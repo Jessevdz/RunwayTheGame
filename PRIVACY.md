@@ -3,6 +3,8 @@
 Applies to the Runway software and to the public
 instance at `https://playrunway.app/`.
 
+**Contact:** [hello@playrunway.app](mailto:hello@playrunway.app)
+
 ## 1. The short version
 
 - No account, no email address, no password, no real name.
@@ -151,6 +153,20 @@ Under the GDPR you have the right to **access** your data, to have it
 processing, to receive it in a **portable** format, and (where we rely on your
 consent) to **withdraw that consent** at any time without affecting what was
 lawful before.
+
+To exercise any of them, write to
+[hello@playrunway.app](mailto:hello@playrunway.app). We do not know who you are,
+so tell us enough to find the data: the race or board in question, the team or
+runner name you used, and roughly when. We answer within 30 days, and there is
+nothing to pay.
+
+Because there is no account, we cannot connect a request to an identity by
+ourselves, and we will not ask you for identity documents to prove one. If we
+cannot locate the data from what you give us, we will say so rather than guess
+and delete somebody else's race.
+
+If you think we have got it wrong, you have the right to complain to your local
+data protection supervisory authority. We would rather you wrote to us first.
 
 ## 5. Security
 

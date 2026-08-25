@@ -56,6 +56,11 @@ export default defineConfig({
           label: 'GitHub',
           href: 'https://github.com/Jessevdz/RunwayTheGame',
         },
+        {
+          icon: 'email',
+          label: 'Email',
+          href: 'mailto:hello@playrunway.app',
+        },
       ],
       // No splash page: /docs/ is the first documentation page itself, so the
       // sidebar is in view on arrival and doubles as the index of what exists.

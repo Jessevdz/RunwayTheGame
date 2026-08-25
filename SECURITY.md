@@ -17,6 +17,10 @@ Report it privately through GitHub's private vulnerability reporting:
 This creates a private advisory visible only to you and the maintainers. It needs
 no email address and keeps the report out of public view until there is a fix.
 
+If you would rather not use GitHub, or you do not have an account, email
+**[hello@playrunway.app](mailto:hello@playrunway.app)** instead. Put `SECURITY`
+in the subject line.
+
 ### What to include
 
 - What the issue is and roughly how bad you think it is

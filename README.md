@@ -167,6 +167,13 @@ Contributions are welcome.
   issue.
 
 
+## Contact
+
+Questions, bug reports that do not belong in a public issue, code of conduct
+concerns, or a privacy request (for example, asking for a photo you appear in to
+be deleted): **[hello@playrunway.app](mailto:hello@playrunway.app)**.
+
+
 ## License
 
 Runway is released under the [MIT License](LICENSE).

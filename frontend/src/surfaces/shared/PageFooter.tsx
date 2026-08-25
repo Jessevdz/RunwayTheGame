@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrandLines, LinkButton, IconBook, IconGithub } from '@ds';
-import { docsUrl, GITHUB_URL } from '../../core/docs';
+import { CONTACT_EMAIL, contactMailto, docsUrl, GITHUB_URL } from '../../core/docs';
 
 /** Closing rule for the document-scroll surfaces (landing, gallery, roadmap). */
 export const PageFooter: React.FC = () => {
@@ -18,11 +18,20 @@ export const PageFooter: React.FC = () => {
         flexWrap: 'wrap'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-        <BrandLines size={20} />
-        <span className="t-narrate fs-6" style={{ fontStyle: 'italic', color: 'var(--ink-muted)' }}>
-          Race the globe.
-        </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <BrandLines size={20} />
+          <span className="t-narrate fs-6" style={{ fontStyle: 'italic', color: 'var(--ink-muted)' }}>
+            Race the globe.
+          </span>
+        </div>
+        <a
+          className="t-data fs-2"
+          href={contactMailto('Runway')}
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          {CONTACT_EMAIL}
+        </a>
       </div>
 
       {/* Plain anchors, not router pushes: the docs are a separate static site

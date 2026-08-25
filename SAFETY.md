@@ -59,3 +59,14 @@ When creating boards and routes in the Board Editor:
   arise during a live event, use the host GM tools to pause or cancel the race.
 - **Respect player disputes and safety vetoes.** Support players who prioritized
   safety over completing an awkward or hazardous waypoint.
+
+
+## 5. Reporting an unsafe board
+
+If you find a published board with a waypoint in a dangerous or private place, or
+a challenge prompt that pushes players toward something unsafe or illegal, email
+**[hello@playrunway.app](mailto:hello@playrunway.app)** with a link to the board
+and which waypoint it is. Unsafe boards are taken down.
+
+The same address handles a request to remove a photo you appear in; see
+[PRIVACY.md](PRIVACY.md).

@@ -55,7 +55,7 @@ matter more here than in a typical software project:
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the project maintainers at
-`[CONTACT_EMAIL — replace before making this repository public]`. All complaints
+[hello@playrunway.app](mailto:hello@playrunway.app). All complaints
 will be reviewed and investigated promptly and fairly. All community leaders are
 obligated to respect the privacy and security of the reporter of any incident.
 

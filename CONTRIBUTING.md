@@ -20,6 +20,10 @@ anything touching scoring should start as a discussion.
 If you are looking for somewhere to start, see the issues labelled
 `good first issue`.
 
+If a question does not fit an issue, or you would rather not ask it in public,
+email [hello@playrunway.app](mailto:hello@playrunway.app). Security
+vulnerabilities go through [SECURITY.md](SECURITY.md).
+
 
 ## Development setup
 
