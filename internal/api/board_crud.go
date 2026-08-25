@@ -193,23 +193,37 @@ func (s *Server) handleUpdateBoard(w http.ResponseWriter, r *http.Request) {
 
 	// Finish line waypoints carry no challenges or coin rewards.
 	finishWaypointIDs := make(map[string]bool)
+	validTargetIDs := make(map[string]bool)
 	for _, wp := range req.Waypoints {
-		if !wp.IsFinish {
+		id := ensureUUID(wp.ID)
+		if id == "" {
 			continue
 		}
-		if wp.ChallengeID != "" {
-			writeError(r.Context(), w, http.StatusBadRequest, fmt.Sprintf(
-				"waypoint %s (%s) is the finish; the finish line carries no challenge, so it cannot reference a challenge",
-				wp.ID, wp.Name))
-			return
-		}
-		if id := ensureUUID(wp.ID); id != "" {
+		if wp.IsFinish {
+			if wp.ChallengeID != "" {
+				writeError(r.Context(), w, http.StatusBadRequest, fmt.Sprintf(
+					"waypoint %s (%s) is the finish; the finish line carries no challenge, so it cannot reference a challenge",
+					wp.ID, wp.Name))
+				return
+			}
 			finishWaypointIDs[id] = true
+		} else {
+			validTargetIDs[id] = true
+		}
+	}
+	for _, road := range req.Roads {
+		if id := ensureUUID(road.ID); id != "" {
+			validTargetIDs[id] = true
 		}
 	}
 	for _, ch := range req.Challenges {
-		if finishWaypointIDs[ensureUUID(ch.WaypointID)] {
+		chTargetID := ensureUUID(ch.WaypointID)
+		if finishWaypointIDs[chTargetID] {
 			writeError(r.Context(), w, http.StatusBadRequest, "the finish line carries no challenge: remove the challenge attached to the finish waypoint")
+			return
+		}
+		if chTargetID != "" && !validTargetIDs[chTargetID] {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Sprintf("challenge %s references non-existent waypoint or road %s", ch.ID, ch.WaypointID))
 			return
 		}
 	}

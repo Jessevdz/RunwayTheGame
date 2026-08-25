@@ -357,3 +357,48 @@ func TestDuplicateElementIDsAcrossBoards(t *testing.T) {
 		t.Fatalf("expected 200 OK saving board 2 with duplicate IDs, got %d. Body: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestRejectOrphanedChallengeWaypointID(t *testing.T) {
+	database, ctx := getTestDB(t)
+	if database == nil {
+		return
+	}
+
+	server := newTestServer(database)
+
+	w, resp := serve(t, ctx, server, jsonRequest("POST", "/api/boards", map[string]string{"name": "Validation Test Board"}, ""))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d. Body: %s", w.Code, w.Body.String())
+	}
+	boardID, _ := resp["id"].(string)
+	token, _ := resp["edit_token"].(string)
+	t.Cleanup(func() {
+		_, _ = database.Pool.Exec(ctx, "DELETE FROM boards WHERE id = $1::uuid", boardID)
+	})
+
+	w1ID := uuid.New().String()
+	w2ID := uuid.New().String()
+	invalidWpID := uuid.New().String()
+
+	badPayload := map[string]interface{}{
+		"name": "Validation Test Board",
+		"waypoints": []map[string]interface{}{
+			{"id": w1ID, "name": "Start", "lat": 51.0, "lon": 4.0, "arrival_radius_m": 25, "is_start": true, "is_finish": false},
+			{"id": w2ID, "name": "Finish", "lat": 51.1, "lon": 4.1, "arrival_radius_m": 25, "is_start": false, "is_finish": true},
+		},
+		"challenges": []map[string]interface{}{
+			{
+				"id":          uuid.New().String(),
+				"waypoint_id": invalidWpID,
+				"prompt":      "Orphaned challenge",
+				"rubric":      map[string]interface{}{"must_show": []string{}},
+			},
+		},
+	}
+
+	w, _ = serve(t, ctx, server, jsonRequest("PUT", "/api/boards/"+boardID, badPayload, token))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request when challenge references unknown waypoint, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}
+

@@ -255,13 +255,19 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
       setRoads((prev) =>
         prev.filter((s) => s.waypoint_id_a !== waypointId && s.waypoint_id_b !== waypointId)
       );
+      setChallenges((prev) => {
+        if (!prev[waypointId]) return prev;
+        const next = { ...prev };
+        delete next[waypointId];
+        return next;
+      });
       setSelectedWaypointId((current) => (current === waypointId ? null : current));
     } else if (pendingDelete.type === 'road') {
       const roadId = pendingDelete.id;
       setRoads((prev) => prev.filter((s) => s.id !== roadId));
     }
     setPendingDelete(null);
-  }, [pendingDelete, setWaypoints, setRoads]);
+  }, [pendingDelete, setWaypoints, setRoads, setChallenges]);
 
   const confirmFinishRole = useCallback(() => {
     if (!pendingFinishRole) return;

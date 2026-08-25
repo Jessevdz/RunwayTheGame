@@ -60,10 +60,12 @@ export const draftSignature = (draft: EditorDraft): string =>
 export const derivePowerupCosts = (powerups: PowerupDraft[]): { [id: string]: number } =>
   Object.fromEntries(powerups.map((p) => [p.id, p.cost]));
 
-/** Challenges assigned to a finish waypoint are dropped: crossing the line is the objective. */
+/** Challenges assigned to active (non-finish) waypoints that exist in the draft. */
 export const activeChallengeEntries = (draft: EditorDraft): [string, ChallengeDraft][] => {
-  const finishIds = new Set(draft.waypoints.filter((w) => w.isFinish).map((w) => w.id));
-  return Object.entries(draft.challenges).filter(([waypointId]) => !finishIds.has(waypointId));
+  const validWaypointIds = new Set(
+    draft.waypoints.filter((w) => !w.isFinish).map((w) => w.id)
+  );
+  return Object.entries(draft.challenges).filter(([waypointId]) => validWaypointIds.has(waypointId));
 };
 
 const isUUID = (id?: string): boolean => !!id && id.length === 36 && id.includes('-');
@@ -158,11 +160,11 @@ export function applyBoardToDraft(prev: EditorDraft, board: ApiBoard): EditorDra
     isFinish: w.is_finish || false
   }));
 
-  const finishIds = new Set(waypoints.filter((w) => w.isFinish).map((w) => w.id));
+  const validWaypointIds = new Set(waypoints.filter((w) => !w.isFinish).map((w) => w.id));
   const challenges: { [waypointId: string]: ChallengeDraft } = {};
   (board.challenges || []).forEach((c) => {
     const waypointId = c.waypoint_id || c.road_id || c.id;
-    if (finishIds.has(waypointId)) return;
+    if (!validWaypointIds.has(waypointId)) return;
     challenges[waypointId] = {
       prompt: c.prompt,
       rubric: {
@@ -306,27 +308,60 @@ export function applyImportToDraft(prev: EditorDraft, data: RawBoardFile): Edito
     }));
   }
 
-  // The finish line has no challenge, so an import carrying one drops it rather
-  // than seeding a board the server would refuse to save.
-  const importedFinishIds = new Set<string>(
-    (Array.isArray(data.waypoints) ? data.waypoints : [])
-      .filter((w) => w.isFinish ?? w.is_finish ?? false)
-      .map((w) => w.id)
-      .filter((id): id is string => !!id)
-  );
+  // Active non-finish waypoints that can hold a challenge
+  const nonFinishWaypoints = next.waypoints.filter((w) => !w.isFinish);
+  const validWaypointIds = new Set(nonFinishWaypoints.map((w) => w.id));
 
   if (Array.isArray(data.challenges)) {
     const parsed: { [waypointId: string]: ChallengeDraft } = {};
+    const assignedWpIds = new Set<string>();
+    const unassignedChallenges: RawChallenge[] = [];
+
+    // Map by challenge_id if present on raw waypoints
+    const rawWpByChallengeId = new Map<string, string>();
+    if (Array.isArray(data.waypoints)) {
+      data.waypoints.forEach((w, idx) => {
+        const cid = (w as any).challenge_id || (w as any).challengeId;
+        const wpDraft = next.waypoints[idx];
+        if (cid && wpDraft && !wpDraft.isFinish) {
+          rawWpByChallengeId.set(cid, wpDraft.id);
+        }
+      });
+    }
+
     data.challenges.forEach((c) => {
-      const waypointId = c.waypoint_id || c.waypointId || c.road_id || c.id;
-      if (waypointId && !importedFinishIds.has(waypointId)) {
-        parsed[waypointId] = asChallengeDraft(c);
+      const explicitWpId = c.waypoint_id || c.waypointId || c.road_id;
+      if (explicitWpId && validWaypointIds.has(explicitWpId) && !assignedWpIds.has(explicitWpId)) {
+        parsed[explicitWpId] = asChallengeDraft(c);
+        assignedWpIds.add(explicitWpId);
+      } else if (c.id && rawWpByChallengeId.has(c.id)) {
+        const wpId = rawWpByChallengeId.get(c.id)!;
+        if (!assignedWpIds.has(wpId)) {
+          parsed[wpId] = asChallengeDraft(c);
+          assignedWpIds.add(wpId);
+        }
+      } else {
+        unassignedChallenges.push(c);
       }
     });
+
+    // Fallback: If challenges could not be linked by explicit ID (e.g. disconnected UUIDs),
+    // assign remaining unlinked challenges in order to the remaining unassigned non-finish waypoints.
+    if (unassignedChallenges.length > 0) {
+      const remainingWaypoints = nonFinishWaypoints.filter((w) => !assignedWpIds.has(w.id));
+      unassignedChallenges.forEach((c, idx) => {
+        if (idx < remainingWaypoints.length) {
+          const wp = remainingWaypoints[idx];
+          parsed[wp.id] = asChallengeDraft(c);
+          assignedWpIds.add(wp.id);
+        }
+      });
+    }
+
     next.challenges = parsed;
   } else if (data.challenges && typeof data.challenges === 'object') {
     next.challenges = Object.fromEntries(
-      Object.entries(data.challenges).filter(([waypointId]) => !importedFinishIds.has(waypointId))
+      Object.entries(data.challenges).filter(([waypointId]) => validWaypointIds.has(waypointId))
     );
   }
 
