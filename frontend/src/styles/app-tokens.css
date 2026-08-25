@@ -1,0 +1,88 @@
+/* ==========================================================================
+   CODENAME RUNWAY — APP EXTENSION TOKENS
+   Extension token layer on top of Departure design system tokens.
+   Only references DS primitives and semantic tokens.
+   ========================================================================== */
+
+:root {
+    /* Team Extension Tokens — slot-indexed (0-5 + neutral) */
+    --team-0: var(--red);
+    --team-0-bg: rgba(235, 53, 57, 0.14);
+
+    --team-1: var(--amber);
+    --team-1-bg: rgba(255, 191, 64, 0.16);
+
+    --team-2: var(--indigo-600);
+    --team-2-bg: rgba(67, 56, 202, 0.12);
+
+    --team-3: var(--moss);
+    --team-3-bg: rgba(78, 122, 82, 0.16);
+
+    --team-4: var(--orange);
+    --team-4-bg: rgba(245, 122, 60, 0.16);
+
+    --team-5: var(--navy-400);
+    --team-5-bg: rgba(90, 110, 130, 0.16);
+
+    --team-neutral: var(--ink-muted);
+    --team-neutral-bg: var(--navy-050);
+
+    /* Map Theme Tokens */
+    --map-waypoint: var(--accent);
+    --map-waypoint-start: var(--moss);
+    --map-waypoint-finish: var(--amber-deep);
+    --map-waypoint-error: var(--red);
+    --map-waypoint-current: var(--indigo-600);
+    --map-waypoint-accessible: var(--moss);
+    --map-waypoint-cleared: var(--moss);
+    --map-waypoint-inaccessible: var(--navy-400);
+
+    --map-waypoint-fill: var(--surface);
+    --map-waypoint-stroke: var(--navy-500);
+
+    --map-road-locked: var(--navy-500);
+    --map-road-open: var(--moss);
+    --map-road-accessible: var(--moss);
+    --map-road-accessible-glow: rgba(78, 122, 82, 0.28);
+    --map-road-cleared: var(--indigo-600);
+    --map-road-roadblock: var(--orange);
+    --map-road-roadblock-casing: rgba(245, 122, 60, 0.35);
+    --map-road-bypassed: var(--amber-deep);
+    --map-road-draft: var(--accent);
+
+    --map-label-ink: var(--navy-900);
+    --map-label-halo: var(--surface);
+    --map-player: var(--accent);
+    /* Coin reward indicator color. */
+    --map-coin-reward: var(--tone-gold-ink);
+
+    /* Interface sizing and safe areas */
+    --min-tap-target: 48px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+    /* Surface Aliases */
+    --surface-panel: var(--surface-2);
+}
+
+[data-theme="night"] {
+    --team-2: var(--indigo-300);
+    --team-2-bg: rgba(165, 160, 238, 0.16);
+    --team-neutral-bg: var(--navy-800);
+
+    --map-label-ink: var(--signal);
+    --map-label-halo: var(--navy-900);
+    --map-waypoint-fill: var(--navy-800);
+    --map-waypoint-stroke: var(--navy-300);
+
+    --map-waypoint-accessible: var(--moss-bright);
+    --map-waypoint-current: var(--indigo-300);
+    --map-waypoint-inaccessible: var(--navy-300);
+    --map-road-accessible: var(--moss-bright);
+    --map-road-accessible-glow: rgba(134, 185, 140, 0.35);
+    --map-road-locked: var(--navy-200);
+    --map-road-cleared: var(--indigo-300);
+    --map-road-roadblock-casing: rgba(245, 122, 60, 0.45);
+}
+
+

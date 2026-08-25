@@ -1,0 +1,197 @@
+/*
+ * Roadblock.css — 10s loop:
+ *   0–16   Purple walks to the junction
+ *   16–22  Orange's card lands on the road ahead
+ *   22–34  Purple runs into it and is turned back
+ *   34–52  Purple submits a photo and the card lifts
+ *   56–78  Purple walks on
+ */
+
+.rb-detour {
+  fill: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* --- The blocked road --- */
+
+.rb-blocked {
+  stroke: var(--red);
+  stroke-width: 4;
+  stroke-dasharray: 3 8;
+  opacity: 0;
+  animation: rb-blocked 10s linear infinite;
+}
+
+@keyframes rb-blocked {
+  0%,
+  18% {
+    opacity: 0;
+  }
+  22%,
+  48% {
+    opacity: 1;
+  }
+  54%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --- The card, dropped as a rotated sticker (DESIGN.md) --- */
+
+.rb-card {
+  opacity: 0;
+  transform-origin: 420px 79px;
+  animation: rb-card 10s var(--ease-premium) infinite;
+}
+
+.rb-card-box {
+  fill: var(--surface);
+  stroke: var(--red);
+  stroke-width: 2;
+}
+
+.rb-card-text {
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-anchor: middle;
+  fill: var(--red);
+}
+
+.rb-kicker {
+  text-anchor: middle;
+}
+
+@keyframes rb-card {
+  0%,
+  16% {
+    opacity: 0;
+    transform: scale(0.5) rotate(6deg);
+  }
+  22%,
+  46% {
+    opacity: 1;
+    transform: scale(1) rotate(-4deg);
+  }
+  54%,
+  100% {
+    opacity: 0;
+    transform: scale(0.9) rotate(-4deg);
+  }
+}
+
+/* --- Clearing it --- */
+
+.rb-clear {
+  opacity: 0;
+  animation: rb-clear 10s var(--ease-premium) infinite;
+}
+
+.rb-clear-text {
+  text-anchor: middle;
+  font-size: 11px;
+  fill: var(--tone-moss);
+}
+
+@keyframes rb-clear {
+  0%,
+  34% {
+    opacity: 0;
+    transform: translate(0, 6px);
+  }
+  40%,
+  58% {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  66%,
+  100% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+}
+
+.rb-flash {
+  fill: #ffffff;
+  opacity: 0;
+  animation: rb-flash 10s linear infinite;
+}
+
+@keyframes rb-flash {
+  0%,
+  42% {
+    opacity: 0;
+  }
+  45% {
+    opacity: 0.85;
+  }
+  52%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --- Purple --- */
+
+.rb-runner {
+  animation: rb-runner 10s var(--ease-premium) infinite;
+}
+
+@keyframes rb-runner {
+  0%,
+  2% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  16%,
+  22% {
+    transform: translate(210px, 0);
+  }
+  26% {
+    transform: translate(250px, 0);
+  }
+  30% {
+    transform: translate(228px, 0);
+  }
+  34%,
+  56% {
+    transform: translate(210px, 0);
+    opacity: 1;
+  }
+  78%,
+  96% {
+    transform: translate(450px, 0);
+    opacity: 1;
+  }
+  99%,
+  100% {
+    transform: translate(450px, 0);
+    opacity: 0;
+  }
+}
+
+/* Resting frame: the card is down and Purple is stopped at the junction. */
+@media (prefers-reduced-motion: reduce) {
+  .rb-card,
+  .rb-blocked,
+  .rb-clear {
+    opacity: 1;
+    transform: none;
+  }
+  .rb-card {
+    transform: rotate(-4deg);
+  }
+  .rb-flash {
+    opacity: 0;
+  }
+  .rb-runner {
+    transform: translate(210px, 0);
+    opacity: 1;
+  }
+}

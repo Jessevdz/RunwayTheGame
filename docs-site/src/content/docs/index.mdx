@@ -1,0 +1,161 @@
+---
+title: What is Runway?
+description: Runway is a location-based racing game played on a board of real places. This page starts with one waypoint, then the board, then coins, power-ups, the three modes, and how evidence gets graded.
+sidebar:
+  label: What is Runway?
+  order: 1
+---
+
+import { Aside, Badge, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+import RaceAnimation from '../../components/RaceAnimation.tsx';
+import CaptureLoop from '../../components/CaptureLoop.tsx';
+import ChartingPath from '../../components/ChartingPath.tsx';
+import OpenForWhom from '../../components/OpenForWhom.tsx';
+
+<RaceAnimation client:load />
+
+Runway is a racing game played on a board somebody drew over the real
+world. A board can be as small as a street, and as large
+as the entire world.
+
+A **board** is a set of waypoints (real places) joined by roads you can
+traverse. Most waypoints hold a **challenge**: a small, specific thing you need to do, verified
+with a photograph. The first team to reach the finish wins.
+
+## What you need to play
+
+Runway is played outdoors, on foot, with a phone in your hand.
+
+| | |
+| :--- | :--- |
+| **People** | Up to six teams. A team is a group walking together. |
+| **Per team** | At least one phone. It is the phone whose position the board sees, so it is the one that has to be with the group. |
+| **On that phone** | A browser with location and camera permission granted. |
+| **A board** | Somebody has to have drawn one first, see [below](#where-boards-come-from). |
+
+## Clearing a Waypoint
+
+You walk to a waypoint, verify your location, 
+and complete the challenge by photographing your answer to unlock the next leg of your route.
+
+<CaptureLoop client:visible />
+
+A challenge is a small, specific task that can be settled by a single photograph.
+These are written by whoever drew the board. For example:
+
+> Eat something grape flavored: Packaging must specify grape.
+
+A challenge you do not want to clear (e.g., it's too
+slow, too silly or too difficult) can be **vetoed**. You decline it, the road
+opens for you anyway, and you move on immediately. A veto always works, and it
+always costs you something; what it costs depends on the game mode.
+
+The finish waypoint is the only exception: it carries no challenge and pays no
+reward. Arriving is the only objective.
+
+## Charting a path
+
+From the waypoint you are standing on, the only places you can go next are the waypoints directly connected to it. 
+A waypoint fifty metres away is out of reach if no road connects you to it.
+
+<ChartingPath client:visible />
+
+Other than that, the route is entirely yours. Teams always start together but they can take different roads to the same finish.
+
+## Coins
+
+The **first** team to clear a challenge earns its coin reward. Teams arriving later
+do not have to do the challenge again, and earn no coins.
+
+### Power-ups
+
+Using coins collected by clearing challenges, you can buy power-ups that help your own team or slow down other teams.
+
+| Power-up | What it does |
+| :--- | :--- |
+| `nerf` | A target team cannot move or start a challenge for a while |
+| `tracker_off` | Your position is withheld from the other teams for a while |
+| `challenge_skip` | Bypasses a waypoint's challenge with no veto penalty |
+
+Every price and duration comes from the game's own ruleset, fixed when the game
+is created.
+
+## The two ways past a challenge
+
+There are two ways past a challenge.
+
+<OpenForWhom client:visible />
+
+| How | Opens the road for |
+| :--- | :--- |
+| You complete the challenge | **The whole field.** Only the coin reward distinguishes first from the rest. |
+| You veto, or use a `challenge_skip` power-up | **Your team alone.** A bypass is personal. |
+
+So clearing a hard waypoint is partly a gift to your rivals, and vetoing it is
+partly a decision to keep them working while you walk on.
+
+## The three game modes
+
+<Steps>
+
+1. **Team race**: Several teams play a single board. The winner is the
+   team that gets to the finish first. Coins are used to buy power-ups.
+
+2. **Solo time trial**: A single runner plays a single board. The clock is wall time
+   from start to finish plus veto penalties.
+
+3. **Solo casual**: The same walk, just for fun. Nothing is recorded and vetoes are free.
+
+</Steps>
+
+
+The price of a veto changes between modes, because a cooldown
+only means something when rivals are racing the same board:
+
+| Mode | Cost of a veto |
+| :--- | :--- |
+| Team race | A cooldown. You keep walking, but you cannot take on **any** challenge until it lapses. |
+| Solo time trial | Time added to your recorded clock. |
+| Solo casual | Nothing. |
+
+## How challenge evidence gets graded
+
+Every game fixes one of three grading modes.
+
+| Mode | What happens to your photo | 
+| :--- | :--- | 
+| <Badge text="trust" variant="success" /> | Honour mode. The evidence always passes, but is visible to everyone at the end of the game for disputes. |
+| <Badge text="host" variant="caution" /> | Evidence is held pending until the game host approves or rejects it. | 
+| <Badge text="llm" variant="danger" /> | Evidence is graded against the challenge's rubric by a multimodal LLM. | 
+
+A GPS checking gate runs in all three modes.
+Teams must be standing at the waypoint before evidence can be submitted.
+
+The game defaults to `trust`, because it is the only mode that asks nothing
+of anyone outside the game.
+
+## Where boards come from
+
+A board consists of waypoints placed over real places, the roads drawn
+between them, and the challenges written onto them.
+
+Boards are obtained one of two ways: **draw your own** in the board editor at
+`/design`, or **fork a board somebody published** from the gallery and race
+that. Either way, [Design a board](design-a-board/) covers the editor.
+
+## Next
+
+<CardGrid>
+  <LinkCard
+    title="Design a board"
+    href="design-a-board/"
+    description="Draw waypoints over real places, join them up, write the challenges, and publish the result."
+  />
+</CardGrid>
+
+:::caution[Runway is in Alpha release]
+Rules, data formats, and APIs change without notice, and databases may be wiped
+between releases. Runway is an independent, fan-made game, not affiliated with,
+endorsed by, or associated with Jet Lag: The Game, Wendover Productions, or
+Half as Interesting.
+:::

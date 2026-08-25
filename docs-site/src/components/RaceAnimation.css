@@ -1,0 +1,272 @@
+/* RaceAnimation.css — Departure Design System styling */
+
+.ra-container {
+  margin: var(--sp-4) 0 var(--sp-6);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-4);
+  font-family: var(--font-ui);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+/* --- Header / Telemetry Bar --- */
+.ra-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.ra-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.ra-badge {
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px var(--sp-2);
+  background: var(--line-strong);
+  color: var(--ink-strong);
+  border-radius: var(--r-pill);
+}
+
+.ra-title {
+  font-family: var(--font-announce);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-strong);
+  margin: 0;
+}
+
+.ra-status-ticker {
+  flex: 1;
+  min-width: 200px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--surface);
+  padding: 6px var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ra-ticker-active {
+  display: inline-block;
+  color: var(--tone-moss);
+}
+
+/* --- Team Legend & Scores --- */
+.ra-teams {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-3);
+  margin-top: 0;
+}
+
+.ra-team-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  margin: 0;
+  padding: 0;
+}
+
+.ra-team-card + .ra-team-card {
+  margin-top: 0;
+}
+
+.ra-team-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.ra-team-dot--purple {
+  background-color: var(--accent);
+  color: var(--accent);
+}
+
+.ra-team-dot--orange {
+  background-color: var(--orange);
+  color: var(--orange);
+}
+
+.ra-team-progress {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+/* --- SVG Stage & Map --- */
+.ra-stage {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  display: block;
+  touch-action: manipulation;
+}
+
+/* Map Roads */
+.ra-road {
+  stroke: var(--line-strong);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+/* Animated Trails */
+.ra-trail-active {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 8 6;
+  animation: ra-dash 20s linear infinite;
+  opacity: 0.7;
+}
+
+.ra-trail-active--purple {
+  stroke: var(--accent);
+}
+
+.ra-trail-active--orange {
+  stroke: var(--orange);
+}
+
+@keyframes ra-dash {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+/* Waypoints / Waypoints */
+.ra-waypoint-ring {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 2;
+}
+
+.ra-waypoint-dot {
+  fill: var(--surface);
+  stroke: var(--line-strong);
+  stroke-width: 2.5;
+}
+
+.ra-waypoint.is-start .ra-waypoint-dot {
+  fill: var(--tone-moss);
+  stroke: var(--tone-moss);
+}
+
+.ra-waypoint.is-finish .ra-waypoint-dot {
+  fill: var(--red);
+  stroke: var(--red);
+}
+
+.ra-waypoint.is-finish .ra-waypoint-ring {
+  stroke: var(--red);
+  animation: ra-pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes ra-pulse {
+  0% {
+    r: 14px;
+    opacity: 1;
+  }
+  50% {
+    r: 20px;
+    opacity: 0.4;
+  }
+  100% {
+    r: 14px;
+    opacity: 1;
+  }
+}
+
+.ra-waypoint-label {
+  fill: var(--ink-muted);
+  font-family: var(--font-data);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.ra-waypoint-name {
+  fill: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* Moving Dots & Glows */
+.ra-runner-glow {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.ra-runner-glow--purple {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 10px var(--accent));
+}
+
+.ra-runner-glow--orange {
+  fill: var(--orange);
+  filter: drop-shadow(0 0 10px var(--orange));
+}
+
+.ra-runner-dot {
+  stroke: #ffffff;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.ra-runner-dot--purple {
+  fill: var(--accent);
+  color: var(--accent);
+}
+
+.ra-runner-dot--orange {
+  fill: var(--orange);
+  color: var(--orange);
+}
+
+.ra-runner-label {
+  font-family: var(--font-data);
+  font-size: 9px;
+  font-weight: 700;
+  fill: #ffffff;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* Reduced motion accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .ra-trail-active {
+    animation: none;
+  }
+  .ra-runner-group {
+    display: none;
+  }
+}

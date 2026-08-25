@@ -1,0 +1,195 @@
+/*
+ * CoinRushClock.css — 10s loop on the race clock rather than the board:
+ *   0–45   both teams earn
+ *   45–48  Orange crosses, takes the placement bonus, and stops earning
+ *   48–96  the countdown drains while Purple keeps earning, and passes
+ */
+
+.cr-row-label {
+  fill: var(--ink-muted);
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-anchor: end;
+}
+
+.cr-track {
+  fill: var(--line);
+  opacity: 0.5;
+}
+
+.cr-bar {
+  width: 30px;
+}
+
+.cr-bar--purple {
+  fill: var(--accent);
+  animation: cr-purple 10s linear infinite;
+}
+
+.cr-bar--orange {
+  fill: var(--orange);
+  animation: cr-orange 10s var(--ease-premium) infinite;
+}
+
+@keyframes cr-purple {
+  0% {
+    width: 30px;
+  }
+  45% {
+    width: 150px;
+  }
+  78% {
+    width: 280px;
+  }
+  92%,
+  100% {
+    width: 330px;
+  }
+}
+
+@keyframes cr-orange {
+  0% {
+    width: 45px;
+  }
+  43% {
+    width: 200px;
+  }
+  48%,
+  100% {
+    width: 258px;
+  }
+}
+
+/* --- Annotations --- */
+
+.cr-locked,
+.cr-winner {
+  text-anchor: start;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  opacity: 0;
+}
+
+.cr-locked {
+  animation: cr-fade-in-50 10s linear infinite;
+}
+
+.cr-winner {
+  animation: cr-fade-in-92 10s linear infinite;
+}
+
+@keyframes cr-fade-in-50 {
+  0%,
+  48% {
+    opacity: 0;
+  }
+  54%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes cr-fade-in-92 {
+  0%,
+  90% {
+    opacity: 0;
+  }
+  95%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* --- The clock --- */
+
+.cr-countdown {
+  fill: var(--amber);
+  width: 0;
+  animation: cr-countdown 10s linear infinite;
+}
+
+@keyframes cr-countdown {
+  0%,
+  45% {
+    width: 0;
+    opacity: 0;
+  }
+  48% {
+    width: 242px;
+    opacity: 1;
+  }
+  96%,
+  100% {
+    width: 0;
+    opacity: 1;
+  }
+}
+
+.cr-tick {
+  stroke: var(--line-strong);
+  stroke-width: 2;
+}
+
+.cr-axis {
+  fill: var(--ink-muted);
+  font-family: var(--font-data);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-anchor: middle;
+}
+
+.cr-axis--start {
+  text-anchor: start;
+}
+
+.cr-axis--end {
+  text-anchor: end;
+}
+
+.cr-playhead {
+  fill: var(--ink-strong);
+  animation: cr-playhead 10s linear infinite;
+}
+
+@keyframes cr-playhead {
+  0%,
+  1% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  4% {
+    opacity: 1;
+  }
+  96% {
+    transform: translate(440px, 0);
+    opacity: 1;
+  }
+  99%,
+  100% {
+    transform: translate(440px, 0);
+    opacity: 0;
+  }
+}
+
+/* Resting frame: the race as it was called. */
+@media (prefers-reduced-motion: reduce) {
+  .cr-bar--purple {
+    width: 330px;
+  }
+  .cr-bar--orange {
+    width: 258px;
+  }
+  .cr-countdown {
+    width: 0;
+  }
+  .cr-locked,
+  .cr-winner {
+    opacity: 1;
+  }
+  .cr-playhead {
+    transform: translate(440px, 0);
+  }
+}

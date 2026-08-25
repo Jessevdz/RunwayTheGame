@@ -1,0 +1,300 @@
+/* Capture flow modal layout and staging styles. */
+.capture {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+    min-height: 0;
+}
+
+/* Full-screen stage scroll container. */
+.capture--sheet {
+    flex: 1;
+    gap: 0;
+}
+
+.capture__scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+    padding: var(--sp-5);
+}
+
+/* Challenge prompt card styling. */
+.capture__challenge {
+    position: relative;
+    padding: var(--sp-5);
+    border-radius: var(--r-lg);
+    background-color: var(--navy-700);
+    color: var(--signal);
+}
+
+.capture__challenge::after {
+    content: "";
+    position: absolute;
+    inset: var(--plate-inset);
+    border: 1px solid currentColor;
+    border-radius: calc(var(--r-lg) - var(--plate-inset));
+    opacity: .32;
+    pointer-events: none;
+}
+
+/* Prompt text styling without line clamp. */
+.capture__challenge-prompt {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: var(--fs-8);
+    font-weight: 600;
+    line-height: 1.3;
+    max-width: 34ch;
+}
+
+/* Rubric criteria list panel styling. */
+.capture__counts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    padding: var(--sp-5);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background-color: var(--surface-2);
+}
+
+.capture__counts-head {
+    display: grid;
+    gap: var(--sp-2);
+}
+
+.capture__counts-title {
+    margin: 0;
+    color: var(--ink-strong);
+}
+
+.capture__counts-lede {
+    margin: 0;
+    font-size: var(--fs-4);
+    color: var(--ink-muted);
+}
+
+/* Criteria indicator rail and label styling. */
+.capture__criteria {
+    --criteria-edge: var(--line-strong);
+    --criteria-ink: var(--ink-muted);
+
+    padding-left: var(--sp-4);
+    border-left: var(--sp-h) solid var(--criteria-edge);
+}
+
+.capture__criteria--must {
+    --criteria-edge: var(--tone-moss-edge);
+    --criteria-ink: var(--tone-moss-ink);
+}
+
+.capture__criteria--fails {
+    --criteria-edge: var(--tone-crimson-edge);
+    --criteria-ink: var(--tone-crimson-ink);
+}
+
+.capture__criteria-label {
+    display: block;
+    font-family: var(--font-data);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    color: var(--criteria-ink);
+    margin-bottom: var(--sp-2);
+}
+
+.capture__criteria ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+
+/* Criteria item list text styling. */
+.capture__criteria li,
+.capture__criteria p {
+    margin: 0;
+    font-size: var(--fs-6);
+    line-height: 1.4;
+    color: var(--ink);
+}
+
+/* Fixed bottom action bar styling. */
+.capture__bar {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-5);
+    padding-bottom: calc(var(--sp-4) + var(--safe-bottom));
+    background-color: var(--surface);
+    border-top: 1px solid var(--line);
+}
+
+.capture__bar .btn {
+    width: 100%;
+}
+
+.capture__bar-hint {
+    margin: 0;
+    text-align: center;
+    font-size: var(--fs-4);
+    color: var(--ink-muted);
+}
+
+/* Photo review viewport container styling. */
+.capture__photo {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background-color: var(--navy-900);
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.capture__photo img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.capture__placeholder {
+    margin: 0;
+    font-family: var(--font-data);
+    font-size: var(--fs-3);
+    color: var(--navy-200);
+}
+
+/* Action button pair styling. */
+.capture__actions {
+    flex: none;
+    display: flex;
+    width: 100%;
+    gap: var(--sp-2);
+}
+
+.capture__actions .btn {
+    flex: 1;
+}
+
+.capture__note {
+    display: grid;
+    gap: var(--sp-2);
+}
+
+.capture__status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-6) 0;
+    text-align: center;
+}
+
+.capture__status h3 {
+    margin: 0;
+}
+
+.capture__status p {
+    margin: 0;
+    max-width: 45ch;
+    color: var(--ink-muted);
+    font-size: var(--fs-5);
+}
+
+.capture__progress {
+    width: 100%;
+    height: var(--sp-2);
+    overflow: hidden;
+    border-radius: var(--r-pill);
+    background-color: var(--line-strong);
+}
+
+.capture__progress-fill {
+    height: 100%;
+    background-color: var(--accent);
+    transition: width var(--dur-1) var(--ease-premium);
+}
+
+/* Indeterminate progress bar animation state. */
+.capture__progress--waiting .capture__progress-fill {
+    width: 40%;
+    animation: capture-indeterminate var(--dur-5) var(--ease-premium) infinite;
+}
+
+@keyframes capture-indeterminate {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(250%); }
+}
+
+/* Tabular numeric font styling for race clock. */
+.capture__clock {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-9);
+    color: var(--ink);
+}
+
+/* Muted progress percentage readout text. */
+.capture__pct {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-2);
+    color: var(--ink-muted);
+}
+
+.capture__verdict {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+}
+
+.capture__verdict-head {
+    text-align: center;
+}
+
+.capture__verdict-head h3 {
+    margin: var(--sp-2) 0 0;
+}
+
+/* Left-aligned rationale body text styling. */
+.capture__rationale {
+    margin: 0;
+    max-width: 65ch;
+    font-size: var(--fs-5);
+    line-height: 1.5;
+    color: var(--ink);
+}
+
+/* Desktop breakpoint overrides for dialog layout. */
+@media (min-width: 768px) {
+    .capture--sheet {
+        gap: var(--sp-5);
+    }
+
+    .capture__scroll {
+        padding: 0;
+    }
+
+    .capture__bar {
+        padding: 0;
+        padding-bottom: 0;
+        background-color: transparent;
+        border-top: 0;
+    }
+
+    .capture__photo {
+        flex: none;
+        aspect-ratio: 4 / 3;
+        border-radius: var(--r-md);
+    }
+}

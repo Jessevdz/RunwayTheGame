@@ -1,0 +1,213 @@
+/*
+ * ChartingPath.css — 10s loop:
+ *   4–32   the waypoints a road joins you to light up
+ *   22–38  a waypoint two steps off is marked as no move at all
+ *   40–90  one route of several gets walked
+ */
+
+/* Where you are standing. */
+.cp-here .rw-waypoint-ring {
+  stroke: var(--accent);
+}
+
+.cp-here .rw-waypoint-dot {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+/* --- Legal steps --- */
+
+.cp-adjacent {
+  fill: none;
+  stroke: var(--tone-moss);
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  opacity: 0;
+  animation: cp-adjacent 10s linear infinite;
+}
+
+@keyframes cp-adjacent {
+  0%,
+  4% {
+    opacity: 0;
+  }
+  8%,
+  32% {
+    opacity: 1;
+  }
+  38%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --- The move that is not one --- */
+
+.cp-illegal {
+  opacity: 0;
+  animation: cp-illegal 10s linear infinite;
+}
+
+.cp-illegal-line {
+  stroke: var(--red);
+  stroke-width: 2;
+  stroke-dasharray: 4 6;
+  opacity: 0.7;
+}
+
+.cp-cross {
+  stroke: var(--red);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+@keyframes cp-illegal {
+  0%,
+  22% {
+    opacity: 0;
+  }
+  26%,
+  36% {
+    opacity: 1;
+  }
+  40%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --- The route this team picked --- */
+
+.cp-route {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 560;
+  stroke-dashoffset: 560;
+  opacity: 0.75;
+  animation: cp-route 10s linear infinite;
+}
+
+@keyframes cp-route {
+  0%,
+  40% {
+    stroke-dashoffset: 560;
+  }
+  90%,
+  96% {
+    stroke-dashoffset: 0;
+  }
+  99%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+/* --- The runner (SMIL motion; CSS only gates when it is visible) --- */
+
+.cp-runner {
+  opacity: 0;
+  animation: cp-runner 10s linear infinite;
+}
+
+@keyframes cp-runner {
+  0%,
+  38% {
+    opacity: 0;
+  }
+  41%,
+  96% {
+    opacity: 1;
+  }
+  99%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --- What is being said at each phase --- */
+
+.cp-say-1,
+.cp-say-2,
+.cp-say-3 {
+  opacity: 0;
+}
+
+.cp-say-1 {
+  animation: cp-say-1 10s linear infinite;
+}
+
+.cp-say-2 {
+  animation: cp-say-2 10s linear infinite;
+}
+
+.cp-say-3 {
+  animation: cp-say-3 10s linear infinite;
+}
+
+@keyframes cp-say-1 {
+  0%,
+  4% {
+    opacity: 0;
+  }
+  8%,
+  18% {
+    opacity: 1;
+  }
+  22%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cp-say-2 {
+  0%,
+  24% {
+    opacity: 0;
+  }
+  28%,
+  36% {
+    opacity: 1;
+  }
+  40%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cp-say-3 {
+  0%,
+  42% {
+    opacity: 0;
+  }
+  46%,
+  96% {
+    opacity: 1;
+  }
+  99%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/*
+ * Resting frame: the route drawn, the legal steps marked, the illegal one
+ * marked. The runner is dropped — animateMotion cannot be frozen from CSS.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .cp-runner {
+    display: none;
+  }
+  .cp-route {
+    stroke-dashoffset: 0;
+    opacity: 0.75;
+  }
+  .cp-adjacent,
+  .cp-illegal,
+  .cp-say-3 {
+    opacity: 1;
+  }
+}

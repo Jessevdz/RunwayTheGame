@@ -1,0 +1,59 @@
+# Secrets & Environment
+.env
+.env.*
+!.env.example
+!.env.homelab.example
+*.pem
+*.key
+*.crt
+
+# Docker overrides
+docker-compose.override.yml
+docker-compose.override.*.yml
+docker-compose.homelab.yml
+docker-compose.local.yml
+!docker-compose.override.example.yml
+
+# Go Build & Test Artifacts
+coverage
+coverage.*
+*.coverprofile
+*.out
+*.prof
+bin/
+*.exe
+server
+worker
+
+# Build & Cache Artifacts
+dist/
+dist-ssr/
+.astro/
+*.tsbuildinfo
+.turbo/
+
+# OS & Editors
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+
+# Local & Agent Tooling
+/docs/
+.agents/
+.claude/
+frontend/.claude/
+CLAUDE.md
+gemini.md
+.mantis
+.gitmodules
+.opencode/
+workspace/
+*.jsonl
+*.sentinel
+mantis-summary.md
+

@@ -1,0 +1,19 @@
+{
+  "defaultSeverity": "error",
+  "rules": {
+    "color-no-hex": true,
+    "declaration-property-value-disallowed-list": {
+      "/^(margin|padding|gap|row-gap|column-gap)/": ["/^-?\\d+px$/"],
+      "border-radius": ["/^-?\\d+px$/"]
+    }
+  },
+  "overrides": [
+    {
+      "files": ["src/styles/tokens.css"],
+      "rules": {
+        "color-no-hex": null,
+        "declaration-property-value-disallowed-list": null
+      }
+    }
+  ]
+}

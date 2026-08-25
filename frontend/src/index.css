@@ -1,0 +1,248 @@
+/* Base styles and application layout. */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-announce);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--dur-1) var(--ease-premium);
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: var(--sp-4) 0;
+}
+
+/* App shell main layout. */
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100svh;
+  background-color: var(--surface);
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  background-color: var(--surface);
+}
+
+@media (max-width: 767px) {
+  .app-shell--navved {
+    padding-bottom: calc(72px + var(--safe-bottom) + var(--sp-6));
+  }
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-main--full {
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* Map canvas container stage. */
+.map-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Toast message notification overlay stack. */
+.toast-stack {
+  position: absolute;
+  top: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: min(calc(100% - var(--sp-6)), 32rem);
+  pointer-events: none;
+}
+
+.toast-stack > * {
+  pointer-events: auto;
+  box-shadow: var(--shadow-over);
+}
+
+/* Alert hierarchy component styles. */
+.alert-critical {
+  background: var(--surface);
+  border: 1px solid var(--red);
+  color: var(--danger-text);
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  margin: var(--sp-3);
+  box-shadow: var(--shadow-hover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  position: relative;
+  z-index: 100;
+}
+
+.alert-critical-title {
+  font-family: var(--font-announce);
+  font-size: 16px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.alert-high {
+  background: var(--surface-2);
+  border: 1px solid var(--amber-deep);
+  color: var(--warn-text);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-sm);
+  margin: var(--sp-2) var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* Live race play side pane. */
+.game-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: none;
+  width: 100%;
+  max-width: 100%;
+  height: 52%;
+  background-color: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--shadow-over);
+  color: var(--ink);
+  z-index: 5;
+  overflow: hidden;
+}
+
+.game-pane .pane-foot {
+  padding-bottom: var(--sp-3);
+}
+
+.game-pane__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* Team selection option control. */
+.team-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font-family: var(--font-ui);
+  font-size: var(--fs-5);
+  font-weight: 600;
+  color: var(--ink-strong);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-premium), box-shadow var(--dur-1) var(--ease-premium);
+}
+
+.team-pick:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+
+.team-pick:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.team-pick__hint {
+  margin-left: auto;
+  font-family: var(--font-data);
+  font-size: var(--fs-2);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+@media (min-width: 768px) {
+  .app-main {
+    flex-direction: row;
+  }
+
+  .game-pane {
+    width: 380px;
+    height: 100%;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+  }
+
+  .game-pane .pane-foot {
+    padding-bottom: calc(var(--sp-3) + var(--safe-bottom));
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell--navved .topbar .tabs {
+    display: none;
+  }
+}
+
+.map-container {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  height: 100%;
+}
+
+.map-container__canvas {
+  width: 100%;
+  height: 100%;
+}

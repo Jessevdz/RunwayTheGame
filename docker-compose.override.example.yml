@@ -1,0 +1,20 @@
+# Example docker-compose.override.yml for traefik deployments.
+# Copy this file to `docker-compose.override.yml` and adjust for your environment.
+
+services:
+  frontend:
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.runway.rule=Host(`race.example.com`)"
+      - "traefik.http.routers.runway.entrypoints=websecure"
+      - "traefik.http.routers.runway.tls.certresolver=myresolver"
+      - "traefik.http.routers.runway.service=runway"
+      - "traefik.http.services.runway.loadbalancer.server.port=80"
+
+networks:
+  proxy:
+    external: true

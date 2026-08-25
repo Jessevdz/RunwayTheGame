@@ -1,0 +1,97 @@
+---
+title: Set up a race
+description: How a race gets started. A board first, then who referees, then the lobby, the one code everybody uses, and the start button.
+sidebar:
+  label: Set up a race
+  order: 3
+---
+
+import { Aside, Badge, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+There are two ways to set up a game depending on how many people are playing.
+
+| You want | Go to | What you get |
+| :--- | :--- | :--- |
+| Several teams racing each other | `/host` | A lobby with a race code, a roster, and a start button |
+| One person walking a board | `/solo` | No lobby. The clock starts on the tap that creates the run |
+
+
+## First you need a board
+
+A race is run on a board, so that part happens days before everything else on
+this page. See [Design a board](../design-a-board/).
+
+## Hosting a race
+
+<Steps>
+
+1. ### Pick who referees
+
+   | | What it means |
+   | :--- | :--- |
+   | <Badge text="Honour system" variant="success" /> | Photos are accepted straight away and nothing grades them. They are still saved for everyone to look back at afterwards. |
+   | <Badge text="You referee" variant="caution" /> | Every photo is approved or rejected by the host.|
+   | <Badge text="AI referee" variant="danger" /> | Photos go to a third-party AI service and are graded against each challenge's criteria.|
+
+   The honour system is the default, because it is the only mode that asks
+   nothing of anyone outside the game. The AI option only appears when the server
+   has configured a model backend.
+
+2. ### Pick a map
+
+   Choosing one creates the race and drops you into its lobby at `/host/{id}`.
+
+   <Aside type="danger" title="Only the phone that creates a race can host it">
+   Hosting stays in the browser you made the race in. That phone is the only one that can start the race, end it, settle a dispute, and open the host tools.
+   </Aside>
+
+3. ### Get everybody into the lobby
+
+   The lobby offers one invitation three ways: a **race code** to read out across
+   a room, a QR code to scan in person, and a link for the group chat.
+
+4. ### Let the teams form
+
+   A player either **starts a squad**, naming it and taking one of six colours,
+   or **taps a squad already on the roster**.
+
+   As host you can take a colour and race, or tell the lobby you are only running
+   it.
+
+5. ### Start
+
+   The button stays disabled until at least one team is on the roster. Starting
+   sends you to the live race.
+
+</Steps>
+
+<Aside type="note" title="Latecomers are fine">
+A live race can still be joined. A race that has already ended cannot.
+</Aside>
+
+## Setting up a solo run
+
+| Decision | The choice |
+| :--- | :--- |
+| How you are running it | **Time trial**, timed from the start line, where vetoes cost time and a finished run can be posted to the board's leaderboard. **Casual**, where nothing is timed, nothing is ranked, and vetoes are free |
+| Who checks your photos | The honour system, or the AI referee when one is configured. A casual run is always the honour system |
+| Your name | Shown anywhere only if you choose to post your time |
+
+Posting a time is opt-in and happens at the finish.
+
+## Next
+
+<CardGrid>
+  <LinkCard
+    title="Run it locally"
+    href="../run-it-locally/"
+    description="Postgres and MinIO in Docker, the Go server and worker, and the Vite dev server from source."
+  />
+</CardGrid>
+
+<Aside type="caution" title="Runway is in Alpha release">
+Rules, data formats, and APIs change without notice, and databases may be wiped
+between releases. Runway is an independent, fan-made game, not affiliated with,
+endorsed by, or associated with Jet Lag: The Game, Wendover Productions, or
+Half as Interesting.
+</Aside>

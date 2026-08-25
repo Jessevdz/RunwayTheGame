@@ -1,0 +1,291 @@
+/*
+ * anim.css — shared chrome and SVG primitives for the explainer animations.
+ *
+ * DESIGN.md is authoritative: tokens only, no invented colours or spacing.
+ * RaceAnimation.css predates this file and keeps its own `.ra-*` rules; every
+ * animation added after it builds on the `.rw-*` primitives here so the figures
+ * on a page read as one set.
+ *
+ * Timing convention: every figure runs a 10s loop divided into phases, so a
+ * reader who looks away and back lands somewhere legible.
+ */
+
+/* --- Figure chrome --- */
+
+.rw-fig {
+  margin: var(--sp-5) 0;
+  padding: var(--sp-4);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-soft);
+  font-family: var(--font-ui);
+}
+
+.rw-fig-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.rw-fig-title {
+  margin: 0;
+  font-family: var(--font-announce);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-strong);
+}
+
+.rw-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.rw-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.rw-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.rw-swatch--purple {
+  background: var(--accent);
+}
+
+.rw-swatch--orange {
+  background: var(--orange);
+}
+
+.rw-swatch--moss {
+  background: var(--tone-moss);
+}
+
+.rw-swatch--red {
+  background: var(--red);
+}
+
+.rw-swatch--amber {
+  background: var(--amber);
+}
+
+.rw-stage {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  touch-action: manipulation;
+}
+
+.rw-cap {
+  margin: var(--sp-3) 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+/* Two panels shown against each other; stacks on a phone. */
+.rw-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.rw-split > * {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .rw-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rw-panel-title {
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+/* A rail of phase labels under a stage. */
+.rw-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rw-step {
+  margin: 0;
+  padding: 4px var(--sp-2);
+  font-family: var(--font-data);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+}
+
+/* --- SVG primitives --- */
+
+.rw-road {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.rw-road--ghost {
+  stroke-dasharray: 4 7;
+  opacity: 0.45;
+}
+
+.rw-waypoint-ring {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 2;
+}
+
+.rw-waypoint-dot {
+  fill: var(--surface);
+  stroke: var(--line-strong);
+  stroke-width: 2.5;
+}
+
+.rw-waypoint-label {
+  fill: var(--ink-muted);
+  font-family: var(--font-data);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.rw-waypoint-name {
+  fill: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.rw-runner-dot {
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.rw-runner-dot--purple {
+  fill: var(--accent);
+}
+
+.rw-runner-dot--orange {
+  fill: var(--orange);
+}
+
+.rw-runner-label {
+  font-family: var(--font-data);
+  font-size: 9px;
+  font-weight: 700;
+  fill: #ffffff;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* Cards: prompts, power-ups, verdicts. */
+.rw-card {
+  fill: var(--surface);
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.rw-card-kicker {
+  font-family: var(--font-data);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  fill: var(--ink-muted);
+}
+
+.rw-card-text {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink-strong);
+}
+
+.rw-status {
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-anchor: middle;
+}
+
+.rw-status--moss {
+  fill: var(--tone-moss);
+}
+
+.rw-status--orange {
+  fill: var(--orange);
+}
+
+.rw-status--red {
+  fill: var(--red);
+}
+
+.rw-status--muted {
+  fill: var(--ink-muted);
+}
+
+.rw-lock {
+  fill: none;
+  stroke: var(--ink-muted);
+  stroke-width: 2;
+}
+
+.rw-lock-body {
+  fill: var(--surface-2);
+  stroke: var(--ink-muted);
+  stroke-width: 2;
+}
+
+/*
+ * Reduced motion: freeze every loop. Each component then declares the resting
+ * frame it wants to be read as a still diagram — a frozen animation otherwise
+ * falls back to its 0% state, which is usually the least informative one.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .rw-fig *,
+  .rw-fig *::before,
+  .rw-fig *::after {
+    animation: none !important;
+  }
+}

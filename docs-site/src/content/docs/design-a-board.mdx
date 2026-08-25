@@ -1,0 +1,159 @@
+---
+title: Design a board
+description: How a board gets drawn. The six tools, the challenges you write onto the waypoints, what the checker refuses to publish, and how a board reaches anybody else.
+sidebar:
+  label: Design a board
+  order: 2
+---
+
+import { Aside, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+A board is the thing a race is run on. You draw one at `/design`: waypoints
+over real places, with roads between them, and challenges gating their exit.
+
+<Aside type="caution" title="Design only works on desktop">
+The design functionality only works on large screens. Dragging pins, drawing roads and reading the side panel all want a pointer and a
+wide screen.
+</Aside>
+
+## The four panels
+
+The map fills the screen. Everything else lives in one panel beside it, which
+you can drag wider or collapse to a rail.
+
+| Panel | What it holds |
+| :--- | :--- |
+| **Map** | The six tools, and the record of whichever waypoint is selected |
+| **Challenges** | The prompt, reward and veto cost for one waypoint at a time |
+| **Power-ups** | What each power-up costs and how long it lasts |
+| **Issues** | Everything wrong with the board right now, split into what blocks publishing and what is only worth a look |
+
+## Drawing the map
+
+There are six tools with associated keybinds.
+
+| Tool | Key | What it does |
+| :--- | :--- | :--- |
+| Select | `V` | Inspects a waypoint. Dragging one moves it |
+| Point | `C` | Drops a waypoint wherever you clicked |
+| Road | `R` | Places a road between waypoints |
+| Start | `S` | Makes that waypoint the starting line |
+| Finish | `F` | Makes that waypoint the finish line |
+| Delete | `D` | Removes the waypoint or road you clicked |
+
+`Esc` returns to Select. `Delete` removes the selected waypoint along with
+every road on it. `Ctrl`/`Cmd` + `S` saves.
+
+Selecting a waypoint opens its record: its coordinates, its name, its arrival
+radius, which roads lead off it, and whether it is the start or the finish.
+
+**Arrival radius** is how close a phone has to be before the waypoint counts
+as reached. It is 25 metres by default. Widen it where GPS struggles, under
+trees or between tall buildings, and keep it tight where two waypoints sit
+close together.
+
+### Start and finish
+
+A board has exactly one of each, and they have to be two different waypoints.
+For a loop that ends where it began, place a separate finish next to the start.
+
+The first waypoint you drop becomes the start. The finish carries no challenge,
+because reaching it is the whole objective, so handing the finish role to a
+waypoint that already has a challenge discards that challenge.
+
+## Writing challenges
+
+The Challenges panel edits one waypoint at a time, listed in the order a team
+walking from the start would meet them.
+
+| Field | What it is |
+| :--- | :--- |
+| **Prompt** | What a team has to photograph. For most challenges this is the entire standard |
+| **Coin reward** | 5 to 40 coins, in fives. Paid to the first team to clear it, and to nobody after |
+| **Veto time penalty** | 15 minutes to 4 hours. What declining this challenge costs |
+| **Grading criteria** | Optional, and folded away. `Must show`, `Fails if`, and `Acceptable ambiguity` |
+
+The veto penalty is a cooldown in a team race, seconds added to the clock in a
+solo time trial, and nothing at all in a casual run. You write one number and
+each mode spends it its own way.
+
+## Power-ups
+
+Three power-ups exist, and the board sets what each one costs and how long it
+runs. You currently cannot add custom power-ups.
+
+| Power-up | Default cost | Default duration |
+| :--- | :--- | :--- |
+| Nerf Dart, freezes a rival team | 10 coins | 30 minutes |
+| Tracker Off, hides your own position | 25 coins | 45 minutes |
+| Challenge Skip, bypasses a challenge with no veto penalty | 100 coins | Instant |
+
+## Saving, and who gets to edit
+
+There are two saves doing different things.
+
+<Steps>
+
+1. ### The draft in your browser
+
+   Every edit is written to local storage as you make it. This is what survives
+   a refresh, a crash, or a dropped connection. It never leaves the machine.
+
+2. ### The save to the server
+
+   The Save button, or `Ctrl`/`Cmd` + `S`. The first one gives the board an
+   address and hands your browser an **edit key**. The server keeps only a hash
+   of that key.
+
+</Steps>
+
+That key decides who can change the board,
+publish it, and take it down again.
+
+| Link | Grants |
+| :--- | :--- |
+| `/design/{id}` | Read only. Anyone holding it can look, and can fork their own copy |
+| `/design/{id}#key=…` | Full edit. Opening it copies the key into that browser and strips it out of the address bar |
+
+**Forking** takes a full copy of a board: new waypoints, new challenges, new id, new
+edit key. Nothing links the copy back to the original, and the original is
+untouched. It is how you build on somebody else's board, and how you get an
+editable version of one you can only view.
+
+## Publishing to the gallery
+
+Publishing lists a board in the public gallery, where anyone can find it, race
+it, or fork it. It asks for three things: the edit key, no unsaved changes, and
+no blocking errors. The gallery is for boards people want to share.
+
+It is reversible. Removing a board hides it from the gallery and leaves it on
+your device, ready to publish again.
+
+Publishing is not what makes a board raceable. You can launch races from boards in the public gallery
+as well as every board this device drew and never published. See
+[Set up a race](../set-up-a-race/) for what that means on the day.
+
+## Import and export
+
+Export writes the whole board to a JSON file: waypoints, roads, challenges,
+power-up prices. Import reads one back, replacing whatever is on screen.
+
+It is the way to back a board up and to move one to another machine. The file
+carries no edit key, so sharing it shares a copy rather than control.
+
+## Next
+
+<CardGrid>
+  <LinkCard
+    title="Set up a race"
+    href="../set-up-a-race/"
+    description="Get a board, decide who referees, open a lobby, and get everybody into it with one code."
+  />
+</CardGrid>
+
+<Aside type="caution" title="Runway is in Alpha release">
+Rules, data formats, and APIs change without notice, and databases may be wiped
+between releases. Runway is an independent, fan-made game, not affiliated with,
+endorsed by, or associated with Jet Lag: The Game, Wendover Productions, or
+Half as Interesting.
+</Aside>

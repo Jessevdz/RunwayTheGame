@@ -1,0 +1,249 @@
+/*
+ * Departure — Starlight theme bridge.
+ *
+ * DESIGN.md is authoritative. This file does two things and nothing else:
+ *   1. declares the Departure primitives as CSS custom properties, and
+ *   2. maps them onto the `--sl-*` variables Starlight actually reads.
+ *
+ * Do not invent colours, font stacks, or spacing values here. If a value is
+ * missing, add it to DESIGN.md first, then mirror it below.
+ */
+
+:root {
+  /* --- Primitives (DESIGN.md → colors.primitives) --- */
+  --navy-900: #101a24;
+  --navy-800: #182533;
+  --navy-700: #202f40;
+  --navy-600: #2b3d50;
+  --navy-500: #3c5064;
+  --navy-400: #5a6e82;
+  --navy-300: #8794a2;
+  --navy-200: #b9c2cb;
+  --navy-100: #dce1e6;
+  --navy-050: #eff2f4;
+  --amber: #ffbf40;
+  --amber-deep: #e5a21f;
+  --amber-text: #8a5b08;
+  --orange: #f57a3c;
+  --red: #eb3539;
+  --ember: #c0272d;
+  --indigo-700: #372da8;
+  --indigo-600: #4338ca;
+  --indigo-300: #a5a0ee;
+  --indigo-100: #dddbf8;
+  --indigo-050: #eeedfb;
+  --moss: #4e7a52;
+  --moss-bright: #86b98c;
+  --cream: #fcfbf9;
+  --cream-2: #f6f3ee;
+  --signal: #f0f0f0;
+  --line-light: #e5e5e5;
+
+  /* --- Radii, spacing, motion (DESIGN.md) --- */
+  --r-xs: 2px;
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+
+  --sp-q: 2px;
+  --sp-h: 6px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  --dur-1: 120ms;
+  --dur-2: 220ms;
+  --dur-3: 400ms;
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* --- Typography voices (DESIGN.md → four-voice hierarchy) --- */
+  --font-announce: 'Archivo Black', system-ui, sans-serif;
+  --font-narrate: 'Playfair Display', Georgia, serif;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-data: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+}
+
+/*
+ * Night Flight is Starlight's default (`:root` is the dark theme there, with
+ * `[data-theme='light']` overriding). Keeping that inversion means the theme
+ * toggle in the header works with no extra JS.
+ */
+:root {
+  --surface: var(--navy-900);
+  --surface-2: var(--navy-800);
+  --ink: var(--signal);
+  --ink-strong: #ffffff;
+  --ink-muted: var(--navy-300);
+  --line: rgba(240, 240, 240, 0.14);
+  --line-strong: rgba(240, 240, 240, 0.3);
+  --accent: var(--indigo-300);
+  --accent-hover: #c4c1f4;
+  --accent-wash: rgba(165, 160, 238, 0.12);
+  --on-accent: var(--navy-900);
+  --tone-moss: var(--moss-bright);
+  --danger-text: #ff8a8d;
+  --warn-text: var(--amber);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
+
+  --sl-color-accent-low: var(--indigo-700);
+  --sl-color-accent: var(--indigo-600);
+  --sl-color-accent-high: var(--indigo-300);
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: var(--navy-050);
+  --sl-color-gray-2: var(--navy-200);
+  --sl-color-gray-3: var(--navy-300);
+  --sl-color-gray-4: var(--navy-500);
+  --sl-color-gray-5: var(--navy-700);
+  --sl-color-gray-6: var(--navy-800);
+  --sl-color-black: var(--navy-900);
+  --sl-color-hairline: var(--line);
+  --sl-color-hairline-light: var(--line-strong);
+  --sl-color-bg: var(--navy-900);
+  --sl-color-bg-nav: var(--navy-900);
+  --sl-color-bg-sidebar: var(--navy-900);
+  --sl-color-bg-inline-code: var(--navy-800);
+  --sl-color-text: var(--ink);
+  --sl-color-text-accent: var(--accent);
+}
+
+:root[data-theme='light'] {
+  --surface: var(--cream);
+  --surface-2: var(--cream-2);
+  --ink: var(--navy-700);
+  --ink-strong: var(--navy-900);
+  --ink-muted: var(--navy-400);
+  --line: var(--line-light);
+  --line-strong: var(--navy-200);
+  --accent: var(--indigo-600);
+  --accent-hover: var(--indigo-700);
+  --accent-wash: var(--indigo-050);
+  --on-accent: #ffffff;
+  --tone-moss: var(--moss);
+  --danger-text: var(--ember);
+  --warn-text: var(--amber-text);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.08);
+
+  --sl-color-accent-low: var(--indigo-050);
+  --sl-color-accent: var(--indigo-600);
+  --sl-color-accent-high: var(--indigo-700);
+  --sl-color-white: var(--navy-900);
+  --sl-color-gray-1: var(--navy-800);
+  --sl-color-gray-2: var(--navy-700);
+  --sl-color-gray-3: var(--navy-400);
+  --sl-color-gray-4: var(--navy-300);
+  --sl-color-gray-5: var(--navy-100);
+  --sl-color-gray-6: var(--cream-2);
+  --sl-color-gray-7: var(--navy-050);
+  --sl-color-black: var(--cream);
+  --sl-color-hairline: var(--line);
+  --sl-color-hairline-light: var(--line-strong);
+  --sl-color-bg: var(--cream);
+  --sl-color-bg-nav: var(--cream);
+  --sl-color-bg-sidebar: var(--cream);
+  --sl-color-bg-inline-code: var(--cream-2);
+  --sl-color-text: var(--ink);
+  --sl-color-text-accent: var(--accent);
+}
+
+/* --- Type --- */
+
+:root {
+  --sl-font: var(--font-ui);
+  --sl-font-mono: var(--font-data);
+  /* DESIGN.md: prose never exceeds a 68ch measure. */
+  --sl-content-width: 68ch;
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2 {
+  font-family: var(--font-announce);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+}
+
+.sl-markdown-content h3,
+.sl-markdown-content h4 {
+  font-weight: 650;
+  color: var(--ink-strong);
+}
+
+/* Data role: tabular figures, per DESIGN.md. */
+.sl-markdown-content code,
+.sl-markdown-content kbd,
+.sl-markdown-content table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Narrate voice — editorial pull quotes only. */
+.sl-markdown-content blockquote {
+  font-family: var(--font-narrate);
+  font-size: 1.125em;
+  font-style: italic;
+  border-inline-start: 2px solid var(--accent);
+  color: var(--ink);
+}
+
+/* Text selection is amber-on-navy, per DESIGN.md. */
+::selection {
+  background: var(--amber);
+  color: var(--navy-900);
+}
+
+/* Focus: 3px solid accent, 3px offset. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* --- Site header: the Sunset Arc as a hairline --- */
+
+.header {
+  border-bottom: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--red) 0%,
+    var(--orange) 50%,
+    var(--amber) 100%
+  );
+}
+
+.site-title {
+  font-family: var(--font-announce);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* --- Tables read as flight boards --- */
+
+.sl-markdown-content table {
+  font-size: var(--sl-text-sm);
+}
+
+.sl-markdown-content th {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.sl-badge {
+  white-space: nowrap;
+}

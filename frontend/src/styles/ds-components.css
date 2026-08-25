@@ -1,0 +1,431 @@
+/* Design system primitives. */
+
+/* Card container styling. */
+.card {
+  background-color: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--dur-3) var(--ease-premium), box-shadow var(--dur-3) var(--ease-premium), border-color var(--dur-2) var(--ease-premium);
+}
+
+.card--pad {
+  padding: var(--sp-5);
+}
+
+.card--interactive {
+  cursor: pointer;
+}
+
+.card--interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: var(--accent);
+}
+
+/* Badge component styling. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-family: var(--font-data);
+  font-size: var(--fs-2);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border: 1px solid transparent;
+  line-height: 1;
+}
+
+.badge--gold {
+  color: var(--tone-gold-ink);
+  border-color: var(--tone-gold-edge);
+  background-color: var(--tone-gold-wash);
+}
+
+.badge--rust {
+  color: var(--tone-rust-ink);
+  border-color: var(--tone-rust-edge);
+  background-color: var(--tone-rust-wash);
+}
+
+.badge--moss {
+  color: var(--tone-moss-ink);
+  border-color: var(--tone-moss-edge);
+  background-color: var(--tone-moss-wash);
+}
+
+.badge--crimson {
+  color: var(--tone-crimson-ink);
+  border-color: var(--tone-crimson-edge);
+  background-color: var(--tone-crimson-wash);
+}
+
+.badge--neutral {
+  color: var(--tone-neutral-ink);
+  border-color: var(--tone-neutral-edge);
+  background-color: var(--tone-neutral-wash);
+}
+
+/* Button size modifiers and icon button styles. */
+.btn--lg {
+  height: 48px;
+  padding-inline: var(--sp-6);
+  font-size: var(--fs-6);
+}
+
+.btn--icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+}
+
+.btn--icon.btn--sm {
+  width: 28px;
+  height: 28px;
+}
+
+@media (pointer: coarse) {
+  .btn--icon.btn--sm {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.btn--icon.btn--lg {
+  width: 48px;
+  height: 48px;
+}
+
+.ic {
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex: none;
+  width: 1em;
+  height: 1em;
+}
+
+/* Map pin indicator styling. */
+.pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font-data);
+  font-size: var(--fs-2);
+  font-weight: 700;
+  box-shadow: var(--shadow-soft);
+}
+
+.pin--gold {
+  border-color: var(--amber-deep);
+  color: var(--amber-text);
+}
+
+.pin--moss {
+  border-color: var(--moss);
+  color: var(--moss-ink, var(--moss));
+}
+
+/* Checkbox, radio, and switch form controls. */
+.checkbox, .radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-5);
+  color: var(--ink);
+  user-select: none;
+}
+
+.checkbox input, .radio input {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all var(--dur-2) var(--ease-premium);
+}
+
+.checkbox input {
+  border-radius: var(--r-xs);
+}
+
+.radio input {
+  border-radius: 50%;
+}
+
+.checkbox input:checked, .radio input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-5);
+  color: var(--ink);
+}
+
+.switch input {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+  position: relative;
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease-premium);
+}
+
+.switch input::before {
+  content: '';
+  position: absolute;
+  top: var(--sp-1);
+  left: var(--sp-1);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--signal);
+  transition: transform var(--dur-2) var(--ease-premium);
+}
+
+.switch input:checked {
+  background: var(--accent);
+}
+
+.switch input:checked::before {
+  transform: translateX(16px);
+}
+
+/* Tab navigation strip styles. */
+.tabs {
+  display: flex;
+  background-color: var(--surface-2);
+  border-radius: var(--r-pill);
+  padding: var(--sp-1);
+  border: 1px solid var(--line);
+  gap: var(--sp-1);
+}
+
+.tab {
+  height: 32px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-pill);
+  font-family: var(--font-data);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  transition: all var(--dur-2) var(--ease-premium);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab--active {
+  color: var(--ink-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.tab__badge {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10px;
+  padding: var(--sp-1) 6px;
+  border-radius: var(--r-pill);
+}
+
+/* Scrim overlay and dialog modal styling. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+
+.dialog {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-over);
+  width: min(540px, 92vw);
+  max-height: calc(100vh - var(--safe-top) - var(--safe-bottom) - var(--sp-8));
+  margin-bottom: var(--safe-bottom);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog--wide {
+  width: min(1100px, 94vw);
+}
+
+.dialog--wide .dialog__body {
+  background: var(--surface-2);
+}
+
+.dialog--capture .dialog__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .dialog--capture {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin-bottom: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .dialog--capture .dialog__body {
+    padding: 0;
+  }
+}
+
+.dialog:focus {
+  outline: none;
+}
+
+.dialog__header {
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog__title {
+  margin: 0;
+}
+
+.dialog__body {
+  padding: var(--sp-5);
+  overflow-y: auto;
+}
+
+/* Toast message alert box. */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background-color: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-5);
+  line-height: 1.4;
+}
+
+.toast--gold {
+  background-color: var(--tone-gold-wash);
+  border-color: var(--tone-gold-edge);
+  color: var(--tone-gold-ink);
+}
+
+.toast--rust {
+  background-color: var(--tone-rust-wash);
+  border-color: var(--tone-rust-edge);
+  color: var(--tone-rust-ink);
+}
+
+.toast--moss {
+  background-color: var(--tone-moss-wash);
+  border-color: var(--tone-moss-edge);
+  color: var(--tone-moss-ink);
+}
+
+.toast--crimson {
+  background-color: var(--tone-crimson-wash);
+  border-color: var(--tone-crimson-edge);
+  color: var(--tone-crimson-ink);
+}
+
+.toast--neutral {
+  background-color: var(--tone-neutral-wash);
+  border-color: var(--tone-neutral-edge);
+  color: var(--tone-neutral-ink);
+}
+
+/* Tooltip popup bubble. */
+.tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip__bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  background: var(--navy-900);
+  color: var(--signal);
+  font-family: var(--font-data);
+  font-size: var(--fs-2);
+  padding: 4px 8px;
+  border-radius: var(--r-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-premium);
+  z-index: 100;
+}
+
+.tooltip:hover .tooltip__bubble {
+  opacity: 1;
+}
+
+/* Tag removal button icon. */
+.chip__remove {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: currentColor;
+  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+}
+
+.chip__remove:hover {
+  opacity: 1;
+}

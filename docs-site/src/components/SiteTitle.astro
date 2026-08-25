@@ -1,0 +1,60 @@
+---
+/*
+ * Header wordmark — overrides Starlight's `SiteTitle`.
+ *
+ * Starlight's own title only ever points at the docs home, which leaves a
+ * reader with no way back to the game itself. Here the wordmark is that way
+ * back and `DOCS` keeps the docs-home link, so nothing is lost.
+ *
+ * The docs are built with `base: '/docs'` and ship inside the frontend's nginx
+ * image, served from the same origin as the app (see `frontend/nginx.conf` and
+ * `frontend/src/core/docs.ts`). That is what makes the landing page a plain
+ * relative-to-origin `/` rather than a configured absolute URL.
+ */
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+
+/** The app's landing page. Same origin as the docs; see the note above. */
+const LANDING_HREF = '/';
+---
+
+<div class="site-title sl-flex">
+  <a href={LANDING_HREF} class="wordmark" translate="no">{siteTitle}</a>
+  <a href={siteTitleHref} class="docs-tag">Docs</a>
+</div>
+
+<style>
+  /* Mirrors the layout rules of the component this replaces: the header grid
+     assumes a single nowrap, min-width:0 title cell. */
+  .site-title {
+    align-items: baseline;
+    gap: var(--sp-2);
+    white-space: nowrap;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* Announce voice, per departure.css's `.site-title` rule. */
+  .wordmark {
+    font-size: var(--sl-text-h4);
+    color: var(--sl-color-text-accent);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Data voice: a small metadata label with heavy tracking (DESIGN.md §type). */
+  .docs-tag {
+    font-family: var(--font-data);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-decoration: none;
+  }
+
+  .wordmark:hover,
+  .docs-tag:hover {
+    color: var(--accent-hover);
+  }
+</style>
