@@ -1,7 +1,7 @@
 # Privacy Policy
 
 Applies to the Runway software and to the public
-instance at `[INSTANCE_DOMAIN todo]`.
+instance at `https://playrunway.app/`.
 
 ## 1. The short version
 

@@ -7,7 +7,7 @@ import react from '@astrojs/react';
 export default defineConfig({
   // Set `site` to the real origin before deploying — it only affects the
   // sitemap and canonical URLs.
-  site: 'https://example.invalid',
+  site: 'https://playrunway.app',
   // The docs ship inside the frontend's nginx image and are served from the same
   // origin as the app, under /docs/. Same origin means the landing page links to
   // them with a plain relative href and no CORS is involved.

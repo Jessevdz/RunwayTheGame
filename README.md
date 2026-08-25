@@ -5,7 +5,7 @@ A host designs a board in the editor, publishes it, and opens a race. Teams walk
 between waypoints, clear photo challenges, and race to a finish. The backend is
 Go with Postgres and PostGIS. The frontend is an installable React PWA.
 
-Read the [public documentation](TODO) to learn more about the game, how to set it up, and how to play.
+Read the [public documentation](https://playrunway.app/docs/) to learn more about the game, how to set it up, and how to play.
 
 
 > **Alpha.** Rules, data formats, and APIs change without notice, and databases
