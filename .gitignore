@@ -56,4 +56,5 @@ workspace/
 *.jsonl
 *.sentinel
 mantis-summary.md
+races
 

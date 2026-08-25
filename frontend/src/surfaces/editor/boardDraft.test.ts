@@ -105,7 +105,10 @@ describe('boardDraft', () => {
         { id: 'ch-1', waypoint_id: 'wp-1', prompt: 'Valid Prompt', rubric: { must_show: [], fails_if: [], acceptable_ambiguity: '' }, coin_reward: 20, veto_penalty_seconds: 900 },
         { id: 'ch-2', waypoint_id: 'wp-finish', prompt: 'Finish Prompt', rubric: { must_show: [], fails_if: [], acceptable_ambiguity: '' }, coin_reward: 20, veto_penalty_seconds: 900 },
         { id: 'ch-3', waypoint_id: 'wp-ghost', prompt: 'Ghost Prompt', rubric: { must_show: [], fails_if: [], acceptable_ambiguity: '' }, coin_reward: 20, veto_penalty_seconds: 900 }
-      ]
+      ],
+      roadblock_deck: [],
+      curse_deck: [],
+      powerup_costs: {}
     });
 
     expect(Object.keys(next.challenges)).toEqual(['wp-1']);
