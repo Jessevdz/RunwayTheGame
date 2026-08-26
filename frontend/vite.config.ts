@@ -3,6 +3,7 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
+import { createHash } from 'crypto'
 import { execSync } from 'child_process'
 
 // The build a bug report was filed against, so a report can be tied to a commit.
@@ -14,6 +15,29 @@ function buildStamp(): string {
     return sha || 'unknown'
   } catch {
     return 'unknown'
+  }
+}
+
+function serviceWorkerPlugin(): Plugin {
+  return {
+    name: 'runway-service-worker',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const template = fs.readFileSync(
+        path.resolve(import.meta.dirname, './sw.template.js'),
+        'utf8'
+      )
+      const stamp = createHash('sha256')
+        .update(Object.keys(bundle).sort().join('\n'))
+        .digest('hex')
+        .slice(0, 12)
+
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sw.js',
+        source: template.replaceAll('__SW_BUILD__', stamp),
+      })
+    },
   }
 }
 
@@ -86,7 +110,7 @@ function docsDevServerPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), docsDevServerPlugin()],
+  plugins: [react(), serviceWorkerPlugin(), docsDevServerPlugin()],
   define: {
     __APP_BUILD__: JSON.stringify(buildStamp()),
   },
