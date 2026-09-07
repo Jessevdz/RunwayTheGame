@@ -1,0 +1,4 @@
+# Gitleaks ignore file
+# Ignores false positives in test files
+4b513705e593221efb9886c593e32a7e15188542:frontend/src/core/map/basemap.test.ts:generic-api-key:42
+4b513705e593221efb9886c593e32a7e15188542:frontend/src/core/map/basemap.test.ts:generic-api-key:45

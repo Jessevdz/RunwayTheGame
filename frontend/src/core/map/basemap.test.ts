@@ -35,25 +35,25 @@ describe('createBasemapStyleSpec', () => {
   });
 
   it('appends encoded ?key= parameter to CARTO tile URLs when key is provided', () => {
-    const spec = createBasemapStyleSpec('carto-secret-key-123');
+    const spec = createBasemapStyleSpec('test-token');
     const sources = spec.sources as Record<string, { type: string; tiles: string[] }>;
 
     for (const url of sources['carto-voyager'].tiles) {
-      expect(url).toContain('?key=carto-secret-key-123');
+      expect(url).toContain('?key=test-token'); // gitleaks:allow
     }
     for (const url of sources['carto-dark'].tiles) {
-      expect(url).toContain('?key=carto-secret-key-123');
+      expect(url).toContain('?key=test-token'); // gitleaks:allow
     }
     // Esri satellite must remain untouched
     expect(sources['esri-satellite'].tiles[0]).not.toContain('?key=');
   });
 
   it('properly URL-encodes special characters in the API key', () => {
-    const spec = createBasemapStyleSpec('key with spaces&special=chars');
+    const spec = createBasemapStyleSpec('foo bar&param=val');
     const sources = spec.sources as Record<string, { type: string; tiles: string[] }>;
 
     expect(sources['carto-voyager'].tiles[0]).toContain(
-      '?key=key%20with%20spaces%26special%3Dchars'
+      '?key=foo%20bar%26param%3Dval' // gitleaks:allow
     );
   });
 });
