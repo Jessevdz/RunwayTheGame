@@ -122,6 +122,8 @@ services:
     build:
       context: .
       target: frontend
+      args:
+        VITE_CARTO_API_KEY: ${VITE_CARTO_API_KEY:-}
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-80}:80"

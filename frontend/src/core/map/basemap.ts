@@ -15,7 +15,11 @@ export function resolveBasemap(style: BasemapStyle, theme: string): EffectiveBas
 }
 
 /** Creates MapLibre style specification preloading default, dark, and satellite tile sources. */
-export function createBasemapStyleSpec(): maplibregl.StyleSpecification {
+export function createBasemapStyleSpec(
+  cartoApiKey: string = (import.meta.env.VITE_CARTO_API_KEY as string) || ''
+): maplibregl.StyleSpecification {
+  const cartoParam = cartoApiKey ? `?key=${encodeURIComponent(cartoApiKey)}` : '';
+
   return {
     version: 8,
     glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
@@ -23,10 +27,10 @@ export function createBasemapStyleSpec(): maplibregl.StyleSpecification {
       'carto-voyager': {
         type: 'raster',
         tiles: [
-          'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-          'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-          'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-          'https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+          `https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoParam}`,
+          `https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoParam}`,
+          `https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoParam}`,
+          `https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${cartoParam}`
         ],
         tileSize: 256,
         attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
@@ -34,10 +38,10 @@ export function createBasemapStyleSpec(): maplibregl.StyleSpecification {
       'carto-dark': {
         type: 'raster',
         tiles: [
-          'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-          'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+          `https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoParam}`,
+          `https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoParam}`,
+          `https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoParam}`,
+          `https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png${cartoParam}`
         ],
         tileSize: 256,
         attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'

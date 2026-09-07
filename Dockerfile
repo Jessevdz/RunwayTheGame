@@ -33,6 +33,8 @@ COPY frontend/package*.json ./frontend/
 WORKDIR /app/frontend
 RUN npm ci
 COPY frontend/ ./
+ARG VITE_CARTO_API_KEY
+ENV VITE_CARTO_API_KEY=$VITE_CARTO_API_KEY
 RUN npm run build
 
 # ─── Docs Build stage ──────────────────────────────────────────────────────────
