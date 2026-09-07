@@ -319,13 +319,53 @@ func isDevelopmentOrigin(origin string) bool {
 	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
 }
 
+// isSameOrigin reports whether the request Origin matches the request Host
+// or X-Forwarded-Host header.
+func isSameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if hostsEqual(u.Host, r.Host) {
+		return true
+	}
+	if xfh := r.Header.Get("X-Forwarded-Host"); xfh != "" {
+		host := strings.TrimSpace(strings.Split(xfh, ",")[0])
+		if hostsEqual(u.Host, host) {
+			return true
+		}
+	}
+	return false
+}
+
+// hostsEqual compares two host strings case-insensitively, ignoring standard default ports (80/443).
+func hostsEqual(originHost, reqHost string) bool {
+	if strings.EqualFold(originHost, reqHost) {
+		return true
+	}
+	oH, oP, errO := net.SplitHostPort(originHost)
+	rH, rP, errR := net.SplitHostPort(reqHost)
+	if errO == nil && (oP == "80" || oP == "443") && errR != nil {
+		return strings.EqualFold(oH, reqHost)
+	}
+	if errR == nil && (rP == "80" || rP == "443") && errO != nil {
+		return strings.EqualFold(originHost, rH)
+	}
+	return false
+}
+
 // corsMiddleware processes CORS preflight requests and applies origin access headers.
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		w.Header().Set("Vary", "Origin")
 
-		if origin != "" && !s.originAllowed(origin) {
+		allowed := origin == "" || isSameOrigin(r) || s.originAllowed(origin)
+		if origin != "" && !allowed {
 			if r.Method == http.MethodOptions {
 				writeError(r.Context(), w, http.StatusForbidden, "origin not allowed")
 				return
@@ -334,7 +374,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if origin != "" {
+		if origin != "" && allowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			reqHeaders := r.Header.Get("Access-Control-Request-Headers")
@@ -343,7 +383,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 			} else {
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Trace-ID, X-Voter-ID, X-Edit-Token, X-Admin-Key, X-Admin-CSRF")
 			}
-			if s.originCredentialed(origin) {
+			if isSameOrigin(r) || s.originCredentialed(origin) {
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 			}
 			w.Header().Set("Access-Control-Max-Age", "600")

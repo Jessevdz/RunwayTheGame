@@ -86,3 +86,56 @@ func TestWebSocketTokenComesFromHeadersNotTheURL(t *testing.T) {
 		t.Errorf("a token in the query string must be ignored, got %q", got)
 	}
 }
+
+func TestWebSocketUpgradeOriginPolicy(t *testing.T) {
+	s := &Server{
+		AllowedOrigins: []string{"https://configured.example.com"},
+	}
+	s.upgrader = s.newUpgrader()
+
+	r := chi.NewRouter()
+	r.Get("/ws", func(w http.ResponseWriter, req *http.Request) {
+		conn, err := s.upgrader.Upgrade(w, req, nil)
+		if err != nil {
+			return
+		}
+		conn.Close()
+	})
+
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+
+	// 1. Same-origin request (matching srv host) should succeed even if not in AllowedOrigins.
+	dialer := websocket.Dialer{}
+	header := http.Header{}
+	header.Set("Origin", srv.URL)
+	conn, resp, err := dialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("same-origin websocket dial should succeed, got: %v (status %v)", err, resp)
+	}
+	conn.Close()
+
+	// 2. Allowed cross-origin should succeed.
+	header = http.Header{}
+	header.Set("Origin", "https://configured.example.com")
+	conn, resp, err = dialer.Dial(wsURL, header)
+	if err != nil {
+		t.Fatalf("configured allowed origin should succeed, got: %v (status %v)", err, resp)
+	}
+	conn.Close()
+
+	// 3. Disallowed origin should fail with 403 Forbidden.
+	header = http.Header{}
+	header.Set("Origin", "https://unauthorized.example.com")
+	conn, resp, err = dialer.Dial(wsURL, header)
+	if err == nil {
+		conn.Close()
+		t.Fatalf("disallowed origin should have failed")
+	}
+	if resp == nil || resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for disallowed origin, got %v", resp)
+	}
+}
+

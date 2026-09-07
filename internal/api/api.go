@@ -155,8 +155,10 @@ func (s *Server) newUpgrader() websocket.Upgrader {
 	return websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin:     func(r *http.Request) bool { return s.originAllowed(r.Header.Get("Origin")) },
-		Subprotocols:    []string{wsProtocol},
+		CheckOrigin: func(r *http.Request) bool {
+			return isSameOrigin(r) || s.originAllowed(r.Header.Get("Origin"))
+		},
+		Subprotocols: []string{wsProtocol},
 	}
 }
 
