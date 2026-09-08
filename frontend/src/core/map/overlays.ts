@@ -1,10 +1,9 @@
 import type { FeatureCollection, Feature } from 'geojson';
-import type { GameState, Waypoint } from '../projection/projectionStore';
+import type { GameState } from '../projection/projectionStore';
 import { loadTeamSession } from '../game/teamSession';
 import { getTeamColor } from '../team/palette';
 import { computeRouteOrder } from '../editor/geometryUtils';
-import { computeRaceAccessibility, type RaceAccessibilityResult } from './raceAccessibility';
-import { calculateDistance } from '../player/locationService';
+import { computeRaceAccessibility, type WaypointRaceStatus } from './raceAccessibility';
 import { makeCirclePolygon } from './geometry';
 import type { MapPalette } from './mapTheme';
 import type { DraftMapWaypoint, DraftMapRoad, DraggedWaypointPos, PlayerLocation } from './types';
@@ -188,38 +187,19 @@ export function resolveActiveTeamId(
   return (gameState.gameId ? loadTeamSession(gameState.gameId)?.teamId : null) ?? null;
 }
 
-/** Picks the open waypoint the player stands nearest, or null without a fix. */
-function nearestOpenWaypoint(
-  gameState: GameState,
-  raceAcc: RaceAccessibilityResult,
-  playerLocation: PlayerLocation | null
-): Waypoint | null {
-  if (!playerLocation) return null;
-
-  let nearest: Waypoint | null = null;
-  let nearestDistance = Infinity;
-
-  gameState.waypoints.forEach((w) => {
-    const acc = raceAcc.waypoints[w.id];
-    // Somewhere already stood on is not somewhere left to reach.
-    if (!acc?.isAccessible || acc.status === 'cleared' || acc.status === 'current') return;
-
-    const distance = calculateDistance(playerLocation.lat, playerLocation.lon, w.lat, w.lon);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearest = w;
-    }
-  });
-
-  return nearest;
+/** Colour of a waypoint's arrival ring, matching the marker it surrounds. */
+function ringColor(status: WaypointRaceStatus, palette: MapPalette): string {
+  if (status === 'current') return palette.waypointCurrent;
+  if (status === 'finish') return palette.waypointFinish;
+  if (status === 'start') return palette.waypointStart;
+  return palette.waypointAccessible;
 }
 
 /** Generates GeoJSON overlay collections for live race visualization. */
 export function buildRaceOverlays(
   gameState: GameState,
   teamId: string | null,
-  palette: MapPalette,
-  playerLocation: PlayerLocation | null = null
+  palette: MapPalette
 ): MapOverlays {
   const raceAcc = computeRaceAccessibility(gameState, teamId);
 
@@ -444,21 +424,23 @@ export function buildRaceOverlays(
       }))
   };
 
-  // One ring in play, on the open waypoint being walked towards, so a board with
-  // ten waypoints unlocked at once does not bury the map in circles.
-  const ringed = nearestOpenWaypoint(gameState, raceAcc, playerLocation);
+  // Every waypoint still to be reached carries its arrival radius, so a team can
+  // see how close they have to get to each option in front of them.
   const radiiGeoJson: FeatureCollection = {
     type: 'FeatureCollection',
-    features: ringed
-      ? [
-        {
-          ...makeCirclePolygon(ringed.lat, ringed.lon, ringed.arrival_radius_m),
-          properties: {
-            color: ringed.isFinish ? palette.waypointFinish : palette.waypointAccessible
-          }
+    features: gameState.waypoints
+      .filter((w) => {
+        const status = raceAcc.waypoints[w.id]?.status;
+        // Somewhere already stood on is not somewhere left to reach.
+        return raceAcc.waypoints[w.id]?.isAccessible && status !== 'cleared';
+      })
+      .map((w) => ({
+        ...makeCirclePolygon(w.lat, w.lon, w.arrival_radius_m),
+        properties: {
+          id: w.id,
+          color: ringColor(raceAcc.waypoints[w.id].status, palette)
         }
-      ]
-      : []
+      }))
   };
 
   return {

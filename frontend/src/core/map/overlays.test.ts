@@ -59,44 +59,41 @@ const ringCentres = (features: GeoJSON.Feature[]) =>
   });
 
 describe('race arrival-radius rings', () => {
-  it('draws no ring before there is a GPS fix', () => {
-    const overlays = buildRaceOverlays(board(), 'team-1', palette, null);
-    expect(overlays.radii.features).toHaveLength(0);
+  it('rings every open waypoint the team can walk to', () => {
+    const overlays = buildRaceOverlays(board(), 'team-1', palette);
+
+    expect(overlays.radii.features).toHaveLength(2);
+    const lats = ringCentres(overlays.radii.features).map(([, lat]) => lat);
+    expect(lats[0]).toBeCloseTo(51.001, 4);
+    expect(lats[1]).toBeCloseTo(51.05, 4);
   });
 
-  it('draws exactly one ring, on the open waypoint the player is nearest', () => {
-    const overlays = buildRaceOverlays(board(), 'team-1', palette, { lat: 51.0005, lon: 4.0, accuracy: 10 });
+  it('leaves waypoints behind a locked road unringed', () => {
+    const ids = buildRaceOverlays(board(), 'team-1', palette).radii.features.map(
+      (f) => f.properties?.id
+    );
 
-    expect(overlays.radii.features).toHaveLength(1);
-    const [[lon, lat]] = ringCentres(overlays.radii.features);
-    expect(lon).toBeCloseTo(4.0, 4);
-    expect(lat).toBeCloseTo(51.001, 4);
-  });
-
-  it('follows the player to the next waypoint as they move', () => {
-    const overlays = buildRaceOverlays(board(), 'team-1', palette, { lat: 51.049, lon: 4.0, accuracy: 10 });
-
-    expect(overlays.radii.features).toHaveLength(1);
-    const [[, lat]] = ringCentres(overlays.radii.features);
-    expect(lat).toBeCloseTo(51.05, 4);
-  });
-
-  it('never rings the waypoint the team is standing on', () => {
-    const overlays = buildRaceOverlays(board(), 'team-1', palette, { lat: 51.0, lon: 4.0, accuracy: 10 });
-
-    expect(overlays.radii.features).toHaveLength(1);
-    const [[, lat]] = ringCentres(overlays.radii.features);
-    expect(lat).toBeCloseTo(51.001, 4);
+    expect(ids).not.toContain('finish');
   });
 
   it('drops the ring on a waypoint once it is cleared', () => {
     const state = board();
     state.progress['team-1'].clearedWaypoints = ['start', 'near'];
-    const overlays = buildRaceOverlays(state, 'team-1', palette, { lat: 51.0005, lon: 4.0, accuracy: 10 });
+    const overlays = buildRaceOverlays(state, 'team-1', palette);
 
     expect(overlays.radii.features).toHaveLength(1);
     const [[, lat]] = ringCentres(overlays.radii.features);
     expect(lat).toBeCloseTo(51.05, 4);
+  });
+
+  it('rings the waypoint underfoot while its challenge is unsolved', () => {
+    const state = board();
+    state.waypoints[0].challengeId = 'ch-1';
+    const overlays = buildRaceOverlays(state, 'team-1', palette);
+
+    expect(overlays.radii.features).toHaveLength(1);
+    expect(overlays.radii.features[0].properties?.id).toBe('start');
+    expect(overlays.radii.features[0].properties?.color).toBe('token:waypointCurrent');
   });
 });
 
@@ -204,17 +201,17 @@ describe('race team position markers', () => {
     overlays.teamPositions.features.map((f) => f.properties?.teamId).sort();
 
   it('leaves your own team out, so your live dot is the only marker on you', () => {
-    const overlays = buildRaceOverlays(withPositions(), 'team-1', palette, null);
+    const overlays = buildRaceOverlays(withPositions(), 'team-1', palette);
     expect(teamIdsOf(overlays)).toEqual(['team-2']);
   });
 
   it('still draws every rival team', () => {
-    const overlays = buildRaceOverlays(withPositions(), 'team-3', palette, null);
+    const overlays = buildRaceOverlays(withPositions(), 'team-3', palette);
     expect(teamIdsOf(overlays)).toEqual(['team-1', 'team-2']);
   });
 
   it('draws every team for a viewer who has no team of their own', () => {
-    const overlays = buildRaceOverlays(withPositions(), null, palette, null);
+    const overlays = buildRaceOverlays(withPositions(), null, palette);
     expect(teamIdsOf(overlays)).toEqual(['team-1', 'team-2']);
   });
 });
