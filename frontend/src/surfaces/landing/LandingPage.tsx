@@ -212,9 +212,9 @@ export const LandingPage: React.FC = () => {
 
       {/* Hero Section */}
       <section className="landing-hero">
-        {/* The mark carries the headline: it is the h1, named for assistive tech. */}
         <h1 className="landing-hero__title">
-          <RouteGlobe label="Design, share, and race" />
+          <span className="u-visually-hidden">Runway &mdash; design and race real-world courses</span>
+          <RouteGlobe />
         </h1>
 
         <p className="t-narrate fs-8 landing-hero__tagline">

@@ -41,26 +41,11 @@ export const PageFooter: React.FC = () => {
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)', flexWrap: 'wrap' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-          <LinkButton
-            href={docsUrl()}
-            variant="ghost"
-            size="sm"
-            className="btn--icon"
-            title="Documentation"
-            aria-label="Documentation"
-          >
-            <IconBook />
+          <LinkButton href={docsUrl()} icon={<IconBook />} variant="ghost" size="sm">
+            Docs
           </LinkButton>
-          <LinkButton
-            href={GITHUB_URL}
-            external
-            variant="ghost"
-            size="sm"
-            className="btn--icon"
-            title="GitHub Repository"
-            aria-label="GitHub Repository"
-          >
-            <IconGithub />
+          <LinkButton href={GITHUB_URL} external icon={<IconGithub />} variant="ghost" size="sm">
+            GitHub
           </LinkButton>
         </div>
       </nav>

@@ -45,6 +45,16 @@ hr {
   margin: var(--sp-4) 0;
 }
 
+/* Keeps text in the crawlable DOM and the accessibility tree without showing it. */
+.u-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* App shell main layout. */
 #root {
   display: flex;

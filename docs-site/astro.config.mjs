@@ -30,6 +30,27 @@ export default defineConfig({
       },
       // The four Departure voices: Announce, Narrate, UI, Data. See DESIGN.md.
       head: [
+        // Starlight already claims a `summary_large_image` card, which needs an image to fill it.
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image', content: 'https://playrunway.app/og-image.png' },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image:width', content: '1200' },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image:height', content: '630' },
+        },
+        {
+          tag: 'meta',
+          attrs: {
+            property: 'og:image:alt',
+            content:
+              'The Runway wordmark beside a wireframe globe crossed by three sunset-coloured routes.',
+          },
+        },
         {
           tag: 'link',
           attrs: { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

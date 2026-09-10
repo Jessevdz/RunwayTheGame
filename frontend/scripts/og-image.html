@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Runway — social card source</title>
+  <!-- Regenerate: chrome --headless --disable-gpu --screenshot=public/og-image.png --window-size=1200,630 --default-background-color=00000000 scripts/og-image.html -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600&family=JetBrains+Mono:wght@500&family=Playfair+Display:ital@1&display=swap"
+    rel="stylesheet">
+  <style>
+    /* Night Flight values are inlined because this file renders outside the app's token cascade. */
+    :root {
+      --navy-900: #101A24;
+      --signal: #F0F0F0;
+      --navy-300: #8794A2;
+      --line-strong: rgba(240, 240, 240, .42);
+      --mesh-a: rgba(165, 160, 238, .16);
+      --mesh-b: rgba(245, 122, 60, .14);
+      --red: #EB3539;
+      --orange: #F57A3C;
+      --amber: #FFBF40;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 1200px;
+      height: 630px;
+      overflow: hidden;
+      background: var(--navy-900);
+      display: flex;
+      align-items: center;
+      gap: 64px;
+      padding: 0 88px;
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    /* Atmospheric mesh, per the elevation rules in DESIGN.md. */
+    .mesh {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(60% 70% at 18% 12%, var(--mesh-a), transparent 70%),
+        radial-gradient(55% 65% at 88% 86%, var(--mesh-b), transparent 70%);
+    }
+
+    .copy {
+      position: relative;
+      flex: 1;
+    }
+
+    .brand-lines {
+      display: block;
+      margin-bottom: 34px;
+    }
+
+    .label {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      font-size: 19px;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--navy-300);
+      margin-bottom: 20px;
+    }
+
+    .wordmark {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 122px;
+      line-height: .92;
+      letter-spacing: -.01em;
+      color: var(--signal);
+    }
+
+    .tagline {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: 38px;
+      line-height: 1.25;
+      color: var(--navy-300);
+      margin-top: 26px;
+    }
+
+    .globe {
+      position: relative;
+      width: 430px;
+      height: 430px;
+      flex: none;
+    }
+
+    .globe .sphere {
+      fill: none;
+      stroke: var(--line-strong);
+      stroke-width: 1.5;
+    }
+
+    .globe .band {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+    }
+
+    .globe .waypoint {
+      fill: var(--navy-900);
+      stroke-width: 4;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="mesh"></div>
+
+  <div class="copy">
+    <svg class="brand-lines" width="76" height="76" viewBox="0 0 24 24" fill="none">
+      <line x1="3" y1="6" x2="21" y2="6" stroke="var(--red)" stroke-width="3" stroke-linecap="round" />
+      <line x1="3" y1="12" x2="21" y2="12" stroke="var(--orange)" stroke-width="3" stroke-linecap="round" />
+      <line x1="3" y1="18" x2="21" y2="18" stroke="var(--amber)" stroke-width="3" stroke-linecap="round" />
+    </svg>
+    <p class="label">Location-based racing game</p>
+    <h1 class="wordmark">RUNWAY</h1>
+    <p class="tagline">Race the real world.</p>
+  </div>
+
+  <!-- Geometry lifted from the RouteGlobe `bands` variant so the card and the app agree. -->
+  <svg class="globe" viewBox="0 0 320 320" fill="none">
+    <g class="sphere">
+      <circle cx="160" cy="160" r="120" />
+      <ellipse cx="160" cy="160" rx="120" ry="33" />
+      <ellipse cx="160" cy="112" rx="110" ry="29" />
+      <ellipse cx="160" cy="208" rx="110" ry="29" />
+      <ellipse cx="160" cy="160" rx="48" ry="120" />
+    </g>
+    <path class="band" d="M26 226 C 92 90, 212 74, 292 128" stroke="var(--red)" />
+    <path class="band" d="M24 246 C 92 114, 212 98, 294 150" stroke="var(--orange)" />
+    <path class="band" d="M24 266 C 92 138, 212 122, 294 172" stroke="var(--amber)" />
+    <circle cx="24" cy="246" r="7" fill="var(--orange)" />
+    <circle class="waypoint" cx="83.3" cy="168" r="7" stroke="var(--orange)" />
+    <circle class="waypoint" cx="153.8" cy="129" r="7" stroke="var(--orange)" />
+    <circle class="waypoint" cx="226.8" cy="124.5" r="7" stroke="var(--orange)" />
+    <polygon points="294 137 282.7 143.5 282.7 156.5 294 163 305.3 156.5 305.3 143.5" fill="var(--red)" />
+  </svg>
+</body>
+
+</html>

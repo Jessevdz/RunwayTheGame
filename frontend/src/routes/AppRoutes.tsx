@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { useSurfaceAnalytics } from '../core/analytics/useSurfaceAnalytics';
+import { useDocumentMeta } from '../core/seo/useDocumentMeta';
 import { BugReporter } from '../surfaces/shared/BugReporter';
 
 const LandingPage = React.lazy(() =>
@@ -53,6 +54,7 @@ const NotFoundPage = React.lazy(() =>
 
 export const AppRoutes: React.FC = () => {
   useSurfaceAnalytics();
+  useDocumentMeta();
 
   return (
     <>
