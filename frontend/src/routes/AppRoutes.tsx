@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { useSurfaceAnalytics } from '../core/analytics/useSurfaceAnalytics';
 import { BugReporter } from '../surfaces/shared/BugReporter';
 
@@ -47,6 +47,9 @@ const AdminPage = React.lazy(() =>
 const Gallery = React.lazy(() =>
   import('../design-system/__gallery__/Gallery').then((m) => ({ default: m.Gallery }))
 );
+const NotFoundPage = React.lazy(() =>
+  import('../surfaces/shared/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
+);
 
 export const AppRoutes: React.FC = () => {
   useSurfaceAnalytics();
@@ -84,7 +87,7 @@ export const AppRoutes: React.FC = () => {
               }
             />
           )}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
       {/* Outside <Suspense> so a lazy surface still loading has a way to report. */}

@@ -1,0 +1,16 @@
+# Runway — https://playrunway.app
+
+User-agent: *
+Allow: /
+# A live race broadcasts every team's GPS position, so session URLs stay out of the index.
+Disallow: /race/
+Disallow: /host/
+Disallow: /join/
+Disallow: /design/
+Disallow: /races
+# These two routes carry an admin key in the path itself.
+Disallow: /admin
+Disallow: /roadmap/admin
+
+Sitemap: https://playrunway.app/sitemap.xml
+Sitemap: https://playrunway.app/docs/sitemap-index.xml

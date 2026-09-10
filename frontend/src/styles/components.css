@@ -1389,6 +1389,44 @@
     }
 }
 
+/* Not-found surface layout container. */
+.notfound {
+    max-width: var(--wrap-content);
+    margin: 0 auto var(--sp-6);
+    padding: var(--sp-8) 0 var(--sp-5);
+    text-align: center;
+}
+
+.notfound__title {
+    color: var(--ink-strong);
+    margin: var(--sp-2) 0 var(--sp-4);
+}
+
+.notfound__body {
+    max-width: 44ch;
+    margin: 0 auto;
+    color: var(--ink-muted);
+}
+
+.notfound__ctas {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    margin-top: var(--sp-6);
+}
+
+@media (max-width: 767px) {
+    .notfound__ctas {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--sp-2);
+        max-width: 20rem;
+        margin-inline: auto;
+    }
+}
+
 .hero h1 em {
     display: block;
     font-family: var(--font-narrate);
