@@ -154,9 +154,9 @@ export const UsagePanel: React.FC = () => {
 
   const busiest = overview
     ? overview.daily.reduce(
-        (best, day) => (day.sessions > best.sessions ? day : best),
-        { day: '—', sessions: 0, events: 0 }
-      )
+      (best, day) => (day.sessions > best.sessions ? day : best),
+      { day: '—', sessions: 0, events: 0 }
+    )
     : null;
 
   return (
@@ -249,12 +249,6 @@ export const UsagePanel: React.FC = () => {
               </tbody>
             </table>
           </Card>
-
-          <p className="fs-3 usage-footnote">
-            A visit is one page load, not one person: the same person returning tomorrow counts
-            twice, and nothing here follows anyone between visits. Events older than 90 days are
-            deleted.
-          </p>
         </>
       )}
     </div>
