@@ -1,5 +1,6 @@
 /** Core HTTP request client and utility methods. */
 import { recordDiagnostic } from '../diagnostics/errorBuffer';
+import { NETWORK_FAILURE_STATUS, reportRequestFailure } from '../analytics/requestFailures';
 
 // A caller-supplied api base is only honoured when it names an origin this
 // device has previously registered; an IP-range guess never decides trust.
@@ -140,18 +141,29 @@ interface RequestOptions extends RequestInit {
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { token, ...init } = options;
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {})
-    }
-  });
+  const method = init.method ?? 'GET';
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {})
+      }
+    });
+  } catch (err) {
+    // A request that never reached a response still says something about reach.
+    reportRequestFailure(path, method, NETWORK_FAILURE_STATUS);
+    throw err;
+  }
+
   if (!res.ok) {
     const message = await errorMessage(res);
     // Feed the bug reporter, so a report says which call failed and how.
-    recordDiagnostic('request', `${res.status} ${init.method ?? 'GET'} ${path} — ${message}`);
+    recordDiagnostic('request', `${res.status} ${method} ${path} — ${message}`);
+    reportRequestFailure(path, method, res.status);
     throw new ApiError(res.status, message);
   }
   if (res.status === 204) return undefined as T;

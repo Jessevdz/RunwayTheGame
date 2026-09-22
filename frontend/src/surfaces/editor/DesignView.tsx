@@ -1,4 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { analytics } from '../../core/analytics/analyticsClient';
+import { currentViewport } from '../../core/analytics/events';
 import { useNavigate } from 'react-router-dom';
 import { Button, Empty, BrandLines } from '@ds';
 import { IconBack } from './components/EditorIcons';
@@ -12,6 +14,12 @@ import { PageFooter } from '../shared/PageFooter';
 // Mobile fallback notice rendered when map designer is opened on small viewports.
 const DesignUnavailable: React.FC = () => {
   const navigate = useNavigate();
+
+  // The editor is desktop-only, so this is the count of people who wanted it
+  // and could not have it.
+  useEffect(() => {
+    analytics.track('app.design_unavailable', { viewport: currentViewport() });
+  }, []);
 
   return (
     <PageShell

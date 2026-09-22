@@ -13,7 +13,9 @@ import {
   saveMyMap,
   syncMyMapMeta
 } from '../../core/game/mapSession';
+import { analytics } from '../../core/analytics/analyticsClient';
 import { applyBoardToDraft, applyStoredDraft, buildBoardPayload, UNTITLED_MAP_NAME } from './boardDraft';
+import { boardSaveProps } from './boardMetrics';
 import { clearLocalDraft, readLocalDraft, writeLocalDraft } from './localDraft';
 import type { BoardDraftApi } from './useBoardDraft';
 import type { SaveStatus } from './components/PaneHeader';
@@ -26,6 +28,8 @@ export interface BoardPersistence {
   listingBusy: boolean;
   listingError: string | null;
   saveStatus: SaveStatus;
+  /** This session has written the board to the server at least once. */
+  hasSaved: boolean;
   errorMessage: string | null;
   reportError: (message: string | null) => void;
   save: () => Promise<void>;
@@ -46,6 +50,7 @@ export function useBoardPersistence(routeMapId: string | undefined, board: Board
   const [isEditable, setIsEditable] = useState<boolean>(true);
 
   const [asyncStatus, setAsyncStatus] = useState<SaveStatus | null>(null);
+  const [hasSaved, setHasSaved] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isForking, setIsForking] = useState<boolean>(false);
   const [isListed, setIsListed] = useState<boolean>(false);
@@ -103,9 +108,14 @@ export function useBoardPersistence(routeMapId: string | undefined, board: Board
 
     const payload = buildBoardPayload(draft);
 
+    // Distinguishes a first save from a re-save, which is the difference
+    // between a new board and an edited one.
+    let claimed = false;
+
     /** A board row plus the token that may write it — created on demand. */
     const claimBoard = async (): Promise<{ id: string; token: string }> => {
       const res = await createBoard(payload.name);
+      claimed = true;
       setMapId(res.id);
       setEditToken(res.edit_token);
       return { id: res.id, token: res.edit_token };
@@ -129,8 +139,10 @@ export function useBoardPersistence(routeMapId: string | undefined, board: Board
       clearLocalDraft(null);
 
       markSaved(signatureAtSave);
+      setHasSaved(true);
       // Clear the async override so the surface re-derives 'saved' vs 'dirty'.
       setAsyncStatus(null);
+      analytics.track('board.saved', boardSaveProps(draft, claimed ? 'created' : 'updated'));
 
       if (target.id !== routeMapId) {
         navigate(`/design/${target.id}#token=${target.token}`, { replace: true });
@@ -138,6 +150,7 @@ export function useBoardPersistence(routeMapId: string | undefined, board: Board
     } catch (err) {
       setAsyncStatus('error');
       setErrorMessage(err instanceof Error ? err.message : 'Save failed');
+      analytics.track('board.saved', boardSaveProps(draft, 'failed'));
     }
   }, [isEditable, signature, draft, mapId, editToken, routeMapId, markSaved, navigate]);
 
@@ -156,6 +169,7 @@ export function useBoardPersistence(routeMapId: string | undefined, board: Board
         await setBoardVisibility(mapId, next, { editToken });
         setIsListed(next);
         syncMyMapMeta(mapId, { name: draft.boardName, isListed: next });
+        analytics.track('board.listed', { listed: next });
       } catch (err) {
         const fallback = next
           ? 'Could not publish this map.'
@@ -173,6 +187,7 @@ export function useBoardPersistence(routeMapId: string | undefined, board: Board
     setIsForking(true);
     try {
       const res = await forkBoard(mapId);
+      analytics.track('board.forked');
       saveMyMap({ mapId: res.id, editToken: res.edit_token, name: res.name });
       navigate(`/design/${res.id}#token=${res.edit_token}`);
     } catch (err) {
@@ -204,6 +219,7 @@ export function useBoardPersistence(routeMapId: string | undefined, board: Board
     // An in-flight save or a failure speaks for itself; otherwise the signature does.
     saveStatus:
       asyncStatus === 'saving' || asyncStatus === 'error' ? asyncStatus : isDirty ? 'dirty' : 'saved',
+    hasSaved,
     errorMessage,
     reportError,
     save,

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { analytics } from '../../core/analytics/analyticsClient';
 import { generateUUID } from '../../core/util/uuid';
 import type { RoadDraft, WaypointDraft } from '../../core/editor/geometryUtils';
 import { DEFAULT_ARRIVAL_RADIUS_M } from './boardDraft';
@@ -87,6 +88,7 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
         }
       ]);
       setSelectedWaypointId(id);
+      analytics.track('editor.waypoint_added');
     },
     [isEditable, setWaypoints]
   );
@@ -94,6 +96,13 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
   const addRoad = useCallback(
     (waypointIdA: string, waypointIdB: string) => {
       if (!isEditable) return;
+      // Re-drawing a road that already exists is a no-op, and not an addition.
+      const duplicate = roads.some(
+        (s) =>
+          (s.waypoint_id_a === waypointIdA && s.waypoint_id_b === waypointIdB) ||
+          (s.waypoint_id_a === waypointIdB && s.waypoint_id_b === waypointIdA)
+      );
+      if (!duplicate) analytics.track('editor.road_added');
       setRoads((prev) => {
         const exists = prev.some(
           (s) =>
@@ -109,13 +118,14 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
         return [...prev, road];
       });
     },
-    [isEditable, setRoads]
+    [isEditable, roads, setRoads]
   );
 
   const moveWaypoint = useCallback(
     (waypointId: string, lat: number, lon: number) => {
       if (!isEditable) return;
       setWaypoints((prev) => prev.map((w) => (w.id === waypointId ? { ...w, lat, lon } : w)));
+      analytics.track('editor.waypoint_moved');
     },
     [isEditable, setWaypoints]
   );
@@ -132,6 +142,7 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
           isFinish: w.id === waypointId ? false : w.isFinish
         }))
       );
+      analytics.track('editor.start_set');
     },
     [isEditable, setWaypoints]
   );
@@ -152,6 +163,7 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
         delete next[waypointId];
         return next;
       });
+      analytics.track('editor.finish_set');
     },
     [setWaypoints, setChallenges]
   );
@@ -176,6 +188,7 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
         name: wp?.name || 'Untitled waypoint',
         prompt: existing.prompt
       });
+      analytics.track('editor.confirm_shown', { subject: 'finish_role' });
     },
     [isEditable, challenges, waypoints, applySetFinish]
   );
@@ -221,6 +234,7 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
           (s) => s.waypoint_id_a === waypointId || s.waypoint_id_b === waypointId
         ).length
       });
+      analytics.track('editor.confirm_shown', { subject: 'delete_waypoint' });
     },
     [isEditable, waypoints, roads]
   );
@@ -238,6 +252,7 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
         waypointAName: wpA ? wpA.name : 'Waypoint',
         waypointBName: wpB ? wpB.name : 'Waypoint'
       });
+      analytics.track('editor.confirm_shown', { subject: 'delete_road' });
     },
     [isEditable, waypoints, roads]
   );
@@ -249,6 +264,11 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
 
   const confirmDelete = useCallback(() => {
     if (!pendingDelete) return;
+    const subject = pendingDelete.type === 'waypoint' ? 'delete_waypoint' : 'delete_road';
+    analytics.track('editor.confirm_resolved', { subject, outcome: 'confirmed' });
+    analytics.track(
+      pendingDelete.type === 'waypoint' ? 'editor.waypoint_deleted' : 'editor.road_deleted'
+    );
     if (pendingDelete.type === 'waypoint') {
       const waypointId = pendingDelete.id;
       setWaypoints((prev) => prev.filter((w) => w.id !== waypointId));
@@ -271,12 +291,25 @@ export function useWaypointEditing(board: BoardDraftApi, isEditable: boolean): W
 
   const confirmFinishRole = useCallback(() => {
     if (!pendingFinishRole) return;
+    analytics.track('editor.confirm_resolved', { subject: 'finish_role', outcome: 'confirmed' });
     applySetFinish(pendingFinishRole.waypointId);
     setPendingFinishRole(null);
   }, [pendingFinishRole, applySetFinish]);
 
-  const cancelDelete = useCallback(() => setPendingDelete(null), []);
-  const cancelFinishRole = useCallback(() => setPendingFinishRole(null), []);
+  const cancelDelete = useCallback(() => {
+    if (pendingDelete) {
+      const subject = pendingDelete.type === 'waypoint' ? 'delete_waypoint' : 'delete_road';
+      analytics.track('editor.confirm_resolved', { subject, outcome: 'cancelled' });
+    }
+    setPendingDelete(null);
+  }, [pendingDelete]);
+
+  const cancelFinishRole = useCallback(() => {
+    if (pendingFinishRole) {
+      analytics.track('editor.confirm_resolved', { subject: 'finish_role', outcome: 'cancelled' });
+    }
+    setPendingFinishRole(null);
+  }, [pendingFinishRole]);
 
   return {
     selectedWaypointId,

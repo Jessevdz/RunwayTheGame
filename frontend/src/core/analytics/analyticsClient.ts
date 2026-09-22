@@ -3,6 +3,7 @@ import { generateUUID } from '../util/uuid';
 import type { AnalyticsEventName, AnalyticsProps } from './events';
 import { sendBatch } from './transport';
 import type { QueuedEvent } from './transport';
+import { setRequestFailureSink } from './requestFailures';
 
 /** In-memory analytics client that queues and flushes metrics. */
 
@@ -46,6 +47,11 @@ class AnalyticsClient {
         this.enabled = false;
         this.discard();
       });
+
+    // Let the HTTP client report failures without importing this module.
+    setRequestFailureSink((route, status) =>
+      this.track('app.request_failed', { route, status })
+    );
 
     // Flush remaining events when the document is hidden or unloaded.
     window.addEventListener('visibilitychange', () => {

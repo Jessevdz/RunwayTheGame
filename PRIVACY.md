@@ -139,6 +139,7 @@ basis: 6(1)(a), your consent, which you may withdraw.
 | Solo leaderboard entries | 30 days after the run |
 | Roadmap anti-abuse fingerprints | 30 days |
 | Bug reports | 90 days after they are filed |
+| Optional editor telemetry (see §2), if the operator enabled it at all | 90 days after the event |
 | Server logs | 7 days |
 | Database backups | 30 days, on a rolling window |
 | Maps and boards (no personal data, no author recorded) | Kept (see §2.4) |

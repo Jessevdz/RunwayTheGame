@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { analytics } from '../../core/analytics/analyticsClient';
 import { generateUUID } from '../../core/util/uuid';
 import {
   parseCard,
@@ -88,11 +89,13 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
   const handleAddCard = () => {
     const card: CardDraft = { id: newCardId(activeDeck), text: '' };
     onChange([...cards, card]);
+    analytics.track('deck.card_added', { deck: activeDeck });
     setEditing({ id: card.id, title: '', description: '' });
   };
 
   const handleDuplicate = (card: CardDraft) => {
     const copy: CardDraft = { id: newCardId(activeDeck), text: card.text };
+    analytics.track('deck.card_added', { deck: activeDeck });
     const idx = cards.findIndex((c) => c.id === card.id);
     const next = [...cards];
     next.splice(idx + 1, 0, copy);
@@ -102,6 +105,7 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
 
   const handleRemove = (id: string) => {
     onChange(cards.filter((c) => c.id !== id));
+    analytics.track('deck.card_removed', { deck: activeDeck });
     if (editing?.id === id) setEditing(null);
   };
 

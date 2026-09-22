@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Dialog, Button, Input, Notice, Badge } from '@ds';
 import { useCopyFeedback } from '../../../core/hooks/useCopyFeedback';
+import { analytics } from '../../../core/analytics/analyticsClient';
 
 interface ShareModalProps {
   mapId: string;
@@ -34,6 +35,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 }) => {
   const [copiedView, copyView] = useCopyFeedback();
   const [copiedEdit, copyEdit] = useCopyFeedback();
+
+  /** Records a copy only when the clipboard actually took it. */
+  const copyLink = async (link: string, url: string, copy: (text: string) => Promise<boolean>) => {
+    if (await copy(url)) analytics.track('board.share_copied', { link });
+  };
   const [confirmingPublish, setConfirmingPublish] = useState(false);
 
   const viewUrl = `${window.location.origin}/design/${mapId}`;
@@ -134,7 +140,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               hint="Anyone with this link can view the map and fork their own copy — gallery or not."
             />
             <div style={{ marginTop: 'var(--sp-2)', display: 'flex', justifyContent: 'flex-end' }}>
-              <Button variant="secondary" size="sm" onClick={() => copyView(viewUrl)}>
+              <Button variant="secondary" size="sm" onClick={() => void copyLink('view', viewUrl, copyView)}>
                 {copiedView ? 'Copied! ✓' : 'Copy'}
               </Button>
             </div>
@@ -149,7 +155,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 hint="Carries the edit key: whoever opens it can edit this map, publish it, and take it down. Share only with trusted co-designers."
               />
               <div style={{ marginTop: 'var(--sp-2)', display: 'flex', justifyContent: 'flex-end' }}>
-                <Button variant="primary" size="sm" onClick={() => copyEdit(editUrl)}>
+                <Button variant="primary" size="sm" onClick={() => void copyLink('edit', editUrl, copyEdit)}>
                   {copiedEdit ? 'Copied! ✓' : 'Copy Key Link'}
                 </Button>
               </div>

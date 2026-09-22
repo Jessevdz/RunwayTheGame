@@ -19,6 +19,10 @@ const RetentionDays = 30
 // RetentionWindow is RetentionDays as a duration.
 const RetentionWindow = RetentionDays * 24 * time.Hour
 
+// AnalyticsRetentionDays is how long an anonymous usage event is kept. The
+// schema is written around this number, and PRIVACY.md publishes it.
+const AnalyticsRetentionDays = 90
+
 // stalePositionAge is the maximum duration a live position record may persist without updates.
 const stalePositionAge = 24 * time.Hour
 
@@ -130,6 +134,26 @@ func (s *Server) SweepRetention(ctx context.Context) {
 	if err := s.sweepOrphanBoardSnapshots(ctx); err != nil {
 		logger.Error(ctx, "retention: failed to sweep orphan board snapshots", map[string]interface{}{"error": err.Error()})
 	}
+	if err := s.sweepExpiredAnalytics(ctx); err != nil {
+		logger.Error(ctx, "retention: failed to sweep analytics events", map[string]interface{}{"error": err.Error()})
+	}
+}
+
+// sweepExpiredAnalytics deletes usage events past the analytics retention window.
+// It runs whether or not recording is enabled, so switching RUNWAY_ANALYTICS off
+// still drains what an earlier run wrote rather than leaving it indefinitely.
+func (s *Server) sweepExpiredAnalytics(ctx context.Context) error {
+	tag, err := s.DB.Pool.Exec(ctx, `
+		DELETE FROM analytics_events
+		 WHERE occurred_on < (NOW() AT TIME ZONE 'utc')::date - $1::integer
+	`, AnalyticsRetentionDays)
+	if err != nil {
+		return err
+	}
+	if removed := tag.RowsAffected(); removed > 0 {
+		logger.Info(ctx, "retention: deleted expired analytics events", map[string]interface{}{"rows": removed})
+	}
+	return nil
 }
 
 // sweepOrphanBoardSnapshots deletes frozen board copies whose race never got created.

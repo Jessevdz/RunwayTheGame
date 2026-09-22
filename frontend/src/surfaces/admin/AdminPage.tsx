@@ -46,6 +46,7 @@ import type {
 } from '../../core/api/client';
 import { getOrCreateVoterId } from '../../core/game/voterSession';
 import { formatReportContext } from '../../core/diagnostics/reportContext';
+import { UsagePanel } from './UsagePanel';
 
 /** User-facing notice outcome for administrative operations. */
 interface ActionNotice {
@@ -55,7 +56,7 @@ interface ActionNotice {
 
 type BoardFilter = 'all' | 'listed' | 'unlisted';
 
-type AdminTab = 'roadmap' | 'gallery' | 'bugs';
+type AdminTab = 'roadmap' | 'gallery' | 'bugs' | 'usage';
 
 /** Tone for a bug report's severity chip. */
 const SEVERITY_TONE: Record<string, 'crimson' | 'gold' | 'neutral'> = {
@@ -82,7 +83,13 @@ export const AdminPage: React.FC = () => {
   const legacyQueryKey = searchParams.get('admin_key') || searchParams.get('key');
   const tabParam = searchParams.get('tab');
   const initialTab: AdminTab =
-    tabParam === 'gallery' ? 'gallery' : tabParam === 'bugs' ? 'bugs' : 'roadmap';
+    tabParam === 'gallery'
+      ? 'gallery'
+      : tabParam === 'bugs'
+        ? 'bugs'
+        : tabParam === 'usage'
+          ? 'usage'
+          : 'roadmap';
 
   const [enteredKey, setEnteredKey] = useState<string>('');
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
@@ -505,7 +512,8 @@ export const AdminPage: React.FC = () => {
             items={[
               { id: 'roadmap', label: 'Roadmap', icon: '📋', badge: roadmapItems.length },
               { id: 'gallery', label: 'Gallery', icon: '🗺️', badge: boards.length },
-              { id: 'bugs', label: 'Bugs', icon: '🐞', badge: newBugCount }
+              { id: 'bugs', label: 'Bugs', icon: '🐞', badge: newBugCount },
+              { id: 'usage', label: 'Usage', icon: '📈' }
             ]}
             active={activeTab}
             onChange={(id) => handleTabChange(id as AdminTab)}
@@ -792,6 +800,8 @@ export const AdminPage: React.FC = () => {
             )}
           </div>
         )}
+
+        {activeTab === 'usage' && <UsagePanel />}
       </section>
 
       {/* Roadmap Dialogs */}

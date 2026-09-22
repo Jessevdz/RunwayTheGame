@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { analytics } from '../../core/analytics/analyticsClient';
+import { firstTime } from '../../core/analytics/coalesce';
 import { validateBoard } from '../../core/editor/geometryUtils';
 import type { RoadDraft } from '../../core/editor/geometryUtils';
 import type { DraftMapWaypoint } from '../../core/map/MapCore';
@@ -23,9 +25,11 @@ import { usePaneChrome } from './usePaneChrome';
 import { useBoardDraft } from './useBoardDraft';
 import { useBoardFileIO } from './useBoardFileIO';
 import { useBoardPersistence } from './useBoardPersistence';
+import { useEditorSession } from './useEditorSession';
 import { useEditorShortcuts } from './useEditorShortcuts';
 import { useMapEditorEvents } from './useMapEditorEvents';
 import { useWaypointEditing } from './useWaypointEditing';
+import { validationIssueCode } from './validationCodes';
 
 interface EditorSurfaceProps {
   onStateUpdate: (data: {
@@ -68,6 +72,40 @@ export const EditorSurface: React.FC<EditorSurfaceProps> = ({ onStateUpdate }) =
   const errorCount = validationIssues.filter((i) => i.type === 'error').length;
   const warningCount = validationIssues.length - errorCount;
 
+  useEditorSession({
+    mapId,
+    isEditable: persistence.isEditable,
+    saveStatus: persistence.saveStatus,
+    waypointCount: draft.waypoints.length,
+    hasSaved: persistence.hasSaved
+  });
+
+  const pickTool = useCallback((tool: EditorTool, via: string) => {
+    setActiveTool(tool);
+    analytics.track('editor.tool_selected', { tool, via });
+  }, []);
+
+  const openTab = useCallback((tab: EditorTabId) => {
+    setActiveTab(tab);
+    analytics.track('editor.tab_opened', { tab });
+  }, []);
+
+  // Validation runs on every render; the question worth recording is which
+  // problems a board still had at the moment its designer tried to save it.
+  const save = useCallback(() => {
+    for (const issue of validationIssues) {
+      const code = validationIssueCode(issue);
+      if (!code) continue;
+      if (!firstTime(`validation:${code}`)) continue;
+      analytics.track('board.validation_issue', {
+        code,
+        severity: issue.type === 'error' ? 'error' : 'warning',
+        source: 'client'
+      });
+    }
+    void persistence.save();
+  }, [validationIssues, persistence]);
+
   useMapEditorEvents({
     addWaypoint: editing.addWaypoint,
     moveWaypoint: editing.moveWaypoint,
@@ -79,6 +117,7 @@ export const EditorSurface: React.FC<EditorSurfaceProps> = ({ onStateUpdate }) =
     selectWaypoint: (waypointId) => {
       editing.selectWaypoint(waypointId);
       if (waypointId) {
+        analytics.track('editor.waypoint_selected');
         setActiveTab((tab) => (tab === 'challenges' ? tab : 'elements'));
         setPaneCollapsed(false);
       }
@@ -86,21 +125,23 @@ export const EditorSurface: React.FC<EditorSurfaceProps> = ({ onStateUpdate }) =
     cancelAction: () => {
       setActiveTool('select');
       editing.selectWaypoint(null);
+      analytics.track('editor.action_cancelled');
     }
   });
 
   useEditorShortcuts({
     isEditable: persistence.isEditable,
     hasSelection: !!editing.selectedWaypointId,
-    save: persistence.save,
+    save,
     deleteSelection: editing.deleteSelectedWaypoint,
     cancel: () => {
       setActiveTool('select');
       editing.selectWaypoint(null);
+      // The dispatch below comes back through cancelAction, which records it.
       window.dispatchEvent(new CustomEvent('map-cancel-action'));
     },
     pickTool: (tool) => {
-      setActiveTool(tool);
+      pickTool(tool, 'key');
       setActiveTab('elements');
     }
   });
@@ -155,7 +196,7 @@ export const EditorSurface: React.FC<EditorSurfaceProps> = ({ onStateUpdate }) =
           onBack={() => navigate('/')}
           onExpand={() => pane.setCollapsed(false)}
           onPick={(id) => {
-            setActiveTab(id);
+            openTab(id);
             pane.setCollapsed(false);
           }}
         />
@@ -187,7 +228,7 @@ export const EditorSurface: React.FC<EditorSurfaceProps> = ({ onStateUpdate }) =
         onCollapse={() => pane.setCollapsed(true)}
       />
 
-      <TabStrip active={activeTab} errorCount={errorCount} onChange={setActiveTab} />
+      <TabStrip active={activeTab} errorCount={errorCount} onChange={openTab} />
 
       <div className="pane-body">
         {!persistence.isEditable && (
@@ -212,7 +253,7 @@ export const EditorSurface: React.FC<EditorSurfaceProps> = ({ onStateUpdate }) =
             editable={persistence.isEditable}
             selectedWaypoint={editing.selectedWaypoint}
             connectedRoads={editing.connectedRoads}
-            onToolChange={setActiveTool}
+            onToolChange={(tool) => pickTool(tool, 'click')}
             onChangeWaypoint={editing.updateField}
             onLocateWaypoint={() =>
               editing.selectedWaypoint && editing.focusWaypoints([editing.selectedWaypoint.id])
@@ -278,10 +319,10 @@ export const EditorSurface: React.FC<EditorSurfaceProps> = ({ onStateUpdate }) =
         canShare={!!persistence.mapId}
         canClear={draft.waypoints.length > 0 || draft.roads.length > 0}
         listed={persistence.isListed}
-        onReviewIssues={() => setActiveTab('validation')}
+        onReviewIssues={() => openTab('validation')}
         onClear={() => setShowClearModal(true)}
         onShare={() => setShowShareModal(true)}
-        onSave={persistence.save}
+        onSave={save}
         onImport={files.triggerImport}
         onExport={files.exportBoard}
       />

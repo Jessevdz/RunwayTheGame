@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { analytics } from '../../core/analytics/analyticsClient';
+import { firstTime } from '../../core/analytics/coalesce';
 import { Select, Input, Chip } from '@ds';
 import { IconCoin } from './components/EditorIcons';
 
@@ -187,7 +189,16 @@ export const ChallengePoolEditor: React.FC<ChallengePoolEditorProps> = ({
     setRubricOpen(criteriaCount > 0);
   }
 
+  /** Records the first edit to a field, so typing reports once, not per keystroke. */
+  const noteEdit = (field: string) => {
+    if (firstTime(`challenge:${currentWaypointId}:${field}`)) {
+      analytics.track('editor.challenge_edited', { field });
+    }
+  };
+
   const handleUpdateField = (field: keyof ChallengeDraft, value: any) => {
+    // The payload column is named for the penalty, not for its unit.
+    noteEdit(field === 'veto_penalty_seconds' ? 'veto_penalty' : field);
     onChangeChallenges({
       ...challenges,
       [currentWaypointId]: {
@@ -198,6 +209,7 @@ export const ChallengePoolEditor: React.FC<ChallengePoolEditorProps> = ({
   };
 
   const handleUpdateRubric = (key: string, value: any) => {
+    noteEdit(key);
     onChangeChallenges({
       ...challenges,
       [currentWaypointId]: {
@@ -215,7 +227,10 @@ export const ChallengePoolEditor: React.FC<ChallengePoolEditorProps> = ({
       <Select
         label="SELECT WAYPOINT"
         value={currentWaypointId}
-        onChange={(e) => onSelectWaypoint(e.target.value)}
+        onChange={(e) => {
+          analytics.track('editor.waypoint_selected');
+          onSelectWaypoint(e.target.value);
+        }}
       >
         {orderedWaypoints.map((w) => (
           <option key={w.id} value={w.id}>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { analytics } from '../../core/analytics/analyticsClient';
 import { DeckWorkshop } from './DeckWorkshop';
 import { parseCard, DECK_META } from './deckCards';
 import type { CardDraft, DeckKind } from './deckCards';
@@ -24,6 +25,12 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
 }) => {
   const [workshopDeck, setWorkshopDeck] = useState<DeckKind | null>(null);
 
+  /** Opening the workshop is the deck tab's only real entry point. */
+  const openWorkshop = (kind: DeckKind) => {
+    analytics.track('deck.editor_opened', { deck: kind });
+    setWorkshopDeck(kind);
+  };
+
   const decks: { kind: DeckKind; cards: CardDraft[] }[] = [
     { kind: 'roadblock', cards: roadblockCards },
     { kind: 'curse', cards: curseCards }
@@ -45,7 +52,7 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
           title="No cards yet"
           description="Both decks are empty. Open the workshop to start from the shipped sets or write your own."
           action={
-            <Button variant="primary" icon={<IconDeck />} onClick={() => setWorkshopDeck('roadblock')}>
+            <Button variant="primary" icon={<IconDeck />} onClick={() => openWorkshop('roadblock')}>
               Open Deck Workshop
             </Button>
           }
@@ -60,7 +67,7 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
                 <button
                   key={kind}
                   className={`deck-summary__deck deck-summary__deck--${kind}`}
-                  onClick={() => setWorkshopDeck(kind)}
+                  onClick={() => openWorkshop(kind)}
                   title={`Open ${meta.label} in the Deck Workshop`}
                 >
                   <div className="deck-summary__deck-head">
@@ -94,7 +101,7 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
             variant="primary"
             icon={<IconDeck />}
             className="deck-summary__open"
-            onClick={() => setWorkshopDeck('roadblock')}
+            onClick={() => openWorkshop('roadblock')}
           >
             Open Deck Workshop
           </Button>

@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import type { ChangeEvent, RefObject } from 'react';
+import { analytics } from '../../core/analytics/analyticsClient';
 import { applyImportToDraft, buildExportFile, isBoardFile } from './boardDraft';
 import type { BoardDraftApi } from './useBoardDraft';
 
@@ -39,6 +40,7 @@ export function useBoardFileIO(
 
   const exportBoard = useCallback(() => {
     downloadJson(`${slugify(draft.boardName || 'map')}.json`, buildExportFile(draft));
+    analytics.track('editor.export_performed');
   }, [draft]);
 
   const triggerImport = useCallback(() => {
@@ -55,18 +57,32 @@ export function useBoardFileIO(
 
       const reader = new FileReader();
       reader.onload = (event) => {
+        // Unreadable JSON and well-formed JSON that is not a board are
+        // different mistakes, and only one of them is the file's fault.
+        let parsed: unknown;
         try {
           const rawText = event.target?.result;
           if (typeof rawText !== 'string' || !rawText) return;
-          const data: unknown = JSON.parse(rawText);
-          if (!isBoardFile(data)) throw new Error('Invalid JSON structure');
-          update((prev) => applyImportToDraft(prev, data));
-          reportError(null);
+          parsed = JSON.parse(rawText);
         } catch (err) {
+          analytics.track('editor.import_attempted', { result: 'parse_error' });
           reportError(
             `Failed to import map: ${err instanceof Error ? err.message : 'Invalid format'}`
           );
+          return;
         }
+
+        if (!isBoardFile(parsed)) {
+          analytics.track('editor.import_attempted', { result: 'shape_error' });
+          reportError('Failed to import map: Invalid JSON structure');
+          return;
+        }
+
+        // A const, so the narrowing survives into the updater closure.
+        const board = parsed;
+        update((prev) => applyImportToDraft(prev, board));
+        analytics.track('editor.import_attempted', { result: 'ok' });
+        reportError(null);
       };
 
       reader.readAsText(file);

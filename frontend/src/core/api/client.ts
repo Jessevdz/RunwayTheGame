@@ -11,6 +11,15 @@ export type { AdminSession } from './admin';
 export { adminAuth, startAdminSession, resumeAdminSession, endAdminSession } from './admin';
 
 export type {
+  AnalyticsDay,
+  AnalyticsEventCount,
+  AnalyticsValue,
+  AnalyticsBreakdown,
+  AnalyticsOverview
+} from './analytics';
+export { getAnalyticsOverview } from './analytics';
+
+export type {
   ApiWaypoint,
   ApiRoad,
   RubricDetail,

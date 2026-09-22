@@ -1,4 +1,6 @@
 import React, { useCallback } from 'react';
+import { analytics } from '../../core/analytics/analyticsClient';
+import { firstTime } from '../../core/analytics/coalesce';
 import {
   POWERUP_EFFECTS,
   formatDuration
@@ -33,6 +35,13 @@ export const PowerupWorkshop: React.FC<PowerupWorkshopProps> = ({
   }, []);
 
   const patch = (id: string, changes: Partial<PowerupDraft>) => {
+    for (const key of Object.keys(changes)) {
+      // The draft names the column for its unit; the vocabulary names the field.
+      const field = key === 'duration_s' ? 'duration' : key;
+      if (firstTime(`powerup:${id}:${field}`)) {
+        analytics.track('editor.powerup_edited', { field });
+      }
+    }
     onChange(powerups.map((p) => (p.id === id ? { ...p, ...changes } : p)));
   };
 

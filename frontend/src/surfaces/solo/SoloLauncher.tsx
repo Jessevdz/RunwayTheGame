@@ -10,6 +10,7 @@ import {
   type SoloMode,
   type SoloVerificationMode
 } from '../../core/api/client';
+import { analytics } from '../../core/analytics/analyticsClient';
 import { listRaceableBoards } from '../../core/game/boardCatalog';
 import { saveHostSession } from '../../core/game/hostSession';
 import { saveTeamSession } from '../../core/game/teamSession';
@@ -133,6 +134,7 @@ export const SoloLauncher: React.FC = () => {
       status: 'live',
       mode: run.mode
     });
+    analytics.track('board.race_launched', { mode: run.mode });
     return run;
   };
 
@@ -154,7 +156,9 @@ export const SoloLauncher: React.FC = () => {
           }
           try {
             await publishBoard(boardId, editToken);
+            analytics.track('board.published', { result: 'ok' });
           } catch (pubErr: any) {
+            analytics.track('board.published', { result: 'rejected' });
             throw new Error(
               `This map can't be run yet — it failed to publish: ${pubErr.message || 'validation error'}`
             );

@@ -50,6 +50,9 @@ func (s *Server) setupRoutes() {
 	s.Router.Post("/api/admin/session", s.handleCreateAdminSession)
 	s.Router.Delete("/api/admin/session", s.handleDeleteAdminSession)
 	s.Router.Get("/api/admin/verify", s.handleVerifyAdminKey)
+	// Aggregates only, and only for an admin: the write side is anonymous, and
+	// the read side never returns a row.
+	s.Router.Get("/api/admin/analytics", s.handleAnalyticsOverview)
 	// Unauthenticated analytics endpoint for the map editor.
 	s.Router.Post("/api/analytics", s.handleIngestAnalytics)
 	s.Router.Route("/api/boards", func(r chi.Router) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createGame, publishBoard, getServerConfig, ApiError } from '../../core/api/client';
+import { analytics } from '../../core/analytics/analyticsClient';
 import { listRaceableBoards } from '../../core/game/boardCatalog';
 import type { BoardSummary, HostedMode, VerificationMode } from '../../core/api/client';
 import { saveHostSession } from '../../core/game/hostSession';
@@ -103,6 +104,7 @@ export const PlayLauncher: React.FC = () => {
       status: 'draft',
       mode: HOSTED_MODE
     });
+    analytics.track('board.race_launched', { mode: HOSTED_MODE });
     return game;
   };
 
@@ -125,7 +127,9 @@ export const PlayLauncher: React.FC = () => {
           }
           try {
             await publishBoard(boardId, editToken);
+            analytics.track('board.published', { result: 'ok' });
           } catch (pubErr: any) {
+            analytics.track('board.published', { result: 'rejected' });
             throw new Error(
               `This map can't be raced yet — it failed to publish: ${pubErr.message || 'validation error'}`
             );
