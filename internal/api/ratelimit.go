@@ -3,6 +3,7 @@ package api
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -139,10 +140,31 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 // maxBodyBytes is the maximum allowed size in bytes for JSON request bodies.
 const maxBodyBytes = 64 << 10 // 64 KiB
 
+const (
+	maxBoardUpdateBodyBytes      = 8 << 20 // 8 MiB
+	boardUpdateBodyTooLargeError = "board update payload exceeds the 8 MiB limit"
+)
+
+func isFullMapBoardSave(r *http.Request) bool {
+	if r.Method != http.MethodPut || !strings.HasPrefix(r.URL.Path, "/api/boards/") {
+		return false
+	}
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/boards/"), "/")
+	return path != "" && !strings.Contains(path, "/")
+}
+
 func bodyLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Body != nil && r.Method != http.MethodGet && r.Method != http.MethodHead {
-			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+			limit := int64(maxBodyBytes)
+			if isFullMapBoardSave(r) {
+				limit = maxBoardUpdateBodyBytes
+				if r.ContentLength > limit {
+					writeError(r.Context(), w, http.StatusRequestEntityTooLarge, boardUpdateBodyTooLargeError)
+					return
+				}
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
 		}
 		next.ServeHTTP(w, r)
 	})

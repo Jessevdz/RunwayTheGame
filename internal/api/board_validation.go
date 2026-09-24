@@ -1,9 +1,11 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v4"
 
 	"github.com/Jessevdz/RunwayTheGame/internal/geo"
 	"github.com/Jessevdz/RunwayTheGame/internal/projections"
@@ -27,9 +29,13 @@ func (s *Server) handlePublishBoard(w http.ResponseWriter, r *http.Request) {
 	boardID := chi.URLParam(r, "id")
 	version := 1
 
-	if !s.isAdminAuthorized(r) {
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
 		if err := s.authorizeBoardEdit(r.Context(), boardID, bearerToken(r)); err != nil {
-			writeError(r.Context(), w, http.StatusForbidden, err.Error())
+			if limited {
+				writeAdminAuthFailure(w, r, true, err.Error())
+			} else {
+				writeError(r.Context(), w, http.StatusForbidden, err.Error())
+			}
 			return
 		}
 	}
@@ -50,7 +56,11 @@ func (s *Server) handleValidateBoard(w http.ResponseWriter, r *http.Request) {
 
 	board, err := projections.LoadBoard(r.Context(), s.DB.Pool, boardID, version)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, "failed to load board for validation: "+err.Error())
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(r.Context(), w, http.StatusNotFound, "board not found")
+			return
+		}
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load board for validation: "+err.Error())
 		return
 	}
 

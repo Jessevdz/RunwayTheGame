@@ -229,11 +229,9 @@ func TestAdminSession_WrongKeyIsThrottled(t *testing.T) {
 	adminSignIn(t, server, testAdminKey, "198.51.100.4:5000")
 }
 
-// TestAdminSession_CorrectKeyIsNeverThrottled is the point of charging only
-// failures: the throttle judges guesses, so the right key opens the door even
-// from an address whose budget a guesser has already spent — and signing in
-// clears that address, rather than leaving the admin one typo from a lockout.
-func TestAdminSession_CorrectKeyIsNeverThrottled(t *testing.T) {
+// TestAdminSession_CorrectKeyIsThrottledWhenBudgetIsSpent confirms exhausted
+// addresses cannot keep probing credentials, even with the correct key.
+func TestAdminSession_CorrectKeyIsThrottledWhenBudgetIsSpent(t *testing.T) {
 	server := newTestServer(nil)
 	server.SetRoadmapAdminKey(testAdminKey)
 
@@ -249,16 +247,13 @@ func TestAdminSession_CorrectKeyIsNeverThrottled(t *testing.T) {
 		}
 	}
 
-	// The admin, on that same address, gets in on the first try.
-	adminSignIn(t, server, testAdminKey, shared)
-
-	// And the budget came back with them: a fresh typo is a 401, not a 429.
-	req := jsonRequest("POST", "/api/admin/session", map[string]string{"key": "wrong-key"}, "")
+	// The right key is also refused until the address budget refills.
+	req := jsonRequest("POST", "/api/admin/session", map[string]string{"key": testAdminKey}, "")
 	req.RemoteAddr = shared
 	w := httptest.NewRecorder()
 	server.Router.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected a signed-in address to have its budget back, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected the spent address to remain throttled, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

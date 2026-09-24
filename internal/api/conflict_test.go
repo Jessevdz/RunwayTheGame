@@ -83,7 +83,7 @@ func TestBackdatedClientTimestampCannotStealARoad(t *testing.T) {
 	// Team B submits later but backdates its claimed capture time to well before
 	// team A's. Only the arrival time counts, so team A keeps the road.
 	bReceived := time.Now().UTC()
-	winner, msg, err := s.resolveRoadConflict(ctx, tx, fx.gameID, fx.roadID, teamB, &bReceived)
+	winner, msg, _, err := s.resolveRoadConflict(ctx, tx, fx.gameID, fx.roadID, teamB, &bReceived)
 	if err != nil {
 		t.Fatalf("resolveRoadConflict failed: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestEarlierArrivalDemotesALateRecordedWinner(t *testing.T) {
 	defer tx.Rollback(ctx)
 
 	bReceived := time.Now().UTC().Add(-9 * time.Minute)
-	winner, msg, err := s.resolveRoadConflict(ctx, tx, fx.gameID, fx.roadID, teamB, &bReceived)
+	winner, msg, displaced, err := s.resolveRoadConflict(ctx, tx, fx.gameID, fx.roadID, teamB, &bReceived)
 	if err != nil {
 		t.Fatalf("resolveRoadConflict failed: %v", err)
 	}
@@ -143,19 +143,18 @@ func TestEarlierArrivalDemotesALateRecordedWinner(t *testing.T) {
 	if msg != "" {
 		t.Errorf("expected no conflict message for the winner, got %q", msg)
 	}
+	// The resolver only names the superseded pass; applyVerdict withdraws it and its award.
+	if len(displaced) != 1 || displaced[0].SubmissionID != sessionA || displaced[0].TeamID != teamA {
+		t.Fatalf("expected team A's pass %s to be reported as displaced, got %+v", sessionA, displaced)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("failed to commit tx: %v", err)
 	}
-	// Mimic what handleVerdict does on a win: record the new owner's pass.
+	// Mimic what applyVerdict does on a win: demote the displaced pass and record the new owner's.
+	if _, err := database.Pool.Exec(ctx, `UPDATE challenge_submissions SET status = 'fail' WHERE id = $1`, sessionA); err != nil {
+		t.Fatalf("failed to demote team A's pass: %v", err)
+	}
 	insertPass(t, ctx, database, fx, teamB, bReceived, bReceived)
-
-	var statusA string
-	if err := database.Pool.QueryRow(ctx, `SELECT status FROM challenge_submissions WHERE id = $1`, sessionA).Scan(&statusA); err != nil {
-		t.Fatalf("failed to fetch team A status: %v", err)
-	}
-	if statusA != "fail" {
-		t.Errorf("expected team A's superseded pass to be demoted to 'fail', got %q", statusA)
-	}
 
 	// A third team arriving after team B loses to it.
 	tx2, err := database.Pool.Begin(ctx)
@@ -165,7 +164,7 @@ func TestEarlierArrivalDemotesALateRecordedWinner(t *testing.T) {
 	defer tx2.Rollback(ctx)
 
 	cReceived := time.Now().UTC()
-	winner2, msg2, err := s.resolveRoadConflict(ctx, tx2, fx.gameID, fx.roadID, teamC, &cReceived)
+	winner2, msg2, _, err := s.resolveRoadConflict(ctx, tx2, fx.gameID, fx.roadID, teamC, &cReceived)
 	if err != nil {
 		t.Fatalf("second resolveRoadConflict failed: %v", err)
 	}

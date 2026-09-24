@@ -56,11 +56,14 @@ type LeaderboardRow struct {
 	// ElapsedSeconds is the total recorded time in seconds, including veto penalties.
 	ElapsedSeconds     int       `json:"elapsed_seconds"`
 	VetoCount          int       `json:"veto_count"`
+	SkipCount          int       `json:"skip_count"`
 	VetoPenaltySeconds int       `json:"veto_penalty_seconds"`
 	Coins              int       `json:"coins"`
 	FinishedAt         time.Time `json:"finished_at"`
 	// Verification is the grading mode used for the run's evidence.
 	Verification string `json:"verification"`
+	// Ruleset is the effective configuration that governed the run.
+	Ruleset rules.Ruleset `json:"ruleset"`
 }
 
 // handlePostLeaderboardTime records a finished solo time trial run on the leaderboard.
@@ -119,22 +122,29 @@ func (s *Server) handlePostLeaderboardTime(w http.ResponseWriter, r *http.Reques
 		RunnerName:         runnerName,
 		ElapsedSeconds:     elapsedSeconds,
 		VetoCount:          proj.Clock.VetoCount,
+		SkipCount:          proj.Clock.SkipCount,
 		VetoPenaltySeconds: proj.Clock.TimePenaltySeconds,
 		Coins:              proj.Coins[team.ID],
 		FinishedAt:         proj.Clock.FinishedAt,
 		Verification:       game.Ruleset.Verification,
+		Ruleset:            game.Ruleset,
+	}
+	rulesetBytes, err := json.Marshal(row.Ruleset)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to encode run ruleset")
+		return
 	}
 
 	// Insert run, ignoring duplicate postings for idempotency.
 	_, err = s.DB.Pool.Exec(r.Context(), `
 		INSERT INTO solo_runs (
 			id, game_id, board_id, board_version, runner_name,
-			elapsed_seconds, veto_count, veto_penalty_seconds, coins, finished_at, verification
+			elapsed_seconds, veto_count, skip_count, veto_penalty_seconds, coins, finished_at, verification, ruleset
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (game_id) DO NOTHING
 	`, row.RunID, gameID, game.BoardID, row.BoardVersion, row.RunnerName,
-		row.ElapsedSeconds, row.VetoCount, row.VetoPenaltySeconds, row.Coins, row.FinishedAt, row.Verification)
+		row.ElapsedSeconds, row.VetoCount, row.SkipCount, row.VetoPenaltySeconds, row.Coins, row.FinishedAt, row.Verification, rulesetBytes)
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to record time: "+err.Error())
 		return
@@ -162,19 +172,36 @@ func (s *Server) handlePostLeaderboardTime(w http.ResponseWriter, r *http.Reques
 // readSoloRun fetches the recorded leaderboard row for a given game ID.
 func (s *Server) readSoloRun(ctx context.Context, gameID string) (LeaderboardRow, error) {
 	var row LeaderboardRow
+	var rulesetBytes []byte
 	err := s.DB.Pool.QueryRow(ctx, `
 		SELECT id::text, game_id::text, board_version, runner_name,
-		       elapsed_seconds, veto_count, veto_penalty_seconds, coins, finished_at, verification
+		       elapsed_seconds, veto_count, skip_count, veto_penalty_seconds, coins, finished_at, verification, ruleset
 		FROM solo_runs WHERE game_id = $1
 	`, gameID).Scan(&row.RunID, &row.GameID, &row.BoardVersion, &row.RunnerName,
-		&row.ElapsedSeconds, &row.VetoCount, &row.VetoPenaltySeconds, &row.Coins, &row.FinishedAt, &row.Verification)
+		&row.ElapsedSeconds, &row.VetoCount, &row.SkipCount, &row.VetoPenaltySeconds, &row.Coins, &row.FinishedAt, &row.Verification, &rulesetBytes)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return row, errors.New("no recorded time for this run")
 		}
 		return row, err
 	}
+	row.Ruleset, err = decodeLeaderboardRuleset(rulesetBytes, row.Verification)
+	if err != nil {
+		return row, err
+	}
+	row.Verification = row.Ruleset.Verification
 	return row, nil
+}
+
+func decodeLeaderboardRuleset(data []byte, legacyVerification string) (rules.Ruleset, error) {
+	var rs rules.Ruleset
+	if err := json.Unmarshal(data, &rs); err != nil {
+		return rs, err
+	}
+	if rs.Verification == "" {
+		rs.Verification = legacyVerification
+	}
+	return rules.NormalizeRuleset(rs), nil
 }
 
 // rankOfSoloRun calculates the 1-based leaderboard rank for a solo run, breaking ties deterministically by run ID.
@@ -210,7 +237,7 @@ func (s *Server) handleGetBoardLeaderboard(w http.ResponseWriter, r *http.Reques
 
 	rows, err := s.DB.Pool.Query(r.Context(), `
 		SELECT id::text, game_id::text, board_version, runner_name,
-		       elapsed_seconds, veto_count, veto_penalty_seconds, coins, finished_at, verification
+		       elapsed_seconds, veto_count, skip_count, veto_penalty_seconds, coins, finished_at, verification, ruleset
 		FROM solo_runs
 		WHERE board_id = $1
 		ORDER BY elapsed_seconds ASC, id::text ASC
@@ -225,12 +252,19 @@ func (s *Server) handleGetBoardLeaderboard(w http.ResponseWriter, r *http.Reques
 	entries := []LeaderboardRow{}
 	for rows.Next() {
 		var row LeaderboardRow
+		var rulesetBytes []byte
 		if err := rows.Scan(&row.RunID, &row.GameID, &row.BoardVersion, &row.RunnerName,
-			&row.ElapsedSeconds, &row.VetoCount, &row.VetoPenaltySeconds, &row.Coins, &row.FinishedAt,
-			&row.Verification); err != nil {
+			&row.ElapsedSeconds, &row.VetoCount, &row.SkipCount, &row.VetoPenaltySeconds, &row.Coins, &row.FinishedAt,
+			&row.Verification, &rulesetBytes); err != nil {
 			writeError(r.Context(), w, http.StatusInternalServerError, "failed to read leaderboard row: "+err.Error())
 			return
 		}
+		row.Ruleset, err = decodeLeaderboardRuleset(rulesetBytes, row.Verification)
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to read leaderboard ruleset: "+err.Error())
+			return
+		}
+		row.Verification = row.Ruleset.Verification
 		row.Rank = len(entries) + 1
 		entries = append(entries, row)
 	}

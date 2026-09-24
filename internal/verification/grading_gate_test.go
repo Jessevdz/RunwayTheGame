@@ -122,7 +122,7 @@ func runGradingWorker(t *testing.T, ctx context.Context, database *db.DB, llm ve
 	testServer := httptest.NewServer(apiServer.Router)
 	defer testServer.Close()
 
-	worker := verification.NewWorker(database, &mockBlobDownloader{MockData: []byte("fake-jpeg-data")}, llm, testServer.URL, workerToken)
+	worker := verification.NewWorker(database, &mockBlobDownloader{MockData: jpegWithEXIF(time.Now())}, llm, testServer.URL, workerToken)
 	processed, err := worker.ProcessNextJob(ctx)
 	if err != nil {
 		t.Fatalf("worker failed to process job: %v", err)

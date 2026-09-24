@@ -19,7 +19,8 @@ import (
 )
 
 type ShopBuyRequest struct {
-	Powerup string `json:"powerup"`
+	Powerup        string `json:"powerup"`
+	IdempotencyKey string `json:"idempotency_key"`
 }
 
 type PowerupUseRequest struct {
@@ -27,6 +28,53 @@ type PowerupUseRequest struct {
 	TargetTeamID   string `json:"target_team_id,omitempty"`
 	RoadID         string `json:"road_id,omitempty"`
 	IdempotencyKey string `json:"idempotency_key"`
+}
+
+type challengeSkipTarget struct {
+	WaypointID  string
+	RoadID      string
+	ChallengeID string
+	BypassID    string
+}
+
+func resolveChallengeSkipTarget(board rules.Board, currentWaypointID, requestedID string) (challengeSkipTarget, error) {
+	if currentWaypointID == "" || requestedID == "" {
+		return challengeSkipTarget{}, fmt.Errorf("you must be standing at a challenge to skip it")
+	}
+	for _, wp := range board.Waypoints {
+		if wp.ID != requestedID && wp.ChallengeID != requestedID {
+			continue
+		}
+		if wp.ID != currentWaypointID {
+			return challengeSkipTarget{}, fmt.Errorf("you can only skip the challenge at your current waypoint")
+		}
+		challengeID := wp.ChallengeID
+		if challengeID == "" {
+			for _, ch := range board.Challenges {
+				if ch.WaypointID == wp.ID {
+					challengeID = ch.ID
+					break
+				}
+			}
+		}
+		if challengeID == "" {
+			return challengeSkipTarget{}, fmt.Errorf("your current waypoint has no challenge to skip")
+		}
+		return challengeSkipTarget{WaypointID: wp.ID, ChallengeID: challengeID, BypassID: wp.ID}, nil
+	}
+	for _, road := range board.Roads {
+		if road.ID != requestedID && road.ChallengeID != requestedID {
+			continue
+		}
+		if road.WaypointIDA != currentWaypointID && road.WaypointIDB != currentWaypointID {
+			return challengeSkipTarget{}, fmt.Errorf("you can only skip a challenge on a road next to your current waypoint")
+		}
+		if road.ChallengeID == "" {
+			return challengeSkipTarget{}, fmt.Errorf("that road has no challenge to skip")
+		}
+		return challengeSkipTarget{WaypointID: currentWaypointID, RoadID: road.ID, ChallengeID: road.ChallengeID, BypassID: road.ID}, nil
+	}
+	return challengeSkipTarget{}, fmt.Errorf("challenge target not found on the board")
 }
 
 // powerupResponse acknowledges a power-up bought or used, naming which one.
@@ -39,10 +87,7 @@ type powerupResponse struct {
 func powerupEffect(board rules.Board, powerupID string) string {
 	for _, pu := range board.Powerups {
 		if pu.ID == powerupID {
-			if pu.Effect != "" {
-				return pu.Effect
-			}
-			break
+			return rules.EffectivePowerupEffect(pu)
 		}
 	}
 	return powerupID
@@ -67,8 +112,8 @@ func (s *Server) handleShopBuy(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Powerup == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, "powerup is required")
+	if req.Powerup == "" || req.IdempotencyKey == "" {
+		writeError(r.Context(), w, http.StatusBadRequest, "powerup and idempotency_key are required")
 		return
 	}
 
@@ -84,6 +129,11 @@ func (s *Server) handleShopBuy(w http.ResponseWriter, r *http.Request) {
 	proj, err := projections.RebuildProjection(r.Context(), s.DB.Pool, gameID, 0)
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load game state")
+		return
+	}
+	effect := powerupEffect(proj.Board, req.Powerup)
+	if !rules.IsSupportedPowerupEffect(effect) {
+		writeError(r.Context(), w, http.StatusConflict, "configured power-up effect is not supported")
 		return
 	}
 
@@ -105,6 +155,16 @@ func (s *Server) handleShopBuy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if cost < 0 {
+		writeError(r.Context(), w, http.StatusConflict, "configured power-up cost is invalid")
+		return
+	}
+	for _, powerup := range proj.Board.Powerups {
+		if powerup.ID == req.Powerup && (powerup.DurationS < 0 || powerup.DurationS > rules.MaxPowerupDurationSeconds) {
+			writeError(r.Context(), w, http.StatusConflict, "configured power-up duration is invalid")
+			return
+		}
+	}
 
 	balance := proj.Coins[team.ID]
 	if balance < cost {
@@ -118,20 +178,22 @@ func (s *Server) handleShopBuy(w http.ResponseWriter, r *http.Request) {
 		Cost:    cost,
 	})
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 
 	cmdReq := commands.CommandRequest{
-		GameID:      gameID,
-		CommandType: "PowerupPurchased",
-		ExpectedSeq: expectedSeq,
-		Payload:     payloadBytes,
+		GameID:             gameID,
+		CommandType:        "PowerupPurchased",
+		PrincipalID:        team.ID,
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            payloadBytes,
 	}
 
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		if err := guardLiveGameMutation(ctx, tx, gameID, proj); err != nil {
+			return nil, err
+		}
 		// Deduct coin balance within transaction and verify non-negative balance.
 		var newBalance int
 		dbErr := tx.QueryRow(ctx, `
@@ -171,11 +233,17 @@ func (s *Server) handleShopBuy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if writeGameMutationGuardError(r.Context(), w, err) {
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to purchase powerup: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, powerupResponse{Status: "purchased", Powerup: req.Powerup})
+	writeCommandResponse(r.Context(), w, response)
 }
 
 func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
@@ -217,6 +285,11 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusForbidden, "powerup not in inventory")
 		return
 	}
+	effect := powerupEffect(proj.Board, req.Powerup)
+	if !rules.IsSupportedPowerupEffect(effect) {
+		writeError(r.Context(), w, http.StatusConflict, "configured power-up effect is not supported")
+		return
+	}
 
 	// Validate power-up usage restrictions for solo mode.
 	if reason, blocked := soloBlocksPowerup(game.Mode, proj.Board, req.Powerup); blocked {
@@ -230,8 +303,9 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	events := []eventstore.Event{}
+	skipBypassID := ""
 
-	switch req.Powerup {
+	switch effect {
 	case "nerf":
 		if req.TargetTeamID == "" {
 			writeError(r.Context(), w, http.StatusBadRequest, "target_team_id is required for nerf")
@@ -239,6 +313,14 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, ok := proj.Teams[req.TargetTeamID]; !ok {
 			writeError(r.Context(), w, http.StatusNotFound, "target team not found in game")
+			return
+		}
+		if req.TargetTeamID == team.ID {
+			writeError(r.Context(), w, http.StatusBadRequest, "you cannot target your own team")
+			return
+		}
+		if proj.Progress[req.TargetTeamID].ReachedFinish {
+			writeError(r.Context(), w, http.StatusConflict, "target team has already finished")
 			return
 		}
 		until := now.Add(game.Ruleset.FreezeDuration())
@@ -273,6 +355,19 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 		if !roadFound {
 			writeError(r.Context(), w, http.StatusNotFound, "road not found on board")
 			return
+		}
+		if existing, ok := proj.Roadblocks[req.RoadID]; ok {
+			cleared := false
+			for _, didClear := range existing.ClearedBy {
+				if didClear {
+					cleared = true
+					break
+				}
+			}
+			if !cleared {
+				writeError(r.Context(), w, http.StatusConflict, "road already has an uncleared roadblock")
+				return
+			}
 		}
 
 		var cardID, cardText string
@@ -312,6 +407,14 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 			writeError(r.Context(), w, http.StatusNotFound, "target team not found in game")
 			return
 		}
+		if req.TargetTeamID == team.ID {
+			writeError(r.Context(), w, http.StatusBadRequest, "you cannot target your own team")
+			return
+		}
+		if proj.Progress[req.TargetTeamID].ReachedFinish {
+			writeError(r.Context(), w, http.StatusConflict, "target team has already finished")
+			return
+		}
 
 		var cardID, cardText string
 		err = s.DB.Pool.QueryRow(r.Context(), `
@@ -343,39 +446,20 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 		events = append(events, eventstore.Event{Type: "CurseApplied", Payload: string(payload)})
 
 	case "challenge_skip":
-		targetWaypointID := req.RoadID // target waypoint_id or road_id
-		var challengeID string
-		waypointFound := false
-		for _, wp := range proj.Board.Waypoints {
-			if wp.ID == targetWaypointID {
-				waypointFound = true
-				challengeID = wp.ChallengeID
-				break
-			}
-		}
-		if !waypointFound {
-			for _, ch := range proj.Board.Challenges {
-				if ch.WaypointID == targetWaypointID || ch.ID == targetWaypointID {
-					waypointFound = true
-					challengeID = ch.ID
-					targetWaypointID = ch.WaypointID
-					break
-				}
-			}
-		}
-		if !waypointFound {
-			writeError(r.Context(), w, http.StatusNotFound, "waypoint not found on board")
+		target, err := resolveChallengeSkipTarget(proj.Board, proj.Progress[team.ID].CurrentWaypointID, req.RoadID)
+		if err != nil {
+			writeError(r.Context(), w, http.StatusBadRequest, err.Error())
 			return
 		}
+		skipBypassID = target.BypassID
 
-		payload, _ := json.Marshal(eventstore.ChallengeVetoedPayload{
-			TeamID:       team.ID,
-			WaypointID:   targetWaypointID,
-			RoadID:       req.RoadID,
-			ChallengeID:  challengeID,
-			PenaltyUntil: now,
+		payload, _ := json.Marshal(eventstore.ChallengeSkippedPayload{
+			TeamID:      team.ID,
+			WaypointID:  target.WaypointID,
+			RoadID:      target.RoadID,
+			ChallengeID: target.ChallengeID,
 		})
-		events = append(events, eventstore.Event{Type: "ChallengeVetoed", Payload: string(payload)})
+		events = append(events, eventstore.Event{Type: "ChallengeSkipped", Payload: string(payload)})
 
 	default:
 		writeError(r.Context(), w, http.StatusBadRequest, "unsupported powerup type")
@@ -388,21 +472,22 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 	})
 	events = append([]eventstore.Event{{Type: "PowerupUsed", Payload: string(usePayload)}}, events...)
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 
 	cmdReq := commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "PowerupUsed",
-		ExpectedSeq:    expectedSeq,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        usePayload,
+		GameID:             gameID,
+		CommandType:        "PowerupUsed",
+		PrincipalID:        team.ID,
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            usePayload,
 	}
 
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		if err := guardLiveGameMutation(ctx, tx, gameID, proj); err != nil {
+			return nil, err
+		}
 		// Persist effect state changes in database tables alongside events.
 		const insertEffect = `
 			INSERT INTO team_effects (id, game_id, team_id, kind, until, meta)
@@ -448,12 +533,12 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 				`, uuid.New().String(), gameID, p.RoadID, p.PlacedBy, uuid.New().String(), p.ChallengeText); err != nil {
 					return nil, fmt.Errorf("placing the roadblock: %w", err)
 				}
-			case "ChallengeVetoed":
+			case "ChallengeSkipped":
 				if _, err := tx.Exec(ctx, `
 					INSERT INTO team_road_bypass (game_id, team_id, road_id, reason)
 					VALUES ($1, $2, $3, 'skip')
 					ON CONFLICT (game_id, team_id, road_id) DO UPDATE SET reason = EXCLUDED.reason
-				`, gameID, team.ID, req.RoadID); err != nil {
+				`, gameID, team.ID, skipBypassID); err != nil {
 					return nil, fmt.Errorf("recording the skip: %w", err)
 				}
 			}
@@ -466,9 +551,15 @@ func (s *Server) handlePowerupUse(w http.ResponseWriter, r *http.Request) {
 		}, nil
 	})
 	if err != nil {
+		if writeGameMutationGuardError(r.Context(), w, err) {
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to use powerup: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, powerupResponse{Status: "used", Powerup: req.Powerup})
+	writeCommandResponse(r.Context(), w, response)
 }

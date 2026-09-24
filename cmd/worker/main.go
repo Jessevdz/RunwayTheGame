@@ -38,8 +38,15 @@ func main() {
 	}
 	defer database.Close()
 
-	blobBaseURL := config.EnvOr("BLOB_DOWNLOAD_BASE_URL", "http://localhost:9000/runway-evidence")
-	blobStore := blobstore.NewHTTPBlobStore(blobBaseURL)
+	blobStore := blobstore.NewSignedHTTPBlobStore(blobstore.NewS3Presigner(blobstore.S3Config{
+		Endpoint:  config.EnvOr("S3_ENDPOINT", "localhost:9000"),
+		Region:    config.EnvOr("S3_REGION", "us-east-1"),
+		Bucket:    config.EnvOr("S3_BUCKET", "runway-evidence"),
+		AccessKey: os.Getenv("S3_ACCESS_KEY"),
+		SecretKey: os.Getenv("S3_SECRET_KEY"),
+		UseSSL:    config.EnvOr("S3_USE_SSL", "false") == "true",
+		PathStyle: config.EnvOr("S3_PATH_STYLE", "true") == "true",
+	}))
 
 	scalewayClient := verification.NewLiveScalewayClient()
 

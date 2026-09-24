@@ -26,6 +26,7 @@ func TestRttEotWProjectionRebuild(t *testing.T) {
 	boardID := "00000000-0000-0000-0000-000000000202"
 
 	// 1. Clean up database
+	_, _ = database.Pool.Exec(ctx, "DELETE FROM games WHERE id = $1", gameID)
 	_, _ = database.Pool.Exec(ctx, "DELETE FROM board_powerup_costs WHERE board_id = $1", boardID)
 	_, _ = database.Pool.Exec(ctx, "DELETE FROM board_roadblock_cards WHERE board_id = $1", boardID)
 	_, _ = database.Pool.Exec(ctx, "DELETE FROM board_curse_cards WHERE board_id = $1", boardID)
@@ -51,6 +52,13 @@ func TestRttEotWProjectionRebuild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to insert board: %v", err)
 	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO games (id, board_id, board_version, ruleset, starts_at, ends_at)
+		VALUES ($1, $2, 1, '{}', NOW(), NOW() + INTERVAL '1 hour')
+	`, gameID, boardID)
+	if err != nil {
+		t.Fatalf("failed to insert fixture game: %v", err)
+	}
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO board_waypoints (id, board_id, board_version, name, location, is_start, is_finish) VALUES
@@ -72,7 +80,7 @@ func TestRttEotWProjectionRebuild(t *testing.T) {
 	}
 
 	// 3. Append events
-	p1, _ := json.Marshal(eventstore.GameCreatedPayload{BoardID: boardID})
+	p1, _ := json.Marshal(eventstore.GameCreatedPayload{BoardID: boardID, BoardVersion: 1})
 	p2, _ := json.Marshal(eventstore.TeamJoinedPayload{TeamID: "red", Name: "Red Team", SlotIndex: 0})
 	p3, _ := json.Marshal(eventstore.TeamJoinedPayload{TeamID: "blue", Name: "Blue Team", SlotIndex: 1})
 	p4, _ := json.Marshal(eventstore.WaypointReachedPayload{TeamID: "red", WaypointID: wStart})

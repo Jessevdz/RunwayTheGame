@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v4"
+
 	"github.com/Jessevdz/RunwayTheGame/internal/db"
 	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
@@ -13,13 +15,80 @@ func finishCarriesChallenge(wp rules.Waypoint) string {
 	return fmt.Sprintf("finish waypoint %s (%s) cannot carry a challenge; arriving there is the objective", wp.ID, wp.Name)
 }
 
+func boardPowerupEffect(board rules.Board, id string) string {
+	for _, powerup := range board.Powerups {
+		if powerup.ID == id {
+			return rules.EffectivePowerupEffect(powerup)
+		}
+	}
+	return id
+}
+
+func markPowerupDeckEffect(effect string, hasRoadblock, hasCurse *bool) {
+	switch effect {
+	case "roadblock":
+		*hasRoadblock = true
+	case "curse":
+		*hasCurse = true
+	}
+}
+
 // ValidateBoard checks a published/draft board for topological errors and warnings.
 func ValidateBoard(ctx context.Context, database *db.DB, board rules.Board) (errors []string, warnings []string, err error) {
+	var queryer boardValidationQueryer
+	if database != nil {
+		queryer = database.Pool
+	}
+	return validateBoard(ctx, queryer, board)
+}
+
+type boardValidationQueryer interface {
+	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...interface{}) pgx.Row
+}
+
+func validateBoard(ctx context.Context, queryer boardValidationQueryer, board rules.Board) (errors []string, warnings []string, err error) {
 	if errors == nil {
 		errors = []string{}
 	}
 	if warnings == nil {
 		warnings = []string{}
+	}
+	unsupportedPowerups := make(map[string]bool)
+	for powerup, cost := range board.PowerupCosts {
+		if cost < 0 {
+			errors = append(errors, fmt.Sprintf("power-up %s has a negative cost of %d", powerup, cost))
+		}
+	}
+	hasRoadblockEffect := false
+	hasCurseEffect := false
+	if queryer == nil {
+		for id := range board.PowerupCosts {
+			effect := boardPowerupEffect(board, id)
+			markPowerupDeckEffect(effect, &hasRoadblockEffect, &hasCurseEffect)
+			if !rules.IsSupportedPowerupEffect(effect) && !unsupportedPowerups[id] {
+				errors = append(errors, fmt.Sprintf("power-up %s has unsupported effect %q", id, effect))
+				unsupportedPowerups[id] = true
+			}
+		}
+	}
+	for _, powerup := range board.Powerups {
+		if powerup.Cost < 0 {
+			errors = append(errors, fmt.Sprintf("power-up %s has a negative cost of %d", powerup.ID, powerup.Cost))
+		}
+		if powerup.DurationS < 0 || powerup.DurationS > rules.MaxPowerupDurationSeconds {
+			errors = append(errors, fmt.Sprintf(
+				"power-up %s has invalid duration_s %d (must be between 0 and %d)",
+				powerup.ID, powerup.DurationS, rules.MaxPowerupDurationSeconds))
+		}
+		effect := rules.EffectivePowerupEffect(powerup)
+		if queryer == nil {
+			markPowerupDeckEffect(effect, &hasRoadblockEffect, &hasCurseEffect)
+			if !rules.IsSupportedPowerupEffect(effect) && !unsupportedPowerups[powerup.ID] {
+				errors = append(errors, fmt.Sprintf("power-up %s has unsupported effect %q", powerup.ID, effect))
+				unsupportedPowerups[powerup.ID] = true
+			}
+		}
 	}
 
 	adj := make(map[string][]string)
@@ -102,10 +171,10 @@ func ValidateBoard(ctx context.Context, database *db.DB, board rules.Board) (err
 		}
 	}
 
-	if database != nil {
+	if queryer != nil {
 		waypointChallenges := make(map[string]bool)
-		rows, err := database.Pool.Query(ctx, `
-			SELECT waypoint_id, coin_reward, veto_penalty_seconds
+		rows, err := queryer.Query(ctx, `
+			SELECT COALESCE(waypoint_id::text, ''), coin_reward, veto_penalty_seconds
 			FROM challenges
 			WHERE board_id = $1 AND board_version = $2
 		`, board.ID, board.Version)
@@ -120,13 +189,65 @@ func ValidateBoard(ctx context.Context, database *db.DB, board rules.Board) (err
 			if err := rows.Scan(&waypointID, &coinReward, &vetoPenaltySec); err != nil {
 				return nil, nil, fmt.Errorf("failed to scan challenge: %w", err)
 			}
-			waypointChallenges[waypointID] = true
+			if waypointID != "" {
+				waypointChallenges[waypointID] = true
+			}
 
 			if coinReward < 5 || coinReward > 40 {
 				errors = append(errors, fmt.Sprintf("challenge on waypoint %s has invalid coin reward %d (must be between 5 and 40)", waypointID, coinReward))
 			}
 			if vetoPenaltySec < 900 || vetoPenaltySec > 14400 {
 				errors = append(errors, fmt.Sprintf("challenge on waypoint %s has invalid veto penalty %d seconds (must be between 15m and 4h)", waypointID, vetoPenaltySec))
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, nil, fmt.Errorf("failed to iterate challenges for validation: %w", err)
+		}
+
+		powerupRows, err := queryer.Query(ctx, `
+			SELECT id, cost, duration_s, effect
+			FROM board_powerups
+			WHERE board_id = $1 AND board_version = $2
+		`, board.ID, board.Version)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to fetch power-ups for validation: %w", err)
+		}
+		defer powerupRows.Close()
+		definedPowerups := make(map[string]bool)
+		for powerupRows.Next() {
+			var id, effect string
+			var cost, durationS int
+			if err := powerupRows.Scan(&id, &cost, &durationS, &effect); err != nil {
+				return nil, nil, fmt.Errorf("failed to scan power-up: %w", err)
+			}
+			if cost < 0 {
+				errors = append(errors, fmt.Sprintf("power-up %s has a negative cost of %d", id, cost))
+			}
+			if durationS < 0 || durationS > rules.MaxPowerupDurationSeconds {
+				errors = append(errors, fmt.Sprintf(
+					"power-up %s has invalid duration_s %d (must be between 0 and %d)",
+					id, durationS, rules.MaxPowerupDurationSeconds))
+			}
+			effect = rules.EffectivePowerupEffect(rules.Powerup{ID: id, Effect: effect})
+			if !rules.IsSupportedPowerupEffect(effect) && !unsupportedPowerups[id] {
+				errors = append(errors, fmt.Sprintf("power-up %s has unsupported effect %q", id, effect))
+				unsupportedPowerups[id] = true
+			}
+			markPowerupDeckEffect(effect, &hasRoadblockEffect, &hasCurseEffect)
+			definedPowerups[id] = true
+		}
+		if err := powerupRows.Err(); err != nil {
+			return nil, nil, fmt.Errorf("failed to iterate power-ups for validation: %w", err)
+		}
+		// Older boards can store costs without power-up definitions. Preserve
+		// their ID-as-effect behavior for known built-ins.
+		for id := range board.PowerupCosts {
+			if !definedPowerups[id] {
+				if !rules.IsSupportedPowerupEffect(id) && !unsupportedPowerups[id] {
+					errors = append(errors, fmt.Sprintf("power-up %s has unsupported effect %q", id, id))
+					unsupportedPowerups[id] = true
+				}
+				markPowerupDeckEffect(id, &hasRoadblockEffect, &hasCurseEffect)
 			}
 		}
 
@@ -139,21 +260,10 @@ func ValidateBoard(ctx context.Context, database *db.DB, board rules.Board) (err
 			}
 		}
 
-		// Validate decks if power-ups are configured in cost mapping
-		hasRoadblockCost := false
-		hasCurseCost := false
-		for pu := range board.PowerupCosts {
-			if pu == "roadblock" {
-				hasRoadblockCost = true
-			}
-			if pu == "curse" {
-				hasCurseCost = true
-			}
-		}
-
-		if hasRoadblockCost {
+		// Validate required decks against executable effects, not power-up IDs.
+		if hasRoadblockEffect {
 			var rbCount int
-			err = database.Pool.QueryRow(ctx, `
+			err = queryer.QueryRow(ctx, `
 				SELECT COUNT(*) FROM board_roadblock_cards WHERE board_id = $1 AND board_version = $2
 			`, board.ID, board.Version).Scan(&rbCount)
 			if err != nil {
@@ -164,9 +274,9 @@ func ValidateBoard(ctx context.Context, database *db.DB, board rules.Board) (err
 			}
 		}
 
-		if hasCurseCost {
+		if hasCurseEffect {
 			var curseCount int
-			err = database.Pool.QueryRow(ctx, `
+			err = queryer.QueryRow(ctx, `
 				SELECT COUNT(*) FROM board_curse_cards WHERE board_id = $1 AND board_version = $2
 			`, board.ID, board.Version).Scan(&curseCount)
 			if err != nil {

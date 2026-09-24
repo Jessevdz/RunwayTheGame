@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"time"
@@ -26,6 +27,7 @@ type ReportEvidence struct {
 	WaypointID   string `json:"waypoint_id,omitempty"`
 	WaypointName string `json:"waypoint_name,omitempty"`
 	RoadID       string `json:"road_id,omitempty"`
+	RoadName     string `json:"road_name,omitempty"`
 	ChallengeID  string `json:"challenge_id,omitempty"`
 	// Prompt is the challenge description presented to the player.
 	Prompt string `json:"prompt,omitempty"`
@@ -55,6 +57,7 @@ type ReportStats struct {
 	Failed             int `json:"failed"`
 	Pending            int `json:"pending"`
 	Vetoes             int `json:"vetoes"`
+	ChallengeSkips     int `json:"challenge_skips"`
 	WaypointsReached   int `json:"waypoints_reached"`
 	Disputes           int `json:"disputes"`
 	DisputesUpheld     int `json:"disputes_upheld"`
@@ -148,7 +151,7 @@ func (s *Server) handleGetRaceReport(w http.ResponseWriter, r *http.Request) {
 		BoardName:    proj.Board.Name,
 		CreatedAt:    createdAt,
 		Teams:        proj.Teams,
-		Standings:    proj.StandingsList,
+		Standings:    view.StandingsList,
 		Clock:        proj.Clock,
 		Timeline:     view.PublicLog,
 		WinnerTeamID: proj.Winner,
@@ -278,6 +281,10 @@ func (s *Server) reportEvidence(r *http.Request, gameID string, proj *projection
 
 		if sub, ok := proj.Submissions[item.SubmissionID]; ok {
 			item.Status = sub.Status
+			item.WaypointID = sub.WaypointID
+			if sub.RoadID != "" {
+				item.RoadID = sub.RoadID
+			}
 			if scopeTeam == "" || item.TeamID == scopeTeam {
 				item.Source = sub.Source
 				item.Confidence = sub.Confidence
@@ -291,8 +298,24 @@ func (s *Server) reportEvidence(r *http.Request, gameID string, proj *projection
 
 		item.Prompt = promptByChallenge[item.ChallengeID]
 		if wp, ok := waypointByChallenge[item.ChallengeID]; ok {
-			item.WaypointID = wp.ID
-			item.WaypointName = wp.Name
+			if item.WaypointID == "" {
+				item.WaypointID = wp.ID
+			}
+		}
+		for _, wp := range proj.Board.Waypoints {
+			if wp.ID == item.WaypointID {
+				item.WaypointName = wp.Name
+				break
+			}
+		}
+		// Waypoint challenges historically store their waypoint ID in road_id.
+		// Keep it as waypoint_id/waypoint_name in reports; only distinct IDs are
+		// actual road challenge targets.
+		if item.Kind == "challenge" && item.RoadID != "" && item.RoadID == item.WaypointID {
+			item.RoadID = ""
+		}
+		if item.Kind == "challenge" && item.RoadID != "" {
+			item.RoadName = reportRoadLabel(proj.Board, item.RoadID)
 		}
 		// Roadblock prompts are populated from roadblock challenge text.
 		if item.Prompt == "" && item.RoadID != "" {
@@ -321,6 +344,28 @@ func (s *Server) reportEvidence(r *http.Request, gameID string, proj *projection
 		return items[i].SubmittedAt.After(items[j].SubmittedAt)
 	})
 	return items, counts, nil
+}
+
+func reportRoadLabel(board rules.Board, roadID string) string {
+	waypointNames := make(map[string]string, len(board.Waypoints))
+	for _, waypoint := range board.Waypoints {
+		waypointNames[waypoint.ID] = waypoint.Name
+	}
+	for _, road := range board.Roads {
+		if road.ID != roadID {
+			continue
+		}
+		waypointA := waypointNames[road.WaypointIDA]
+		if waypointA == "" {
+			waypointA = "unnamed waypoint"
+		}
+		waypointB := waypointNames[road.WaypointIDB]
+		if waypointB == "" {
+			waypointB = "unnamed waypoint"
+		}
+		return fmt.Sprintf("Road between %s and %s", waypointA, waypointB)
+	}
+	return ""
 }
 
 // reportStats calculates aggregated metrics and start/end timestamps from race events.
@@ -373,8 +418,6 @@ func (s *Server) reportStats(ctx context.Context, gameID string, proj *projectio
 			endedAt = createdAt
 		case "WaypointReached":
 			stats.WaypointsReached++
-		case "ChallengeVetoed":
-			stats.Vetoes++
 		case "PowerupPurchased":
 			stats.PowerupsBought++
 		case "PowerupUsed":
@@ -414,6 +457,8 @@ func (s *Server) reportStats(ctx context.Context, gameID string, proj *projectio
 	if err := rows.Err(); err != nil {
 		return stats, startedAt, endedAt, err
 	}
+	stats.Vetoes = proj.Clock.VetoCount
+	stats.ChallengeSkips = proj.Clock.SkipCount
 
 	if !startedAt.IsZero() {
 		finish := endedAt

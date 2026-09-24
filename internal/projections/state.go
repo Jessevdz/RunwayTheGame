@@ -71,6 +71,7 @@ type StandingRow struct {
 	WaypointsReached int     `json:"waypoints_reached"`
 	DistanceToFinish float64 `json:"distance_to_finish"`
 	Coins            int     `json:"coins"`
+	CoinsVisible     bool    `json:"coins_visible"`
 	// Finished indicates whether the team reached the finish.
 	Finished bool `json:"finished"`
 	// FinishRank is the team's placement rank in a coin rush.
@@ -89,6 +90,8 @@ type RunClock struct {
 	TimePenaltySeconds int `json:"time_penalty_seconds"`
 	// VetoCount is the number of vetoed challenges.
 	VetoCount int `json:"veto_count"`
+	// SkipCount is the number of challenges bypassed with a purchased skip.
+	SkipCount int `json:"skip_count"`
 }
 
 // MarshalJSON customizes JSON encoding to omit zero-value timestamps.
@@ -98,9 +101,11 @@ func (rc RunClock) MarshalJSON() ([]byte, error) {
 		FinishedAt         *time.Time `json:"finished_at,omitempty"`
 		TimePenaltySeconds int        `json:"time_penalty_seconds"`
 		VetoCount          int        `json:"veto_count"`
+		SkipCount          int        `json:"skip_count"`
 	}{
 		TimePenaltySeconds: rc.TimePenaltySeconds,
 		VetoCount:          rc.VetoCount,
+		SkipCount:          rc.SkipCount,
 	}
 	if !rc.StartedAt.IsZero() {
 		started := rc.StartedAt
@@ -184,9 +189,9 @@ type GameStateProjection struct {
 	// Clock tracks solo run timing.
 	Clock RunClock `json:"clock"`
 	// CoinRush contains coin rush countdown state, if applicable.
-	CoinRush       *CoinRushState                 `json:"coin_rush,omitempty"`
-	Board          rules.Board                    `json:"board"`
-	Teams          map[string]TeamInfo            `json:"teams"` // team_id -> name/slot
+	CoinRush *CoinRushState      `json:"coin_rush,omitempty"`
+	Board    rules.Board         `json:"board"`
+	Teams    map[string]TeamInfo `json:"teams"` // team_id -> name/slot
 	// Log is the full race log; RedactFor turns it into a viewer-scoped PublicLog.
 	Log []LogEntry `json:"-"`
 	// PublicLog is filled only by RedactFor, so an unredacted projection carries no log.

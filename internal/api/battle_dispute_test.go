@@ -130,7 +130,7 @@ func TestPlayLoopFlow(t *testing.T) {
 
 	// 8. Buy powerup roadblock
 	buyReq := map[string]interface{}{
-		"powerup": "roadblock",
+		"powerup": "roadblock", "idempotency_key": uuid.New().String(),
 	}
 	w, _ = serve(t, ctx, server, jsonRequest("POST", fmt.Sprintf("/api/games/%s/shop/buy", gameID), buyReq, token))
 	if w.Code != http.StatusOK {

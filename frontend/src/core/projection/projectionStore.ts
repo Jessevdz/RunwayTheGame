@@ -28,7 +28,8 @@ export interface RaceStanding {
   teamName: string;
   waypointsReached: number;
   distanceToFinishM: number;
-  coins: number;
+  coins: number | null;
+  coinsVisible: boolean;
   finished: boolean;
   finishRank: number;
   /** What the placing paid. Coin rush only; zero everywhere else. */
@@ -138,6 +139,8 @@ export interface RunClock {
   timePenaltySeconds: number;
   /** Challenges walked away from, penalised or not. */
   vetoCount: number;
+  /** Challenges bypassed with a purchased skip. */
+  skipCount: number;
 }
 
 /** Returns elapsed seconds for a solo run clock based on start/finish timestamps and penalties. */
@@ -208,7 +211,7 @@ export interface GameState {
   connection: ConnectionState;
 }
 
-const emptyClock: RunClock = { startedAt: null, finishedAt: null, timePenaltySeconds: 0, vetoCount: 0 };
+const emptyClock: RunClock = { startedAt: null, finishedAt: null, timePenaltySeconds: 0, vetoCount: 0, skipCount: 0 };
 
 // Default ruleset view configuration fallbacks.
 const defaultRulesetView: RulesetView = {
@@ -253,7 +256,8 @@ type StandingsWire = {
   team_name: string;
   waypoints_reached: number;
   distance_to_finish: number;
-  coins: number;
+  coins?: number;
+  coins_visible?: boolean;
   finished?: boolean;
   finish_rank?: number;
   finish_bonus?: number;
@@ -272,6 +276,7 @@ export interface RawSnapshot {
     finished_at?: string;
     time_penalty_seconds?: number;
     veto_count?: number;
+    skip_count?: number;
   };
   /** Absent outside a coin rush, and until the first team is home. */
   coin_rush?: {
@@ -430,16 +435,20 @@ class ProjectionStore {
       teams[tId] = { name: info.name, slotIndex: info.slot_index };
     });
 
-    const standings: RaceStanding[] = (raw.standings_list || raw.standings || []).map((s) => ({
-      teamId: s.team_id,
-      teamName: s.team_name,
-      waypointsReached: s.waypoints_reached,
-      distanceToFinishM: s.distance_to_finish,
-      coins: s.coins,
-      finished: s.finished ?? false,
-      finishRank: s.finish_rank ?? 0,
-      finishBonus: s.finish_bonus ?? 0
-    }));
+    const standings: RaceStanding[] = (raw.standings_list || raw.standings || []).map((s) => {
+      const coinsVisible = s.coins_visible ?? true;
+      return {
+        teamId: s.team_id,
+        teamName: s.team_name,
+        waypointsReached: s.waypoints_reached,
+        distanceToFinishM: s.distance_to_finish,
+        coins: coinsVisible ? (s.coins ?? 0) : null,
+        coinsVisible,
+        finished: s.finished ?? false,
+        finishRank: s.finish_rank ?? 0,
+        finishBonus: s.finish_bonus ?? 0
+      };
+    });
 
     const positions: Record<string, { lat: number; lon: number; accuracy: number; reportedAt: string }> = {};
     Object.entries(raw.positions || {}).forEach(([tId, p]) => {
@@ -554,7 +563,8 @@ class ProjectionStore {
       startedAt: raw.clock?.started_at || null,
       finishedAt: raw.clock?.finished_at || null,
       timePenaltySeconds: raw.clock?.time_penalty_seconds ?? 0,
-      vetoCount: raw.clock?.veto_count ?? 0
+      vetoCount: raw.clock?.veto_count ?? 0,
+      skipCount: raw.clock?.skip_count ?? 0
     };
     const ruleset: RulesetView = {
       vetoPenaltyMinSeconds: raw.ruleset?.veto_penalty_min_seconds ?? defaultRulesetView.vetoPenaltyMinSeconds,

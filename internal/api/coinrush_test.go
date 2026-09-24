@@ -328,7 +328,7 @@ func TestCoinRushFinishedTeamIsLockedOut(t *testing.T) {
 	}
 	// The finished team also holds an item, so the /powerup/use 403 is the
 	// lockout talking and not the inventory check in front of it.
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf"}, walking.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf", "idempotency_key": uuid.NewString()}, walking.Token)
 
 	lat, lon := r.board.coordsOf(r.board.Mid1)
 	blocked := []struct {
@@ -336,7 +336,7 @@ func TestCoinRushFinishedTeamIsLockedOut(t *testing.T) {
 		path string
 		body map[string]interface{}
 	}{
-		{"shop", "/shop/buy", map[string]interface{}{"powerup": "nerf"}},
+		{"shop", "/shop/buy", map[string]interface{}{"powerup": "nerf", "idempotency_key": uuid.NewString()}},
 		{"powerup", "/powerup/use", map[string]interface{}{
 			"powerup": "nerf", "target_team_id": walking.ID,
 			"idempotency_key": uuid.New().String(),
@@ -362,7 +362,7 @@ func TestCoinRushFinishedTeamIsLockedOut(t *testing.T) {
 
 	// The same calls from a team still on the road are unaffected — the lockout
 	// is about who is acting, not about the race being nearly over.
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf"}, walking.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf", "idempotency_key": uuid.NewString()}, walking.Token)
 }
 
 // TestCoinRushDeadlineSweepEndsTheRace tests that lapsed coin rush deadlines

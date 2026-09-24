@@ -173,7 +173,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
     teamName: s.teamName,
     waypointsReached: s.waypointsReached,
     distanceToFinishM: s.distanceToFinishM,
-    coins: s.coins,
+    coins: s.coins ?? 0,
     finished: s.finished,
     finishRank: s.finishRank,
     finishBonus: s.finishBonus

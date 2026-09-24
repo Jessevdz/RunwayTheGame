@@ -30,7 +30,7 @@ func AppendEvents(ctx context.Context, conn DBConnection, gameID string, expecte
 		if isConcurrencyError(err) {
 			// Under Serializable isolation, a concurrent write turns this read into
 			// a serialization failure, which is returned as a concurrency conflict.
-			return fmt.Errorf("%w: could not read the log: %v", ErrConcurrencyConflict, err)
+			return fmt.Errorf("%w: could not read the log: %w", ErrConcurrencyConflict, err)
 		}
 		return fmt.Errorf("failed to fetch current sequence: %w", err)
 	}
@@ -61,7 +61,7 @@ func AppendEvents(ctx context.Context, conn DBConnection, gameID string, expecte
 			if isConcurrencyError(err) {
 				// Concurrent appends passing the sequence pre-check will fail here on the
 				// unique sequence constraint or serialization conflict.
-				return fmt.Errorf("%w: sequence %d was taken concurrently: %v", ErrConcurrencyConflict, seq, err)
+				return fmt.Errorf("%w: sequence %d was taken concurrently: %w", ErrConcurrencyConflict, seq, err)
 			}
 			return fmt.Errorf("failed to insert event at sequence %d: %w", seq, err)
 		}
@@ -74,7 +74,7 @@ func AppendEvents(ctx context.Context, conn DBConnection, gameID string, expecte
 // returning all other errors unmodified.
 func WrapConflict(err error) error {
 	if err != nil && isConcurrencyError(err) {
-		return fmt.Errorf("%w: %v", ErrConcurrencyConflict, err)
+		return fmt.Errorf("%w: %w", ErrConcurrencyConflict, err)
 	}
 	return err
 }
@@ -128,6 +128,9 @@ func GetEventStream(ctx context.Context, conn DBConnection, gameID string, upToS
 			return nil, fmt.Errorf("failed to scan event: %w", err)
 		}
 		stream = append(stream, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed while reading event stream: %w", err)
 	}
 
 	return stream, nil

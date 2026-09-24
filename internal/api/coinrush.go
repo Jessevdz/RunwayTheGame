@@ -146,52 +146,38 @@ func (s *Server) settleCoinRushFinish(ctx context.Context, tx pgx.Tx, gameID, te
 		winner := rules.CoinRushWinner(scores)
 		endPayload, _ := json.Marshal(eventstore.GameEndedPayload{WinnerTeamID: winner})
 		out = append(out, eventstore.Event{Type: "GameEnded", Payload: string(endPayload)})
-		if _, err := tx.Exec(ctx, `
-			UPDATE games SET status = 'ended', winner_team_id = $1 WHERE id = $2
-		`, nullableTeamID(winner), gameID); err != nil {
+		tag, err := tx.Exec(ctx, `
+			UPDATE games SET status = 'ended', winner_team_id = $1 WHERE id = $2 AND status = 'live'
+		`, nullableTeamID(winner), gameID)
+		if err != nil {
 			return nil, err
+		}
+		if tag.RowsAffected() != 1 {
+			return nil, errGameNotLive
 		}
 	}
 
 	return out, nil
 }
 
-// coinRushArrivalRetries is the maximum number of times an arrival command is replayed after concurrency conflicts.
-const coinRushArrivalRetries = 3
-
-// processArrivalWithRetry submits an arrival command, re-reading sequence numbers and retrying upon concurrency conflicts.
-// Non-concurrency errors return immediately without retrying.
-func (s *Server) processArrivalWithRetry(
+// processArrival submits an arrival against the sequence of the
+// projection that the handler validated. A conflict is returned to the caller
+// so it can rebuild the projection and make a fresh decision.
+func (s *Server) processArrival(
 	ctx context.Context,
 	gameID string,
 	idempotencyKey string,
+	expectedSeq int,
 	payload []byte,
 	handler commands.CommandHandler,
 ) error {
-	var err error
-	for attempt := 1; attempt <= coinRushArrivalRetries; attempt++ {
-		var expectedSeq int
-		expectedSeq, err = s.nextSequence(ctx, gameID)
-		if err != nil {
-			return err
-		}
-
-		_, err = s.CmdProcessor.Process(ctx, commands.CommandRequest{
-			GameID:         gameID,
-			CommandType:    "WaypointReached",
-			ExpectedSeq:    expectedSeq,
-			IdempotencyKey: idempotencyKey,
-			Payload:        payload,
-		}, handler)
-
-		if !errors.Is(err, eventstore.ErrConcurrencyConflict) {
-			return err
-		}
-		logger.Info(ctx, "arrival lost a write race, retrying against a fresh sequence", map[string]interface{}{
-			"game_id": gameID,
-			"attempt": attempt,
-		})
-	}
+	_, err := s.CmdProcessor.Process(ctx, commands.CommandRequest{
+		GameID:         gameID,
+		CommandType:    "WaypointReached",
+		ExpectedSeq:    expectedSeq,
+		IdempotencyKey: idempotencyKey,
+		Payload:        payload,
+	}, handler)
 	return err
 }
 
@@ -242,10 +228,14 @@ func (s *Server) EndLapsedCoinRush(ctx context.Context, gameID string) error {
 		winner := rules.CoinRushWinner(scores)
 
 		endPayload, _ := json.Marshal(eventstore.GameEndedPayload{WinnerTeamID: winner})
-		if _, err := tx.Exec(ctx, `
+		tag, err := tx.Exec(ctx, `
 			UPDATE games SET status = 'ended', winner_team_id = $1 WHERE id = $2 AND status = 'live'
-		`, nullableTeamID(winner), gameID); err != nil {
+		`, nullableTeamID(winner), gameID)
+		if err != nil {
 			return nil, err
+		}
+		if tag.RowsAffected() != 1 {
+			return nil, errGameNotLive
 		}
 
 		logger.Info(ctx, "coin rush countdown lapsed", map[string]interface{}{

@@ -123,6 +123,9 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
         const mustShow = item.rubric?.must_show?.filter(Boolean) ?? [];
         const failsIf = item.rubric?.fails_if?.filter(Boolean) ?? [];
         const busy = grading === item.submission_id;
+        const isRoadChallenge = item.kind !== 'roadblock' && Boolean(
+          item.road_id && item.waypoint_id && item.road_id !== item.waypoint_id
+        );
 
         return (
           <Plate key={item.submission_id} className="review-card">
@@ -130,8 +133,8 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
               <span className="fs-6" style={{ fontWeight: 600 }}>
                 {item.team_name || item.team_id}
               </span>
-              <Badge tone={item.kind === 'roadblock' ? 'rust' : 'gold'}>
-                {item.kind === 'roadblock' ? 'Roadblock' : 'Waypoint'}
+              <Badge tone={item.kind === 'roadblock' ? 'rust' : isRoadChallenge ? 'neutral' : 'gold'}>
+                {item.kind === 'roadblock' ? 'Roadblock' : isRoadChallenge ? 'Road challenge' : 'Waypoint'}
               </Badge>
               <span className="t-data fs-2" style={{ color: 'var(--ink-muted)' }}>
                 {new Date(item.submitted_at).toLocaleTimeString()}

@@ -167,7 +167,7 @@ export const PostGameRecap: React.FC<PostGameRecapProps> = ({ gameState }) => {
     teamName: s.teamName,
     waypointsReached: s.waypointsReached,
     distanceToFinishM: s.distanceToFinishM,
-    coins: s.coins,
+    coins: s.coins ?? 0,
     finishRank: s.finishRank,
     finishBonus: s.finishBonus
   }));

@@ -192,13 +192,23 @@ func (s *Server) sessionAuthorized(r *http.Request) bool {
 // all. Presenting nothing is an anonymous request, not a failed attempt, and
 // must not spend the sign-in budget of whoever shares that IP address.
 func adminCredentialPresented(r *http.Request) bool {
-	if strings.TrimSpace(r.Header.Get(adminKeyHeader)) != "" {
-		return true
+	return rawAdminKeyPresented(r) || adminSessionToken(r) != ""
+}
+
+func rawAdminKeyPresented(r *http.Request) bool {
+	return strings.TrimSpace(r.Header.Get(adminKeyHeader)) != "" ||
+		strings.TrimSpace(r.URL.Query().Get("admin_key")) != ""
+}
+
+// writeAdminAuthFailure returns a consistent response for an admin key guess
+// that exhausted the per-address budget.
+func writeAdminAuthFailure(w http.ResponseWriter, r *http.Request, rateLimited bool, message string) {
+	if rateLimited {
+		w.Header().Set("Retry-After", "1800")
+		writeError(r.Context(), w, http.StatusTooManyRequests, "too many admin authentication attempts: wait 30 minutes and try again")
+		return
 	}
-	if strings.TrimSpace(r.URL.Query().Get("admin_key")) != "" {
-		return true
-	}
-	return adminSessionToken(r) != ""
+	writeError(r.Context(), w, http.StatusUnauthorized, message)
 }
 
 // SetAdminCookieSameSite configures the SameSite policy of the admin session
@@ -281,23 +291,17 @@ func (s *Server) handleCreateAdminSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// The key is judged before the budget is consulted, so the throttle is only
-	// ever a verdict on guesses. An admin behind an address somebody else has
-	// been guessing from — a shared office NAT, a phone on carrier CGNAT, their
-	// own earlier typo — signs in on the first correct try rather than waiting
-	// out a lockout they did not earn. Guessing still costs: a wrong key spends
-	// a token whether or not one remained, and once the budget is gone every
-	// further wrong key is refused outright.
+	// Consume the per-address budget before comparing the key. That keeps this
+	// route and the raw-key header routes on the same lockout behavior.
+	if !s.adminAuthLimiter.allow(ip) {
+		w.Header().Set("Retry-After", "1800")
+		writeError(ctx, w, http.StatusTooManyRequests, "too many admin sign-in attempts: wait 30 minutes and try again")
+		return
+	}
+
 	key := strings.TrimSpace(req.Key)
 	if key == "" || !tokensEqual(key, s.RoadmapAdminKey) {
-		spent := !s.adminAuthLimiter.available(ip)
-		s.adminAuthLimiter.penalize(ip)
 		logger.Warn(ctx, "rejected admin sign-in attempt", map[string]interface{}{"ip": ip})
-		if spent {
-			w.Header().Set("Retry-After", "60")
-			writeError(ctx, w, http.StatusTooManyRequests, "too many admin sign-in attempts: wait a minute and try again")
-			return
-		}
 		writeError(ctx, w, http.StatusUnauthorized, "unauthorized: invalid admin key")
 		return
 	}

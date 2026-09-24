@@ -6,7 +6,7 @@ export type ConsoleOverlay =
   | { kind: 'log' }
   | { kind: 'invite' }
   /** Confirming a walk-away from the challenge gating this waypoint. */
-  | { kind: 'veto'; waypointId: string }
+  | { kind: 'veto'; waypointId: string; roadId?: string }
   | { kind: 'end-run' };
 
 export interface ConsoleOverlays {

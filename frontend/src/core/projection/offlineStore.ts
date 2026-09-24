@@ -3,6 +3,7 @@ import { generateUUID } from '../util/uuid';
 export interface QueuedCapturePayload {
   gameId: string;
   waypointId: string;
+  roadId?: string;
   challengeId: string;
   photo: Blob;
   contentType: string;

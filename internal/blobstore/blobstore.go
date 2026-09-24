@@ -73,6 +73,7 @@ func KeyBelongsToTeam(key, gameID, teamID string) bool {
 // HTTPBlobStore retrieves blobs over HTTP from a single configured origin.
 type HTTPBlobStore struct {
 	BaseURL string
+	Signer  Presigner
 
 	client *http.Client
 	// allowPrivate permits fetching from private or loopback IP addresses.
@@ -104,6 +105,16 @@ func NewHTTPBlobStore(baseURL string) *HTTPBlobStore {
 	return h
 }
 
+// NewSignedHTTPBlobStore downloads objects using short-lived SigV4 GET URLs.
+func NewSignedHTTPBlobStore(signer Presigner) *HTTPBlobStore {
+	h := NewHTTPBlobStore("")
+	h.Signer = signer
+	if s3, ok := signer.(*S3Presigner); ok {
+		h.allowPrivate = baseHostIsPrivate("http://" + s3.cfg.Endpoint)
+	}
+	return h
+}
+
 // checkDialAddr validates that host in host:port is a public IP address.
 func (h *HTTPBlobStore) checkDialAddr(address string) error {
 	if h.allowPrivate {
@@ -128,20 +139,36 @@ func (h *HTTPBlobStore) DownloadBlob(ctx context.Context, blobRef string) ([]byt
 	if err := ValidateKey(blobRef); err != nil {
 		return nil, err
 	}
-	if h.BaseURL == "" {
+	if h.Signer == nil && h.BaseURL == "" {
 		return nil, fmt.Errorf("blobstore: base URL is not configured")
 	}
 
-	base, err := url.Parse(h.BaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("blobstore: invalid base URL: %w", err)
+	var target url.URL
+	if h.Signer != nil {
+		signedURL, err := h.Signer.PresignDownload(ctx, blobRef, 5*time.Minute)
+		if err != nil {
+			return nil, fmt.Errorf("blobstore: failed to sign download: %w", err)
+		}
+		parsed, err := url.Parse(signedURL)
+		if err != nil {
+			return nil, fmt.Errorf("blobstore: invalid signed download URL: %w", err)
+		}
+		target = *parsed
+	} else {
+		base, err := url.Parse(h.BaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("blobstore: invalid base URL: %w", err)
+		}
+		if base.Scheme != "http" && base.Scheme != "https" {
+			return nil, fmt.Errorf("blobstore: base URL must be http or https")
+		}
+		target = *base
+		target.Path = strings.TrimRight(base.EscapedPath(), "/") + "/" + encodePath(blobRef)
 	}
-	if base.Scheme != "http" && base.Scheme != "https" {
-		return nil, fmt.Errorf("blobstore: base URL must be http or https")
-	}
-	target := *base
-	target.Path = strings.TrimRight(base.EscapedPath(), "/") + "/" + encodePath(blobRef)
 
+	if target.Scheme != "http" && target.Scheme != "https" {
+		return nil, fmt.Errorf("blobstore: download URL must use http or https")
+	}
 	if err := h.checkHost(ctx, target.Hostname()); err != nil {
 		return nil, err
 	}

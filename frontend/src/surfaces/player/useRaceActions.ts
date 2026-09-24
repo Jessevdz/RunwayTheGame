@@ -8,8 +8,8 @@ import { type TeamSession } from '../../core/game/teamSession';
 export interface RaceActions {
   /** The last failure message, or null when clean. */
   error: string | null;
-  startChallenge: (waypointId: string) => Promise<void>;
-  veto: (waypointId: string) => Promise<void>;
+  startChallenge: (waypointId: string, roadId?: string) => Promise<void>;
+  veto: (waypointId: string, roadId?: string) => Promise<void>;
   arrive: (waypointId: string) => Promise<void>;
   endRun: () => Promise<void>;
 }
@@ -18,7 +18,7 @@ interface RaceActionsInput {
   gameState: GameState;
   session: TeamSession;
   playerLocation: GPSPosition | null;
-  onStartChallenge: (waypointId: string, prompt: string, rubric: any, challengeId?: string) => void;
+  onStartChallenge: (waypointId: string, prompt: string, rubric: any, challengeId?: string, roadId?: string) => void;
   /** Solo mode callback for finishing a run. */
   onEndRun?: () => Promise<void>;
   /** Waypoint ID to trigger error banner reset when changed. */
@@ -59,22 +59,24 @@ export const useRaceActions = ({
   return {
     error,
 
-    startChallenge: (waypointId) =>
+    startChallenge: (waypointId, roadId) =>
       run('Could not start the challenge', async () => {
         const result = await startChallenge(gameState.gameId!, {
           waypoint_id: waypointId,
+          ...(roadId ? { road_id: roadId } : {}),
           ...here(),
-          idempotency_key: `challenge-${waypointId}-${Date.now()}`
+          idempotency_key: `challenge-${roadId || waypointId}-${Date.now()}`
         });
-        onStartChallenge(waypointId, result.prompt, result.rubric, result.challenge_id);
+        onStartChallenge(waypointId, result.prompt, result.rubric, result.challenge_id, roadId);
       }),
 
-    veto: (waypointId) =>
+    veto: (waypointId, roadId) =>
       run('Veto failed', () =>
         vetoChallenge(gameState.gameId!, {
           waypoint_id: waypointId,
+          ...(roadId ? { road_id: roadId } : {}),
           team_token: session.teamToken,
-          idempotency_key: `veto-${waypointId}-${Date.now()}`
+          idempotency_key: `veto-${roadId || waypointId}-${Date.now()}`
         })
       ),
 

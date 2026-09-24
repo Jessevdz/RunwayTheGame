@@ -48,7 +48,9 @@ export const StandingsBoard: React.FC<StandingsBoardProps> = ({ gameState, teamI
             key: 'coins',
             header: 'Coins',
             numeric: true,
-            render: (row: StandingRow) => <><IconCoin /> {row.coins}</>
+            render: (row: StandingRow) => row.coinsVisible
+              ? <><IconCoin /> {row.coins}</>
+              : <span aria-label="Coin balance hidden">Hidden</span>
           },
           {
             key: 'placed',

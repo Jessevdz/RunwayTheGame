@@ -19,6 +19,8 @@ import (
 	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
+var errGameLifecycleChanged = errors.New("game lifecycle changed before the command committed")
+
 type GameCreateRequest struct {
 	BoardID      string    `json:"board_id"`
 	BoardVersion int       `json:"board_version"`
@@ -83,6 +85,18 @@ type soloRunResponse struct {
 	Ruleset      rules.Ruleset `json:"ruleset"`
 }
 
+type soloRunCacheResponse struct {
+	GameID       string        `json:"game_id"`
+	TeamID       string        `json:"team_id"`
+	TeamName     string        `json:"team_name"`
+	Mode         string        `json:"mode"`
+	RaceCode     string        `json:"race_code"`
+	StartedAt    time.Time     `json:"started_at"`
+	BoardID      string        `json:"board_id"`
+	BoardVersion int           `json:"board_version"`
+	Ruleset      rules.Ruleset `json:"ruleset"`
+}
+
 func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 	var req GameCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -109,6 +123,14 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve and serialize ruleset for storage.
+	ruleset, err := resolveRuleset(req.Ruleset, req.Mode)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, err.Error())
+		return
+	}
+	rulesetBytes, _ := json.Marshal(ruleset)
+
 	// The race runs on a frozen copy of the design, never on the draft itself, so
 	// the designer can keep editing without moving waypoints under a live race.
 	raceVersion, err := s.freezeBoardForRace(r.Context(), req.BoardID, req.BoardVersion)
@@ -118,37 +140,16 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gameID := uuid.New().String()
-	// Resolve and serialize ruleset for storage.
-	ruleset, err := resolveRuleset(req.Ruleset, req.Mode)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, err.Error())
-		return
-	}
-	rulesetBytes, _ := json.Marshal(ruleset)
 
 	// Generate host token for game creator.
 	hostToken := uuid.New().String()
 
-	raceCode, err := s.insertGameRow(r.Context(), newGameRow{
-		GameID:        gameID,
-		BoardID:       req.BoardID,
-		BoardVersion:  raceVersion,
-		Mode:          req.Mode,
-		RulesetBytes:  rulesetBytes,
-		HostTokenHash: hashToken(hostToken),
-		StartsAt:      req.StartsAt,
-		EndsAt:        req.EndsAt,
-	})
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to create game: "+err.Error())
-		return
-	}
-
 	payloadBytes, _ := json.Marshal(eventstore.GameCreatedPayload{
-		BoardID:  req.BoardID,
-		StartsAt: req.StartsAt,
-		EndsAt:   req.EndsAt,
-		Mode:     req.Mode,
+		BoardID:      req.BoardID,
+		BoardVersion: raceVersion,
+		StartsAt:     req.StartsAt,
+		EndsAt:       req.EndsAt,
+		Mode:         req.Mode,
 	})
 	cmdReq := commands.CommandRequest{
 		GameID:      gameID,
@@ -156,7 +157,23 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 		ExpectedSeq: 1,
 		Payload:     payloadBytes,
 	}
+	var raceCode string
+	var createRowErr error
 	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		createRowErr = nil
+		raceCode, createRowErr = insertGameRowTx(ctx, tx, newGameRow{
+			GameID:        gameID,
+			BoardID:       req.BoardID,
+			BoardVersion:  raceVersion,
+			Mode:          req.Mode,
+			RulesetBytes:  rulesetBytes,
+			HostTokenHash: hashToken(hostToken),
+			StartsAt:      req.StartsAt,
+			EndsAt:        req.EndsAt,
+		})
+		if createRowErr != nil {
+			return nil, createRowErr
+		}
 		return &commands.CommandResult{
 			ResponseCode: http.StatusCreated,
 			ResponseBody: gameDraftAck{ID: gameID, Status: "draft"},
@@ -166,6 +183,10 @@ func (s *Server) handleCreateGame(w http.ResponseWriter, r *http.Request) {
 		}, nil
 	})
 	if err != nil {
+		if createRowErr != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to create game: "+createRowErr.Error())
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to append game created event: "+err.Error())
 		return
 	}
@@ -191,12 +212,36 @@ var (
 
 // resolveRuleset merges requested ruleset configurations with defaults and validates verification modes.
 func resolveRuleset(requested *rules.Ruleset, mode string) (rules.Ruleset, error) {
-	if requested == nil {
+	if rules.IsSoloMode(mode) {
+		verification := ""
+		if requested != nil {
+			if requested.HasNonVerificationSettings() {
+				return rules.Ruleset{}, fmt.Errorf("solo run ruleset values are server controlled; only verification may be supplied")
+			}
+			verification = requested.Verification
+		}
+
 		rs := rules.DefaultRuleset()
+		if verification != "" {
+			if !rules.IsValidVerification(verification) {
+				return rules.Ruleset{}, fmt.Errorf("unknown verification mode %q: expected llm, host, or trust", verification)
+			}
+			if !rules.VerificationAllowedInMode(verification, mode) {
+				if mode == rules.ModeSoloCasual {
+					return rules.Ruleset{}, fmt.Errorf("a casual solo run cannot have a referee")
+				}
+				return rules.Ruleset{}, fmt.Errorf("a solo run cannot be graded by its host: there is nobody watching a review queue")
+			}
+			rs.Verification = verification
+		}
 		if mode == rules.ModeSoloCasual {
 			rs.Verification = rules.VerificationTrust
 		}
 		return rs, nil
+	}
+
+	if requested == nil {
+		return rules.DefaultRuleset(), nil
 	}
 	if v := requested.Verification; v != "" {
 		if !rules.IsValidVerification(v) {
@@ -285,6 +330,27 @@ func (s *Server) insertGameRow(ctx context.Context, g newGameRow) (string, error
 	return raceCode, nil
 }
 
+func insertGameRowTx(ctx context.Context, tx pgx.Tx, g newGameRow) (string, error) {
+	for attempt := 0; attempt < 5; attempt++ {
+		raceCode, err := newJoinCode()
+		if err != nil {
+			return "", fmt.Errorf("failed to mint race code: %w", err)
+		}
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO games (id, board_id, board_version, status, mode, ruleset, host_token_hash, race_code, starts_at, ends_at)
+			VALUES ($1, $2, $3, 'draft', $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (race_code) WHERE race_code IS NOT NULL DO NOTHING
+		`, g.GameID, g.BoardID, g.BoardVersion, g.Mode, g.RulesetBytes, g.HostTokenHash, raceCode, g.StartsAt, g.EndsAt)
+		if err != nil {
+			return "", err
+		}
+		if tag.RowsAffected() == 1 {
+			return raceCode, nil
+		}
+	}
+	return "", fmt.Errorf("failed to mint a unique race code after several attempts")
+}
+
 // insertTeamRow registers a team in the database within a transaction.
 func insertTeamRow(ctx context.Context, tx pgx.Tx, gameID string, t newTeamRow) error {
 	if _, err := tx.Exec(ctx, `
@@ -368,6 +434,13 @@ func (s *Server) handleCreateSoloRun(w http.ResponseWriter, r *http.Request) {
 		runnerName = "Runner"
 	}
 
+	ruleset, err := resolveRuleset(req.Ruleset, req.Mode)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, err.Error())
+		return
+	}
+	rulesetBytes, _ := json.Marshal(ruleset)
+
 	// A solo run freezes its own copy of the design, exactly as a hosted race does.
 	raceVersion, err := s.freezeBoardForRace(r.Context(), req.BoardID, req.BoardVersion)
 	if err != nil {
@@ -381,45 +454,26 @@ func (s *Server) handleCreateSoloRun(w http.ResponseWriter, r *http.Request) {
 		endsAt = now.Add(soloRunDuration)
 	}
 
-	ruleset, err := resolveRuleset(req.Ruleset, req.Mode)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusBadRequest, err.Error())
-		return
-	}
-	rulesetBytes, _ := json.Marshal(ruleset)
-
 	gameID := uuid.New().String()
+	if req.IdempotencyKey != "" {
+		gameID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("runway-solo:"+req.IdempotencyKey)).String()
+	}
 	// Generate host token for solo runner.
 	hostToken := uuid.New().String()
-
-	raceCode, err := s.insertGameRow(r.Context(), newGameRow{
-		GameID:        gameID,
-		BoardID:       req.BoardID,
-		BoardVersion:  raceVersion,
-		Mode:          req.Mode,
-		RulesetBytes:  rulesetBytes,
-		HostTokenHash: hashToken(hostToken),
-		StartsAt:      now,
-		EndsAt:        endsAt,
-	})
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to create solo run: "+err.Error())
-		return
-	}
 
 	// Mint team and player identity for the solo runner.
 	team, err := mintTeam(runnerName, 0, runnerName)
 	if err != nil {
-		s.discardDraftGame(r.Context(), gameID)
 		writeError(r.Context(), w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	createdPayload, _ := json.Marshal(eventstore.GameCreatedPayload{
-		BoardID:  req.BoardID,
-		StartsAt: now,
-		EndsAt:   endsAt,
-		Mode:     req.Mode,
+		BoardID:      req.BoardID,
+		BoardVersion: raceVersion,
+		StartsAt:     now,
+		EndsAt:       endsAt,
+		Mode:         req.Mode,
 	})
 	joinedPayload, _ := json.Marshal(eventstore.TeamJoinedPayload{
 		TeamID:    team.TeamID,
@@ -442,7 +496,6 @@ func (s *Server) handleCreateSoloRun(w http.ResponseWriter, r *http.Request) {
 		JoinToken:    team.JoinToken,
 		JoinCode:     team.JoinCode,
 		Mode:         req.Mode,
-		RaceCode:     raceCode,
 		StartedAt:    now,
 		BoardID:      req.BoardID,
 		BoardVersion: raceVersion,
@@ -450,33 +503,106 @@ func (s *Server) handleCreateSoloRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process SoloRunStarted command at expected sequence 1.
-	_, err = s.CmdProcessor.Process(r.Context(), commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "SoloRunStarted",
-		ExpectedSeq:    1,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        createdPayload,
+	commandResponse, err := s.CmdProcessor.Process(r.Context(), commands.CommandRequest{
+		GameID:             gameID,
+		CommandType:        "SoloRunStarted",
+		PrincipalID:        "solo-create",
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        1,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            createdPayload,
 	}, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		raceCode, err := insertGameRowTx(ctx, tx, newGameRow{
+			GameID: gameID, BoardID: req.BoardID, BoardVersion: raceVersion,
+			Mode: req.Mode, RulesetBytes: rulesetBytes, HostTokenHash: hashToken(hostToken),
+			StartsAt: now, EndsAt: endsAt,
+		})
+		if err != nil {
+			return nil, err
+		}
 		if err := insertTeamRow(ctx, tx, gameID, team); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE games SET status = 'live' WHERE id = $1`, gameID); err != nil {
+		tag, err := tx.Exec(ctx, `UPDATE games SET status = 'live' WHERE id = $1 AND status = 'draft'`, gameID)
+		if err != nil {
 			return nil, err
 		}
+		if tag.RowsAffected() != 1 {
+			return nil, fmt.Errorf("solo game draft changed before initialization")
+		}
+		responseBody.RaceCode = raceCode
+		cachedResponseBody := soloRunCacheResponse{
+			GameID: responseBody.GameID, TeamID: responseBody.TeamID, TeamName: responseBody.TeamName,
+			Mode: responseBody.Mode, RaceCode: responseBody.RaceCode, StartedAt: responseBody.StartedAt,
+			BoardID: responseBody.BoardID, BoardVersion: responseBody.BoardVersion, Ruleset: responseBody.Ruleset,
+		}
 		return &commands.CommandResult{
-			ResponseCode: http.StatusCreated,
-			ResponseBody: responseBody,
-			Events:       events,
+			ResponseCode:       http.StatusCreated,
+			ResponseBody:       responseBody,
+			CachedResponseBody: cachedResponseBody,
+			Events:             events,
 		}, nil
 	})
 	if err != nil {
-		// Discard draft game on initialization failure.
-		s.discardDraftGame(r.Context(), gameID)
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to start solo run: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusCreated, responseBody)
+	if err := json.Unmarshal(commandResponse.ResponseBody, &responseBody); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to read solo-run response")
+		return
+	}
+	if responseBody.HostToken == "" || responseBody.JoinToken == "" || responseBody.JoinCode == "" {
+		if err := s.refreshSoloRunCapabilities(r.Context(), &responseBody); err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to issue solo-run capabilities")
+			return
+		}
+	}
+	writeJSON(r.Context(), w, commandResponse.ResponseCode, responseBody)
+}
+
+func (s *Server) refreshSoloRunCapabilities(ctx context.Context, response *soloRunResponse) error {
+	hostToken := uuid.NewString()
+	joinToken := uuid.NewString()
+	tx, err := s.DB.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO game_host_tokens (token_hash, game_id) VALUES ($1, $2)
+		ON CONFLICT (token_hash) DO NOTHING
+	`, hashToken(hostToken), response.GameID); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO team_tokens (token_hash, game_id, team_id, player_id, display_name)
+		SELECT $1, game_id, team_id, player_id, display_name
+		FROM team_tokens WHERE game_id = $2 AND team_id = $3
+		ORDER BY created_at ASC LIMIT 1
+	`, hashToken(joinToken), response.GameID, response.TeamID)
+	if err != nil {
+		return err
+	}
+	var tokenCount int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM team_tokens WHERE game_id = $1 AND team_id = $2 AND token_hash = $3`, response.GameID, response.TeamID, hashToken(joinToken)).Scan(&tokenCount); err != nil {
+		return err
+	}
+	if tokenCount != 1 {
+		return fmt.Errorf("solo runner capability row is missing")
+	}
+	if err := tx.QueryRow(ctx, `SELECT join_code FROM game_teams WHERE game_id = $1 AND id = $2`, response.GameID, response.TeamID).Scan(&response.JoinCode); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	response.HostToken = hostToken
+	response.JoinToken = joinToken
+	return nil
 }
 
 // discardDraftGame removes unstarted draft games upon creation failure.
@@ -540,9 +666,12 @@ func (s *Server) handleStartGame(w http.ResponseWriter, r *http.Request) {
 		Payload:     []byte(`{}`),
 	}
 	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
-		_, dbErr := tx.Exec(ctx, `UPDATE games SET status = 'live' WHERE id = $1`, gameID)
+		tag, dbErr := tx.Exec(ctx, `UPDATE games SET status = 'live' WHERE id = $1 AND status = 'draft'`, gameID)
 		if dbErr != nil {
 			return nil, dbErr
+		}
+		if tag.RowsAffected() != 1 {
+			return nil, errGameLifecycleChanged
 		}
 		return &commands.CommandResult{
 			ResponseCode: http.StatusOK,
@@ -553,6 +682,13 @@ func (s *Server) handleStartGame(w http.ResponseWriter, r *http.Request) {
 		}, nil
 	})
 	if err != nil {
+		if errors.Is(err, errGameLifecycleChanged) {
+			writeError(r.Context(), w, http.StatusConflict, "game is no longer a draft")
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to start game: "+err.Error())
 		return
 	}
@@ -569,28 +705,72 @@ func (s *Server) handleEndGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, _ := json.Marshal(eventstore.GameEndedPayload{WinnerTeamID: ""})
-
 	cmdReq := commands.CommandRequest{
 		GameID:      gameID,
 		CommandType: "GameEnded",
 		ExpectedSeq: expectedSeq,
-		Payload:     payload,
+		Payload:     []byte(`{}`),
 	}
 	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
-		_, dbErr := tx.Exec(ctx, `UPDATE games SET status = 'ended' WHERE id = $1`, gameID)
+		var status, mode string
+		if dbErr := tx.QueryRow(ctx, `
+			SELECT status, mode FROM games WHERE id = $1 FOR UPDATE
+		`, gameID).Scan(&status, &mode); dbErr != nil {
+			return nil, dbErr
+		}
+		if status != "draft" && status != "live" {
+			return nil, errGameLifecycleChanged
+		}
+
+		winner := ""
+		if mode == rules.ModeCoinRush {
+			scores, err := coinRushScores(ctx, tx, gameID)
+			if err != nil {
+				return nil, err
+			}
+			winner = rules.CoinRushWinner(scores)
+		}
+		payload, err := json.Marshal(eventstore.GameEndedPayload{WinnerTeamID: winner})
+		if err != nil {
+			return nil, err
+		}
+
+		var tag pgconn.CommandTag
+		var dbErr error
+		if mode == rules.ModeCoinRush {
+			tag, dbErr = tx.Exec(ctx, `
+				UPDATE games SET status = 'ended', winner_team_id = $1
+				WHERE id = $2 AND status IN ('draft', 'live')
+			`, nullableTeamID(winner), gameID)
+		} else {
+			tag, dbErr = tx.Exec(ctx, `
+				UPDATE games SET status = 'ended'
+				WHERE id = $1 AND status IN ('draft', 'live')
+			`, gameID)
+		}
 		if dbErr != nil {
 			return nil, dbErr
 		}
+		if tag.RowsAffected() != 1 {
+			return nil, errGameLifecycleChanged
+		}
+
 		return &commands.CommandResult{
 			ResponseCode: http.StatusOK,
 			ResponseBody: statusResponse{Status: "ended"},
 			Events: []eventstore.Event{
-				{Type: "GameEnded", Payload: string(cr.Payload)},
+				{Type: "GameEnded", Payload: string(payload)},
 			},
 		}, nil
 	})
 	if err != nil {
+		if errors.Is(err, errGameLifecycleChanged) {
+			writeError(r.Context(), w, http.StatusConflict, "game has already ended")
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to end game: "+err.Error())
 		return
 	}

@@ -364,7 +364,7 @@ func TestFullRace(t *testing.T) {
 	}
 
 	// Buy and use a power-up: the nerf freezes Blue, and the effect is real.
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf", "idempotency_key": uuid.NewString()}, red.Token)
 	proj = r.projection()
 	if got := proj.Coins[red.ID]; got != 30 {
 		t.Fatalf("expected the nerf to cost 10 coins, leaving 30; got %d", got)
@@ -509,7 +509,7 @@ func TestRoadblockBlocksTraversalAndCanBeCleared(t *testing.T) {
 	r.advance(red, r.board.Mid1)
 	r.completeChallenge(red, r.board.Mid1, r.board.Mid1Challenge, "pass")
 
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock", "idempotency_key": uuid.NewString()}, red.Token)
 	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{
 		"powerup": "roadblock", "road_id": r.board.SegMid1Mid2, "idempotency_key": uuid.New().String(),
 	}, red.Token)
@@ -531,6 +531,7 @@ func TestRoadblockBlocksTraversalAndCanBeCleared(t *testing.T) {
 	// Blue advances to Mid 1, clears Mid 1's challenge, and is stopped by Red's roadblock to Mid 2.
 	r.advance(blue, r.board.Mid1)
 	r.completeChallenge(blue, r.board.Mid1, r.board.Mid1Challenge, "pass")
+	blueCoinsBeforeClear := r.projection().Coins[blue.ID]
 
 	if w, _ := r.arrive(blue, r.board.Mid2); w.Code != http.StatusForbidden {
 		t.Fatalf("expected the roadblock to stop Blue, got %d — %s", w.Code, w.Body.String())
@@ -561,8 +562,8 @@ func TestRoadblockBlocksTraversalAndCanBeCleared(t *testing.T) {
 	}
 	// Clearing a roadblock is a toll, not an achievement: it pays nothing and
 	// does not record road progress.
-	if got := proj.Coins[blue.ID]; got != 20 {
-		t.Errorf("expected clearing a roadblock to pay nothing extra, Blue holds %d", got)
+	if got := proj.Coins[blue.ID]; got != blueCoinsBeforeClear {
+		t.Errorf("expected clearing a roadblock to pay nothing extra, Blue went from %d to %d", blueCoinsBeforeClear, got)
 	}
 	var progressRows int
 	if err := database.Pool.QueryRow(ctx,
@@ -606,7 +607,7 @@ func TestRoadblockClearRejectsTeamsItDoesNotBlock(t *testing.T) {
 		t.Errorf("expected 404 for a road with no roadblock, got %d", w.Code)
 	}
 
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock", "idempotency_key": uuid.NewString()}, red.Token)
 	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{
 		"powerup": "roadblock", "road_id": r.board.SegStartMid1, "idempotency_key": uuid.New().String(),
 	}, red.Token)
@@ -632,7 +633,7 @@ func TestRoadblockClearRejectsTeamsItDoesNotBlock(t *testing.T) {
 	// Red drops a second roadblock on a stretch Blue is nowhere near, and Blue
 	// cannot clear it from where it stands. (The 20-coin challenge Red already
 	// completed covers both 5-coin roadblocks.)
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock", "idempotency_key": uuid.NewString()}, red.Token)
 	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{
 		"powerup": "roadblock", "road_id": r.board.SegMid2Finish, "idempotency_key": uuid.New().String(),
 	}, red.Token)
@@ -706,7 +707,7 @@ func TestRoadblockClearedByOneTeamLiftsItForAll(t *testing.T) {
 
 	r.advance(red, r.board.Mid1)
 	r.completeChallenge(red, r.board.Mid1, r.board.Mid1Challenge, "pass")
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "roadblock", "idempotency_key": uuid.NewString()}, red.Token)
 	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{
 		"powerup": "roadblock", "road_id": r.board.SegMid1Mid2, "idempotency_key": uuid.New().String(),
 	}, red.Token)
@@ -764,7 +765,7 @@ func TestCurseCanBeResolved(t *testing.T) {
 	r.advance(red, r.board.Mid1)
 	r.completeChallenge(red, r.board.Mid1, r.board.Mid1Challenge, "pass")
 
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "curse"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "curse", "idempotency_key": uuid.NewString()}, red.Token)
 	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{
 		"powerup": "curse", "target_team_id": blue.ID, "idempotency_key": uuid.New().String(),
 	}, red.Token)
@@ -846,7 +847,7 @@ func TestGameRulesetIsHonoured(t *testing.T) {
 	}
 
 	// The ruleset's power-up prices apply where the board sets none.
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf", "idempotency_key": uuid.NewString()}, red.Token)
 	if got := r.projection().Coins[red.ID]; got != 6 {
 		t.Errorf("expected the ruleset's nerf price of 1, Red now holds %d", got)
 	}
@@ -872,7 +873,7 @@ func TestGameRulesetIsHonoured(t *testing.T) {
 	}
 
 	// Tracker-off honours its own configured duration too.
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "tracker_off"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "tracker_off", "idempotency_key": uuid.NewString()}, red.Token)
 	trackerBefore := time.Now().UTC()
 	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{
 		"powerup": "tracker_off", "idempotency_key": uuid.New().String(),
@@ -1042,7 +1043,7 @@ func TestArrivalIsRefusedWhenTheMovementIsImpossible(t *testing.T) {
 		t.Fatalf("failed to seed a stale far-away fix: %v", err)
 	}
 
-w, _ := r.rawArrive(red, r.board.Mid1)
+	w, _ := r.rawArrive(red, r.board.Mid1)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected the teleport to be refused with 422, got %d - %s", w.Code, w.Body.String())
 	}
@@ -1071,7 +1072,7 @@ w, _ := r.rawArrive(red, r.board.Mid1)
 	}
 }
 
-func TestChallengeCompletionAwardsCoinsWithWaypointID(t *testing.T) {
+func TestSubmissionRequiresTheBoardChallengeID(t *testing.T) {
 	database, ctx := getTestDB(t)
 	if database == nil {
 		return
@@ -1083,9 +1084,22 @@ func TestChallengeCompletionAwardsCoinsWithWaypointID(t *testing.T) {
 	r.start()
 	r.advance(red, r.board.Mid1)
 
-	// Submit using waypointID as challengeID (matching frontend behaviour when client submits evidence)
-	r.completeChallenge(red, r.board.Mid1, r.board.Mid1, "pass")
+	// A waypoint ID standing in for the challenge ID is refused rather than resolved server-side.
+	lat, lon := r.board.coordsOf(r.board.Mid1)
+	r.mustPost(http.StatusOK, "/challenge/start", map[string]interface{}{
+		"waypoint_id": r.board.Mid1, "lat": lat, "lon": lon, "accuracy_m": 8.0,
+		"idempotency_key": uuid.New().String(),
+	}, red.Token)
+	if w, _ := r.post("/submission", map[string]interface{}{
+		"waypoint_id": r.board.Mid1, "challenge_id": r.board.Mid1,
+		"lat": lat, "lon": lon, "accuracy_m": 8.0,
+		"blob_ref": r.evidenceRef(red), "idempotency_key": uuid.New().String(),
+	}, red.Token); w.Code != http.StatusBadRequest {
+		t.Fatalf("expected a mismatched challenge_id to be refused with 400, got %d — %s", w.Code, w.Body.String())
+	}
+
+	r.completeChallenge(red, r.board.Mid1, r.board.Mid1Challenge, "pass")
 	if got := r.projection().Coins[red.ID]; got != 20 {
-		t.Fatalf("expected 20 coins for completing challenge using waypointID, got %d", got)
+		t.Fatalf("expected 20 coins for completing the challenge by its board ID, got %d", got)
 	}
 }

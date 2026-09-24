@@ -64,6 +64,7 @@ func (s *Server) handleListPendingReview(w http.ResponseWriter, r *http.Request)
 		       COALESCE(t.name, ''),
 		       COALESCE(s.kind, 'challenge'),
 		       COALESCE(s.road_id::text, ''),
+		       COALESCE(s.waypoint_id::text, ''),
 		       s.challenge_id::text,
 		       s.blob_ref,
 		       s.lat, s.lon, s.accuracy_m,
@@ -96,7 +97,7 @@ func (s *Server) handleListPendingReview(w http.ResponseWriter, r *http.Request)
 		var rubricJSON string
 		if err := rows.Scan(
 			&item.SubmissionID, &item.TeamID, &item.TeamName, &item.Kind,
-			&item.RoadID, &item.ChallengeID, &item.BlobRef,
+			&item.RoadID, &item.WaypointID, &item.ChallengeID, &item.BlobRef,
 			&item.Lat, &item.Lon, &item.AccuracyM,
 			&clientCapturedAt, &item.SubmittedAt,
 			&item.Prompt, &rubricJSON,
@@ -110,8 +111,11 @@ func (s *Server) handleListPendingReview(w http.ResponseWriter, r *http.Request)
 		}
 		// Ignore unmarshal errors for malformed rubric JSON.
 		_ = json.Unmarshal([]byte(rubricJSON), &item.Rubric)
-		// For roadblock submissions, WaypointID maps to RoadID.
-		item.WaypointID = item.RoadID
+		// Historical submissions and roadblock submissions did not store an
+		// endpoint separately; their target ID is the best available location.
+		if item.WaypointID == "" {
+			item.WaypointID = item.RoadID
+		}
 
 		item.PhotoURL = s.presignReviewPhoto(r.Context(), item.BlobRef, reqHost, reqScheme)
 		items = append(items, item)

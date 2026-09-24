@@ -317,8 +317,12 @@ func TestJoinIsIdempotentAcrossRetries(t *testing.T) {
 	if w2.Code != http.StatusCreated {
 		t.Fatalf("retried join: got %d, want 201 — %s", w2.Code, w2.Body.String())
 	}
-	if first["team_id"] != second["team_id"] || first["join_token"] != second["join_token"] {
+	if first["team_id"] != second["team_id"] || first["player_id"] != second["player_id"] {
 		t.Fatalf("retry minted a different team: %v then %v", first, second)
+	}
+	// The idempotency cache never stores the secret, so a replay issues a fresh token for the same player.
+	if token, _ := second["join_token"].(string); token == "" {
+		t.Fatalf("retried join returned no token: %v", second)
 	}
 
 	var rows int

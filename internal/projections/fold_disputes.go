@@ -1,7 +1,6 @@
 package projections
 
 import (
-
 	"github.com/Jessevdz/RunwayTheGame/internal/eventstore"
 )
 
@@ -13,7 +12,7 @@ func foldDisputeRaised(p *GameStateProjection, _ eventstore.Event, payload event
 		Objection: payload.Objection,
 		Status:    "pending",
 	}
-	p.logf("Dispute raised by team %s on %s: %s", p.teamLabel(payload.ByTeamID), p.submissionLabel(payload.VerdictID), payload.Objection)
+	p.logfOwn(payload.ByTeamID, "Dispute raised by team %s on %s", p.teamLabel(payload.ByTeamID), p.submissionLabel(payload.VerdictID))
 }
 
 // foldDisputeResolved updates a dispute with its final outcome.

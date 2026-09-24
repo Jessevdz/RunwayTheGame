@@ -104,7 +104,7 @@ func TestNerfAndChallengeSkipPowerupsUseTheCatalogNames(t *testing.T) {
 
 	// Buy and use "nerf" (not "freeze") on team B.
 	if w, _ := post(fmt.Sprintf("/api/games/%s/shop/buy", gameID), map[string]interface{}{
-		"powerup": "nerf",
+		"powerup": "nerf", "idempotency_key": uuid.New().String(),
 	}, tokenA); w.Code != http.StatusOK {
 		t.Fatalf("failed to buy nerf: %s", w.Body.String())
 	}
@@ -131,7 +131,7 @@ func TestNerfAndChallengeSkipPowerupsUseTheCatalogNames(t *testing.T) {
 
 	// Buy and use "challenge_skip" (not "bypass") on waypoint wStart.
 	if w, _ := post(fmt.Sprintf("/api/games/%s/shop/buy", gameID), map[string]interface{}{
-		"powerup": "challenge_skip",
+		"powerup": "challenge_skip", "idempotency_key": uuid.New().String(),
 	}, tokenA); w.Code != http.StatusOK {
 		t.Fatalf("failed to buy challenge_skip: %s", w.Body.String())
 	}
@@ -258,7 +258,7 @@ func TestPositionPingIsEphemeralAndRespectsTrackerOff(t *testing.T) {
 	}
 
 	if w, _ := post(fmt.Sprintf("/api/games/%s/shop/buy", gameID), map[string]interface{}{
-		"powerup": "tracker_off",
+		"powerup": "tracker_off", "idempotency_key": uuid.New().String(),
 	}, token); w.Code != http.StatusOK {
 		t.Fatalf("failed to buy tracker_off: %s", w.Body.String())
 	}

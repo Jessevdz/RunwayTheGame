@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -10,7 +11,11 @@ import (
 	"github.com/jackc/pgx/v4"
 
 	"github.com/Jessevdz/RunwayTheGame/internal/blobstore"
+	"github.com/Jessevdz/RunwayTheGame/internal/commands"
+	"github.com/Jessevdz/RunwayTheGame/internal/eventstore"
 	"github.com/Jessevdz/RunwayTheGame/internal/logger"
+	"github.com/Jessevdz/RunwayTheGame/internal/projections"
+	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
 // RetentionDays is the maximum retention duration in days for race data.
@@ -34,6 +39,11 @@ const purgeBatchSize = 50
 
 // purgeAttempts is the maximum number of retry passes when sweeping photos during a game purge.
 const purgeAttempts = 3
+
+const (
+	purgeRetryBase = time.Hour
+	purgeRetryMax  = 7 * 24 * time.Hour
+)
 
 // errBlobsRemain indicates one or more evidence photos failed to be deleted from object storage.
 var errBlobsRemain = errors.New("some photos could not be deleted from object storage")
@@ -119,6 +129,12 @@ func (s *Server) handleDeleteTeamEvidence(w http.ResponseWriter, r *http.Request
 
 // SweepRetention executes a single pass of all data retention cleanup tasks.
 func (s *Server) SweepRetention(ctx context.Context) {
+	if err := s.sweepGamesPastDeadline(ctx); err != nil {
+		logger.Error(ctx, "retention: failed to end games past their deadline", map[string]interface{}{"error": err.Error()})
+	}
+	if err := s.sweepFinishedJobs(ctx); err != nil {
+		logger.Error(ctx, "retention: failed to prune finished jobs", map[string]interface{}{"error": err.Error()})
+	}
 	if err := s.sweepStalePositions(ctx); err != nil {
 		logger.Error(ctx, "retention: failed to sweep stale positions", map[string]interface{}{"error": err.Error()})
 	}
@@ -137,6 +153,85 @@ func (s *Server) SweepRetention(ctx context.Context) {
 	if err := s.sweepExpiredAnalytics(ctx); err != nil {
 		logger.Error(ctx, "retention: failed to sweep analytics events", map[string]interface{}{"error": err.Error()})
 	}
+}
+
+func (s *Server) sweepFinishedJobs(ctx context.Context) error {
+	tag, err := s.DB.Pool.Exec(ctx, `
+		DELETE FROM jobs
+		WHERE status IN ('completed', 'failed')
+		  AND created_at < NOW() - $1::interval
+	`, RetentionWindow.String())
+	if err != nil {
+		return err
+	}
+	if removed := tag.RowsAffected(); removed > 0 {
+		logger.Info(ctx, "retention: deleted finished worker jobs", map[string]interface{}{"rows": removed})
+	}
+	return nil
+}
+
+func (s *Server) sweepGamesPastDeadline(ctx context.Context) error {
+	rows, err := s.DB.Pool.Query(ctx, `
+		SELECT id::text FROM games WHERE status = 'live' AND ends_at <= NOW()
+		ORDER BY ends_at ASC LIMIT $1
+	`, purgeBatchSize)
+	if err != nil {
+		return err
+	}
+	var gameIDs []string
+	for rows.Next() {
+		var gameID string
+		if err := rows.Scan(&gameID); err != nil {
+			rows.Close()
+			return err
+		}
+		gameIDs = append(gameIDs, gameID)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, gameID := range gameIDs {
+		proj, err := projections.RebuildProjection(ctx, s.DB.Pool, gameID, 0)
+		if err != nil {
+			logger.Warn(ctx, "retention: failed to load expired game state", map[string]interface{}{"game_id": gameID, "error": err.Error()})
+			continue
+		}
+		winner := ""
+		if proj.Mode == rules.ModeCoinRush {
+			scores, err := coinRushScores(ctx, s.DB.Pool, gameID)
+			if err != nil {
+				logger.Warn(ctx, "retention: failed to load expired coin-rush scores", map[string]interface{}{"game_id": gameID, "error": err.Error()})
+				continue
+			}
+			winner = rules.CoinRushWinner(scores)
+		}
+		payload, _ := json.Marshal(eventstore.GameEndedPayload{WinnerTeamID: winner})
+		_, err = s.CmdProcessor.Process(ctx, commands.CommandRequest{
+			GameID: gameID, CommandType: "GameEnded", ExpectedSeq: proj.LastSequence + 1,
+			IdempotencyKey: "deadline-ended", Payload: payload,
+		}, func(txCtx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+			var live bool
+			if err := tx.QueryRow(txCtx, `SELECT status = 'live' AND ends_at <= NOW() FROM games WHERE id = $1 FOR UPDATE`, gameID).Scan(&live); err != nil {
+				return nil, err
+			}
+			if !live {
+				return &commands.CommandResult{ResponseCode: http.StatusOK, ResponseBody: statusResponse{Status: "ended"}}, nil
+			}
+			tag, err := tx.Exec(txCtx, `UPDATE games SET status = 'ended', winner_team_id = NULLIF($1, '') WHERE id = $2 AND status = 'live' AND ends_at <= NOW()`, winner, gameID)
+			if err != nil {
+				return nil, err
+			}
+			if tag.RowsAffected() != 1 {
+				return nil, errGameNotLive
+			}
+			return &commands.CommandResult{ResponseCode: http.StatusOK, ResponseBody: statusResponse{Status: "ended"}, Events: []eventstore.Event{{Type: "GameEnded", Payload: string(cr.Payload)}}}, nil
+		})
+		if err != nil && !errors.Is(err, eventstore.ErrConcurrencyConflict) {
+			logger.Warn(ctx, "retention: failed to end an expired game", map[string]interface{}{"game_id": gameID, "error": err.Error()})
+		}
+	}
+	return nil
 }
 
 // sweepExpiredAnalytics deletes usage events past the analytics retention window.
@@ -218,47 +313,75 @@ func (s *Server) sweepExpiredGames(ctx context.Context) error {
 	rows, err := s.DB.Pool.Query(ctx, `
 		SELECT g.id::text
 		FROM games g
-		WHERE g.status = 'ended'
+		WHERE ((g.status = 'ended'
 		  AND COALESCE(
 		        (SELECT MAX(e.created_at) FROM events e
 		          WHERE e.game_id = g.id AND e.event_type = 'GameEnded'),
 		        g.created_at
-		      ) < NOW() - $1::interval
-		ORDER BY g.created_at ASC
+		      ) < NOW() - $1::interval)
+		   OR (g.status = 'draft' AND g.created_at < NOW() - $1::interval))
+		  AND (g.purging_at IS NULL OR g.purging_at <= NOW() - LEAST(
+		        $3::interval * power(2::double precision, GREATEST(LEAST(g.purge_attempts - 1, 8), 0)),
+		        $4::interval
+		      ))
+		ORDER BY g.purging_at ASC NULLS FIRST, g.created_at ASC
 		LIMIT $2
-	`, RetentionWindow.String(), purgeBatchSize)
+	`, RetentionWindow.String(), purgeBatchSize, purgeRetryBase.String(), purgeRetryMax.String())
 	if err != nil {
 		return err
 	}
 
-	var expired []string
+	type purgeCandidate struct {
+		gameID string
+	}
+	var expired []purgeCandidate
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var candidate purgeCandidate
+		if err := rows.Scan(&candidate.gameID); err != nil {
 			rows.Close()
 			return err
 		}
-		expired = append(expired, id)
+		expired = append(expired, candidate)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return err
 	}
 
-	for _, gameID := range expired {
-		photos, err := s.purgeGame(ctx, gameID)
+	for _, candidate := range expired {
+		photos, err := s.purgeGame(ctx, candidate.gameID)
 		if err != nil {
+			if retryErr := s.recordPurgeFailure(ctx, candidate.gameID, err); retryErr != nil {
+				logger.Error(ctx, "retention: failed to schedule retry for an expired race", map[string]interface{}{
+					"game_id": candidate.gameID,
+					"error":   retryErr.Error(),
+				})
+			}
 			// Log error and continue sweeping remaining expired games.
 			logger.Error(ctx, "retention: failed to purge an expired race", map[string]interface{}{
-				"game_id": gameID,
+				"game_id": candidate.gameID,
 				"error":   err.Error(),
 			})
 			continue
 		}
 		logger.Info(ctx, "retention: purged an expired race", map[string]interface{}{
-			"game_id":        gameID,
+			"game_id":        candidate.gameID,
 			"photos_deleted": photos,
 		})
+	}
+	return nil
+}
+
+func (s *Server) recordPurgeFailure(ctx context.Context, gameID string, purgeErr error) error {
+	_, err := s.DB.Pool.Exec(ctx, `
+		UPDATE games
+		SET purge_attempts = LEAST(purge_attempts + 1, 30),
+		    purging_at = NOW(),
+		    purge_last_error = LEFT($2, 1000)
+		WHERE id = $1
+	`, gameID, purgeErr.Error())
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -351,6 +474,9 @@ func (s *Server) deleteGameRows(ctx context.Context, gameID string) (bool, error
 	}
 
 	// Delete event store and command records prior to cascading game row deletion.
+	if _, err := tx.Exec(ctx, `DELETE FROM jobs WHERE game_id = $1`, gameID); err != nil {
+		return false, err
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM events WHERE game_id = $1`, gameID); err != nil {
 		return false, err
 	}

@@ -408,6 +408,25 @@ func SoloAllowsEffect(effect string) bool {
 	return false
 }
 
+// EffectivePowerupEffect returns the configured effect, falling back to the
+// legacy ID-as-effect convention for older board definitions.
+func EffectivePowerupEffect(powerup Powerup) string {
+	if powerup.Effect != "" {
+		return powerup.Effect
+	}
+	return powerup.ID
+}
+
+// IsSupportedPowerupEffect reports whether the runtime can execute an effect.
+func IsSupportedPowerupEffect(effect string) bool {
+	switch effect {
+	case "nerf", "tracker_off", "roadblock", "curse", "challenge_skip":
+		return true
+	default:
+		return false
+	}
+}
+
 // CoinRushScore represents a team's coin balance and finish rank in coin rush mode.
 type CoinRushScore struct {
 	TeamID string
@@ -474,44 +493,62 @@ func DefaultRuleset() Ruleset {
 	}
 }
 
+func (rs Ruleset) hasProvidedField(field string) bool {
+	if !rs.decodedFromJSON {
+		return false
+	}
+	_, ok := rs.providedFields[field]
+	return ok
+}
+
+func shouldUseRulesetDefault(rs Ruleset, field string, value int, zeroIsValue bool) bool {
+	if rs.decodedFromJSON {
+		return !rs.hasProvidedField(field) || value < 0 || (value == 0 && !zeroIsValue)
+	}
+	if zeroIsValue {
+		return value < 0
+	}
+	return value <= 0
+}
+
 // NormalizeRuleset populates unset fields in a ruleset with default values.
 func NormalizeRuleset(rs Ruleset) Ruleset {
 	def := DefaultRuleset()
 
-	if rs.CoinRewardMin <= 0 {
+	if shouldUseRulesetDefault(rs, "coin_reward_min", rs.CoinRewardMin, false) {
 		rs.CoinRewardMin = def.CoinRewardMin
 	}
-	if rs.CoinRewardMax <= 0 {
+	if shouldUseRulesetDefault(rs, "coin_reward_max", rs.CoinRewardMax, false) {
 		rs.CoinRewardMax = def.CoinRewardMax
 	}
 	if rs.CoinRewardMax < rs.CoinRewardMin {
 		rs.CoinRewardMin, rs.CoinRewardMax = rs.CoinRewardMax, rs.CoinRewardMin
 	}
 
-	if rs.VetoPenaltyMinSeconds <= 0 {
+	if shouldUseRulesetDefault(rs, "veto_penalty_min_seconds", rs.VetoPenaltyMinSeconds, false) {
 		rs.VetoPenaltyMinSeconds = def.VetoPenaltyMinSeconds
 	}
-	if rs.VetoPenaltyMaxSeconds <= 0 {
+	if shouldUseRulesetDefault(rs, "veto_penalty_max_seconds", rs.VetoPenaltyMaxSeconds, false) {
 		rs.VetoPenaltyMaxSeconds = def.VetoPenaltyMaxSeconds
 	}
 	if rs.VetoPenaltyMaxSeconds < rs.VetoPenaltyMinSeconds {
 		rs.VetoPenaltyMinSeconds, rs.VetoPenaltyMaxSeconds = rs.VetoPenaltyMaxSeconds, rs.VetoPenaltyMinSeconds
 	}
 
-	if rs.FreezeDurationSeconds <= 0 {
+	if shouldUseRulesetDefault(rs, "freeze_duration_seconds", rs.FreezeDurationSeconds, false) {
 		rs.FreezeDurationSeconds = def.FreezeDurationSeconds
 	}
-	if rs.TrackerOffDurationSeconds <= 0 {
+	if shouldUseRulesetDefault(rs, "tracker_off_duration_seconds", rs.TrackerOffDurationSeconds, false) {
 		rs.TrackerOffDurationSeconds = def.TrackerOffDurationSeconds
 	}
-	if rs.CurseDurationSeconds <= 0 {
+	if shouldUseRulesetDefault(rs, "curse_duration_seconds", rs.CurseDurationSeconds, false) {
 		rs.CurseDurationSeconds = def.CurseDurationSeconds
 	}
-	if rs.VetoTimePenaltySeconds < 0 {
+	if shouldUseRulesetDefault(rs, "veto_time_penalty_seconds", rs.VetoTimePenaltySeconds, true) {
 		rs.VetoTimePenaltySeconds = def.VetoTimePenaltySeconds
 	}
 
-	if len(rs.CoinRushFinishBonuses) == 0 {
+	if len(rs.CoinRushFinishBonuses) == 0 && !rs.hasProvidedField("coin_rush_finish_bonuses") {
 		rs.CoinRushFinishBonuses = def.CoinRushFinishBonuses
 	}
 	for i, bonus := range rs.CoinRushFinishBonuses {
@@ -519,11 +556,16 @@ func NormalizeRuleset(rs Ruleset) Ruleset {
 			rs.CoinRushFinishBonuses[i] = 0
 		}
 	}
-	if rs.CoinRushLateFinishBonus < 0 {
+	if rs.decodedFromJSON && !rs.hasProvidedField("coin_rush_late_finish_bonus") {
+		rs.CoinRushLateFinishBonus = def.CoinRushLateFinishBonus
+	} else if rs.CoinRushLateFinishBonus < 0 {
 		rs.CoinRushLateFinishBonus = 0
 	}
-	if rs.CoinRushCountdownSeconds <= 0 {
+	if shouldUseRulesetDefault(rs, "coin_rush_countdown_seconds", rs.CoinRushCountdownSeconds, false) {
 		rs.CoinRushCountdownSeconds = def.CoinRushCountdownSeconds
+	}
+	if rs.decodedFromJSON && !rs.hasProvidedField("reward_only_first_completer") {
+		rs.RewardOnlyFirstCompleter = def.RewardOnlyFirstCompleter
 	}
 
 	switch {

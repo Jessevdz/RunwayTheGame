@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Jessevdz/RunwayTheGame/internal/db"
+	"github.com/Jessevdz/RunwayTheGame/internal/eventstore"
 	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
@@ -237,25 +239,53 @@ func TestSoloShopRejectsOpponentPowerups(t *testing.T) {
 	}
 	defer database.Close()
 
-	// A challenge pays 20; price the skip inside that so one completion buys one.
-	r, runner := newSoloRun(t, ctx, database, rules.ModeSoloTimeTrial, "Jordan", map[string]interface{}{
-		"powerup_costs": map[string]int{"nerf": 1, "tracker_off": 1, "challenge_skip": 5},
-	})
+	// The solo ruleset uses the server's default 100-coin challenge skip price.
+	r, runner := newSoloRun(t, ctx, database, rules.ModeSoloTimeTrial, "Jordan", nil)
 
 	r.advance(runner, r.board.Mid1)
 	r.completeChallenge(runner, r.board.Mid1, r.board.Mid1Challenge, "pass")
 
+	// Seed enough coins for this shop assertion without letting the request
+	// override server-controlled solo-run prices.
+	proj := r.projection()
+	seedPayload, err := json.Marshal(eventstore.CoinsChangedPayload{
+		TeamID: runner.ID, Delta: 80, BalanceAfter: 100, Reason: "test_seed",
+	})
+	if err != nil {
+		t.Fatalf("failed to encode seeded coin balance: %v", err)
+	}
+	tx, err := database.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("failed to begin seeded coin balance transaction: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO team_coins (game_id, team_id, balance)
+		VALUES ($1, $2, 100)
+		ON CONFLICT (game_id, team_id) DO UPDATE SET balance = 100
+	`, r.GameID, runner.ID); err != nil {
+		t.Fatalf("failed to seed coin balance: %v", err)
+	}
+	if err := eventstore.AppendEvents(ctx, tx, r.GameID, proj.LastSequence+1, []eventstore.Event{{
+		Type: "CoinsChanged", Payload: string(seedPayload),
+	}}); err != nil {
+		t.Fatalf("failed to append seeded coin balance: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("failed to commit seeded coin balance: %v", err)
+	}
+
 	// Nothing that acts on a rival can be bought — there is no rival to act on.
 	for _, powerup := range []string{"nerf", "tracker_off"} {
-		if w, _ := r.post("/shop/buy", map[string]interface{}{"powerup": powerup}, runner.Token); w.Code != http.StatusForbidden {
+		if w, _ := r.post("/shop/buy", map[string]interface{}{"powerup": powerup, "idempotency_key": uuid.NewString()}, runner.Token); w.Code != http.StatusForbidden {
 			t.Errorf("expected %s to be refused in a solo run, got %d", powerup, w.Code)
 		}
 	}
 
 	// A challenge skip is the one thing a lone runner can spend on.
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "challenge_skip"}, runner.Token)
-	if got := r.projection().Coins[runner.ID]; got != 15 {
-		t.Fatalf("expected the skip to cost 5 of 20 coins, %d remain", got)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "challenge_skip", "idempotency_key": uuid.NewString()}, runner.Token)
+	if got := r.projection().Coins[runner.ID]; got != 0 {
+		t.Fatalf("expected the skip to cost the server's 100 coins, %d remain", got)
 	}
 
 	// And activating it actually bypasses the waypoint — the regression guarding the
@@ -270,7 +300,7 @@ func TestSoloShopRejectsOpponentPowerups(t *testing.T) {
 		"powerup": "challenge_skip", "road_id": r.board.Mid2, "idempotency_key": uuid.New().String(),
 	}, runner.Token)
 
-	proj := r.projection()
+	proj = r.projection()
 	if !proj.WaypointStates[r.board.Mid2].Bypassed[runner.ID] {
 		t.Fatalf("expected the skip to bypass Mid 2, got %+v", proj.WaypointStates[r.board.Mid2])
 	}

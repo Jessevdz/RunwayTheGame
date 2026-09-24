@@ -101,6 +101,24 @@ export function buildBoardPayload(draft: EditorDraft): BoardPayload {
     };
   });
 
+  const challengeIdByRoad: { [roadId: string]: string } = {};
+  draft.roads.forEach((road) => {
+    if (!road.challenge) return;
+    const challengeId = road.challenge.id || road.challenge_id || generateUUID();
+    challengeIdByRoad[road.id] = challengeId;
+    challenges.push({
+      id: challengeId,
+      prompt: road.challenge.prompt,
+      rubric: {
+        must_show: road.challenge.rubric?.must_show || [],
+        fails_if: road.challenge.rubric?.fails_if || [],
+        acceptable_ambiguity: road.challenge.rubric?.acceptable_ambiguity || ''
+      },
+      coin_reward: road.challenge.coin_reward ?? DEFAULT_COIN_REWARD,
+      veto_penalty_seconds: road.challenge.veto_penalty_seconds ?? DEFAULT_VETO_PENALTY_SECONDS
+    });
+  });
+
   return {
     name: draft.boardName,
     waypoints: draft.waypoints.map((w) => ({
@@ -119,6 +137,7 @@ export function buildBoardPayload(draft: EditorDraft): BoardPayload {
       waypoint_id_b: s.waypoint_id_b,
       waypoint_a: s.waypoint_id_a,
       waypoint_b: s.waypoint_id_b,
+      challenge_id: challengeIdByRoad[s.id] || s.challenge_id || undefined,
       length_m: 1000
     })),
     challenges,
@@ -161,8 +180,19 @@ export function applyBoardToDraft(prev: EditorDraft, board: ApiBoard): EditorDra
   }));
 
   const validWaypointIds = new Set(waypoints.filter((w) => !w.isFinish).map((w) => w.id));
+  const challengeById = new Map<string, ApiChallenge>((board.challenges || []).map((c) => [c.id, c] as const));
+  const roadChallengesByRoadId = new Map<string, ApiChallenge>();
+  (board.roads || []).forEach((road) => {
+    const linkedChallenge = road.challenge_id ? challengeById.get(road.challenge_id) : undefined;
+    const legacyChallenge = linkedChallenge || (board.challenges || []).find(
+      (challenge) => challenge.waypoint_id === road.id || challenge.road_id === road.id
+    );
+    if (legacyChallenge) roadChallengesByRoadId.set(road.id, legacyChallenge);
+  });
+  const roadChallengeIds = new Set(Array.from(roadChallengesByRoadId.values(), (challenge) => challenge.id));
   const challenges: { [waypointId: string]: ChallengeDraft } = {};
   (board.challenges || []).forEach((c) => {
+    if (roadChallengeIds.has(c.id)) return;
     const waypointId = c.waypoint_id || c.road_id || c.id;
     if (!validWaypointIds.has(waypointId)) return;
     challenges[waypointId] = {
@@ -181,12 +211,26 @@ export function applyBoardToDraft(prev: EditorDraft, board: ApiBoard): EditorDra
     ...prev,
     boardName: board.name || UNTITLED_MAP_NAME,
     waypoints,
-    roads: (board.roads || []).map((s) => ({
-      id: s.id,
-      waypoint_id_a: s.waypoint_id_a || s.waypoint_a || '',
-      waypoint_id_b: s.waypoint_id_b || s.waypoint_b || '',
-      challenge_id: s.challenge_id || null
-    })),
+    roads: (board.roads || []).map((s) => {
+      const challenge = roadChallengesByRoadId.get(s.id);
+      return {
+        id: s.id,
+        waypoint_id_a: s.waypoint_id_a || s.waypoint_a || '',
+        waypoint_id_b: s.waypoint_id_b || s.waypoint_b || '',
+        challenge_id: challenge?.id || s.challenge_id || null,
+        challenge: challenge ? {
+          id: challenge.id,
+          prompt: challenge.prompt,
+          rubric: {
+            must_show: challenge.rubric?.must_show || [],
+            fails_if: challenge.rubric?.fails_if || [],
+            acceptable_ambiguity: challenge.rubric?.acceptable_ambiguity || ''
+          },
+          coin_reward: challenge.coin_reward || DEFAULT_COIN_REWARD,
+          veto_penalty_seconds: challenge.veto_penalty_seconds || DEFAULT_VETO_PENALTY_SECONDS
+        } : null
+      };
+    }),
     challenges,
     roadblockCards: board.roadblock_deck || prev.roadblockCards,
     curseCards: board.curse_deck || prev.curseCards,
@@ -316,6 +360,22 @@ export function applyImportToDraft(prev: EditorDraft, data: RawBoardFile): Edito
     const parsed: { [waypointId: string]: ChallengeDraft } = {};
     const assignedWpIds = new Set<string>();
     const unassignedChallenges: RawChallenge[] = [];
+    const roadChallengeRows = new Set<RawChallenge>();
+    const roadsByID = new Map<string, RoadDraft>(next.roads.map((road) => [road.id, road] as const));
+    const roadsByChallengeID = new Map<string, RoadDraft>(
+      next.roads.filter((road) => road.challenge_id).map((road) => [road.challenge_id!, road] as const)
+    );
+
+    data.challenges.forEach((c) => {
+      const legacyTargetID = c.waypoint_id || c.waypointId;
+      const road = (c.id ? roadsByChallengeID.get(c.id) : undefined) ||
+        (c.road_id ? roadsByID.get(c.road_id) : undefined) ||
+        (legacyTargetID ? roadsByID.get(legacyTargetID) : undefined);
+      if (!road) return;
+      if (!road.challenge_id && c.id) road.challenge_id = c.id;
+      road.challenge = asChallengeDraft(c);
+      roadChallengeRows.add(c);
+    });
 
     // Map by challenge_id if present on raw waypoints
     const rawWpByChallengeId = new Map<string, string>();
@@ -330,6 +390,8 @@ export function applyImportToDraft(prev: EditorDraft, data: RawBoardFile): Edito
     }
 
     data.challenges.forEach((c) => {
+      if (roadChallengeRows.has(c)) return;
+      if (c.road_id && !validWaypointIds.has(c.road_id)) return;
       const explicitWpId = c.waypoint_id || c.waypointId || c.road_id;
       if (explicitWpId && validWaypointIds.has(explicitWpId) && !assignedWpIds.has(explicitWpId)) {
         parsed[explicitWpId] = asChallengeDraft(c);

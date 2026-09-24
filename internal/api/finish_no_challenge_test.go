@@ -96,7 +96,13 @@ func TestFinishWaypointRejectsChallengeOnSave(t *testing.T) {
 		t.Fatalf("expected 400 adding a challenge to the finish waypoint, got %d. Body: %s", w.Code, w.Body.String())
 	}
 
-	// ...and still accepts one on a waypoint that is not the finish.
+	// ...and still accepts one on a waypoint that is not the finish, once the start is free again.
+	w, _ = serve(t, ctx, server, jsonRequest("PUT", "/api/boards/"+boardID, map[string]interface{}{
+		"name": "Finish Rules", "waypoints": waypoints(""), "roads": roads,
+	}, editToken))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 clearing the start challenge, got %d. Body: %s", w.Code, w.Body.String())
+	}
 	w, _ = serve(t, ctx, server, jsonRequest("POST", "/api/boards/"+boardID+"/waypoints/"+startID+"/challenges", map[string]interface{}{
 		"edit_token": editToken, "prompt": "Photograph the start arch",
 		"coin_reward": 20, "veto_penalty_seconds": 900,

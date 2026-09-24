@@ -13,7 +13,9 @@ func foldWaypointReached(p *GameStateProjection, _ eventstore.Event, payload eve
 	if payload.IsFinish {
 		prog.ReachedFinish = true
 	}
-	// Record waypoints with no challenge or already cleared by the field as cleared.
+	// Record waypoints with no challenge or already cleared by the field. The
+	// contains check keeps passing back through a cleared waypoint from awarding
+	// additional progress.
 	openedByField := false
 	for _, cleared := range p.WaypointStates[payload.WaypointID].ClearedBy {
 		if cleared {

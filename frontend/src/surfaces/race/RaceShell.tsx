@@ -42,7 +42,7 @@ export const RaceShell: React.FC = () => {
 
   const [playerLocation, setPlayerLocation] = useState<GPSPosition | null>(null);
   const latestLocationRef = useRef<GPSPosition | null>(null);
-  const [activeChallenge, setActiveChallenge] = useState<{ mode?: 'challenge' | 'roadblock'; waypointId: string; challengeId?: string; prompt: string; rubric: any } | null>(null);
+  const [activeChallenge, setActiveChallenge] = useState<{ mode?: 'challenge' | 'roadblock'; waypointId: string; roadId?: string; challengeId?: string; prompt: string; rubric: any } | null>(null);
 
   const [watchedSubmission, setWatchedSubmission] = useState<string | null>(null);
 
@@ -296,6 +296,7 @@ export const RaceShell: React.FC = () => {
             <CaptureFlow
               mode={activeChallenge.mode}
               waypointId={activeChallenge.waypointId}
+              roadId={activeChallenge.roadId}
               challengeId={activeChallenge.challengeId}
               prompt={activeChallenge.prompt}
               rubric={activeChallenge.rubric}
@@ -311,7 +312,7 @@ export const RaceShell: React.FC = () => {
               session={session}
               onLeave={handleLeaveTeam}
               onEndRun={solo && hostSession ? handleEndRun : undefined}
-              onStartChallenge={(waypointId, prompt, rubric, challengeId) => setActiveChallenge({ waypointId, challengeId, prompt, rubric })}
+              onStartChallenge={(waypointId, prompt, rubric, challengeId, roadId) => setActiveChallenge({ waypointId, roadId, challengeId, prompt, rubric })}
               onClearRoadblock={(roadId, cardText) =>
                 setActiveChallenge({
                   mode: 'roadblock',

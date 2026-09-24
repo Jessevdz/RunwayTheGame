@@ -22,6 +22,11 @@ import (
 // errSquadOccupied indicates that a squad cannot be disbanded while members remain.
 var errSquadOccupied = errors.New("squad still has players")
 
+var (
+	errSquadGameNotFound = errors.New("game not found")
+	errSquadEditsClosed  = errors.New("game is no longer a draft")
+)
+
 // JoinGameRequest defines the payload for creating and joining a new team.
 type JoinGameRequest struct {
 	TeamName       string `json:"team_name"`
@@ -59,6 +64,14 @@ type teamJoinedResponse struct {
 	DisplayName string `json:"display_name"`
 }
 
+type teamJoinedCacheResponse struct {
+	TeamID      string `json:"team_id"`
+	SlotIndex   int    `json:"slot_index"`
+	TeamName    string `json:"team_name,omitempty"`
+	PlayerID    string `json:"player_id"`
+	DisplayName string `json:"display_name"`
+}
+
 // teamUpdatedResponse reports a squad's updated name and slot index after a lobby edit.
 type teamUpdatedResponse struct {
 	TeamID    string `json:"team_id"`
@@ -75,8 +88,13 @@ func (s *Server) handleJoinGame(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	req.TeamName = strings.TrimSpace(req.TeamName)
 	if req.TeamName == "" {
 		writeError(r.Context(), w, http.StatusBadRequest, "team_name is required")
+		return
+	}
+	if len([]rune(req.TeamName)) > teamNameMaxRunes {
+		writeError(r.Context(), w, http.StatusBadRequest, fmt.Sprintf("team_name must be %d characters or fewer", teamNameMaxRunes))
 		return
 	}
 	// Validate slot index bounds.
@@ -100,7 +118,6 @@ func (s *Server) handleJoinGame(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusForbidden, "game has ended, cannot join")
 		return
 	}
-
 	// Execute team registration and join event append within a transaction.
 	var joinBody json.RawMessage
 	for attempt := 0; ; attempt++ {
@@ -115,17 +132,25 @@ func (s *Server) handleJoinGame(w http.ResponseWriter, r *http.Request) {
 			Name:      team.Name,
 			SlotIndex: team.SlotIndex,
 		})
+		requestBytes, _ := json.Marshal(req)
+		principalBytes, _ := json.Marshal(struct {
+			TeamName    string `json:"team_name"`
+			SlotIndex   int    `json:"slot_index"`
+			DisplayName string `json:"display_name"`
+		}{TeamName: req.TeamName, SlotIndex: req.SlotIndex, DisplayName: req.DisplayName})
 		expectedSeq, seqErr := s.nextSequence(r.Context(), gameID)
 		if seqErr != nil {
 			writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence: "+seqErr.Error())
 			return
 		}
 		cmdReq := commands.CommandRequest{
-			GameID:         gameID,
-			CommandType:    "TeamJoined",
-			ExpectedSeq:    expectedSeq,
-			IdempotencyKey: req.IdempotencyKey,
-			Payload:        payloadBytes,
+			GameID:             gameID,
+			CommandType:        "TeamJoined",
+			PrincipalID:        "join:" + hashToken(string(principalBytes)),
+			IdempotencyPayload: requestBytes,
+			ExpectedSeq:        expectedSeq,
+			IdempotencyKey:     req.IdempotencyKey,
+			Payload:            payloadBytes,
 		}
 
 		resp, procErr := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
@@ -135,7 +160,6 @@ func (s *Server) handleJoinGame(w http.ResponseWriter, r *http.Request) {
 			}
 			return &commands.CommandResult{
 				ResponseCode: http.StatusCreated,
-				// Hand back existing team attributes on idempotent request replays.
 				ResponseBody: teamJoinedResponse{
 					TeamID:      team.TeamID,
 					JoinToken:   team.JoinToken,
@@ -143,6 +167,10 @@ func (s *Server) handleJoinGame(w http.ResponseWriter, r *http.Request) {
 					SlotIndex:   team.SlotIndex,
 					PlayerID:    team.PlayerID,
 					DisplayName: team.DisplayName,
+				},
+				CachedResponseBody: teamJoinedCacheResponse{
+					TeamID: team.TeamID, SlotIndex: team.SlotIndex,
+					TeamName: team.Name, PlayerID: team.PlayerID, DisplayName: team.DisplayName,
 				},
 				Events: []eventstore.Event{
 					{Type: "TeamJoined", Payload: string(cr.Payload)},
@@ -169,6 +197,46 @@ func (s *Server) handleJoinGame(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to append event: "+procErr.Error())
 		return
+	}
+
+	var joined teamJoinedResponse
+	if err := json.Unmarshal(joinBody, &joined); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to read cached team response")
+		return
+	}
+	if joined.JoinToken == "" || joined.JoinCode == "" {
+		joinToken := uuid.NewString()
+		tx, err := s.DB.Pool.Begin(r.Context())
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to issue a replacement team token")
+			return
+		}
+		defer tx.Rollback(r.Context())
+		_, err = tx.Exec(r.Context(), `
+			INSERT INTO team_tokens (token_hash, game_id, team_id, player_id, display_name)
+			SELECT $1, game_id, team_id, player_id, display_name
+			FROM team_tokens WHERE game_id = $2 AND team_id = $3 AND player_id = $4
+			LIMIT 1
+		`, hashToken(joinToken), gameID, joined.TeamID, joined.PlayerID)
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to issue a replacement team token")
+			return
+		}
+		var tokenCount int
+		if err := tx.QueryRow(r.Context(), `SELECT COUNT(*) FROM team_tokens WHERE game_id = $1 AND team_id = $2 AND player_id = $3 AND token_hash = $4`, gameID, joined.TeamID, joined.PlayerID, hashToken(joinToken)).Scan(&tokenCount); err != nil || tokenCount != 1 {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to issue a replacement team token")
+			return
+		}
+		if err := tx.QueryRow(r.Context(), `SELECT join_code FROM game_teams WHERE id = $1 AND game_id = $2`, joined.TeamID, gameID).Scan(&joined.JoinCode); err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to recover team join code")
+			return
+		}
+		if err := tx.Commit(r.Context()); err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to issue a replacement team token")
+			return
+		}
+		joined.JoinToken = joinToken
+		joinBody, _ = json.Marshal(joined)
 	}
 
 	writeRawJSON(r.Context(), w, http.StatusCreated, joinBody)
@@ -215,6 +283,10 @@ func (s *Server) handleJoinExistingTeam(w http.ResponseWriter, r *http.Request) 
 		writeError(r.Context(), w, http.StatusForbidden, "game has ended, cannot join")
 		return
 	}
+	if gameStatus != "draft" && suppliedCode == "" {
+		writeError(r.Context(), w, http.StatusForbidden, "a valid join code is required once the game has started")
+		return
+	}
 
 	var name string
 	var slotIndex int
@@ -248,6 +320,34 @@ func (s *Server) handleJoinExistingTeam(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
+	var lockedStatus string
+	var lockedCode *string
+	if err := tx.QueryRow(r.Context(), `
+		SELECT g.status, t.join_code
+		FROM games g
+	JOIN game_teams t ON t.game_id = g.id
+		WHERE g.id = $1 AND t.id = $2
+		FOR UPDATE OF g, t
+	`, gameID, teamID).Scan(&lockedStatus, &lockedCode); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(r.Context(), w, http.StatusNotFound, "team or game not found")
+		} else {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to check game status: "+err.Error())
+		}
+		return
+	}
+	if lockedStatus == "ended" {
+		writeError(r.Context(), w, http.StatusForbidden, "game has ended, cannot join")
+		return
+	}
+	if lockedStatus != "draft" && suppliedCode == "" {
+		writeError(r.Context(), w, http.StatusForbidden, "a valid join code is required once the game has started")
+		return
+	}
+	if suppliedCode != "" && (lockedCode == nil || *lockedCode == "" || !tokensEqual(normalizeJoinCode(*lockedCode), suppliedCode)) {
+		writeError(r.Context(), w, http.StatusForbidden, "wrong join code for this team")
+		return
+	}
 	if err := insertTeamToken(r.Context(), tx, gameID, teamID, joinToken, playerID, displayName); err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to issue a team token: "+err.Error())
 		return
@@ -318,6 +418,21 @@ func deleteTeamTx(ctx context.Context, tx pgx.Tx, gameID, teamID string) error {
 	return nil
 }
 
+func requireDraftGameForSquadEdit(ctx context.Context, tx pgx.Tx, gameID string) error {
+	var status string
+	err := tx.QueryRow(ctx, `SELECT status FROM games WHERE id = $1 FOR UPDATE`, gameID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errSquadGameNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("failed to check game status: %w", err)
+	}
+	if status != "draft" {
+		return errSquadEditsClosed
+	}
+	return nil
+}
+
 // authorizeSquadEdit verifies that the requester holds host privileges or membership on the specified team.
 func (s *Server) authorizeSquadEdit(w http.ResponseWriter, r *http.Request, gameID, teamID string) (*gameRecord, bool) {
 	token := bearerToken(r)
@@ -332,7 +447,7 @@ func (s *Server) authorizeSquadEdit(w http.ResponseWriter, r *http.Request, game
 	}
 
 	if caps, err := s.loadGameCapabilities(r.Context(), gameID); err == nil {
-		if caps.HostTokenHash != "" && tokensEqual(hashToken(token), caps.HostTokenHash) {
+		if caps.acceptsHostToken(token) {
 			return game, true
 		}
 	}
@@ -430,6 +545,9 @@ func (s *Server) handleUpdateMembership(w http.ResponseWriter, r *http.Request) 
 			CommandType: "MembershipChanged",
 			ExpectedSeq: expectedSeq,
 		}, func(ctx context.Context, tx pgx.Tx, _ commands.CommandRequest) (*commands.CommandResult, error) {
+			if err := requireDraftGameForSquadEdit(ctx, tx, gameID); err != nil {
+				return nil, err
+			}
 			if newName != nil {
 				if _, err := tx.Exec(ctx, `
 					UPDATE team_tokens SET team_id = $1, display_name = $2 WHERE game_id = $3 AND token_hash = $4
@@ -460,6 +578,14 @@ func (s *Server) handleUpdateMembership(w http.ResponseWriter, r *http.Request) 
 
 		if procErr == nil {
 			break
+		}
+		if errors.Is(procErr, errSquadEditsClosed) {
+			writeError(r.Context(), w, http.StatusForbidden, "the race has started, so squads can no longer be changed")
+			return
+		}
+		if errors.Is(procErr, errSquadGameNotFound) {
+			writeError(r.Context(), w, http.StatusNotFound, "game not found")
+			return
 		}
 		var pgErr *pgconn.PgError
 		lostSequenceRace := errors.Is(procErr, eventstore.ErrConcurrencyConflict) ||
@@ -531,6 +657,10 @@ func (s *Server) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
 			writeError(r.Context(), w, http.StatusBadRequest, "name cannot be empty")
 			return
 		}
+		if len([]rune(trimmed)) > teamNameMaxRunes {
+			writeError(r.Context(), w, http.StatusBadRequest, fmt.Sprintf("name must be %d characters or fewer", teamNameMaxRunes))
+			return
+		}
 		name = trimmed
 	}
 	if req.SlotIndex != nil {
@@ -556,6 +686,9 @@ func (s *Server) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
 			ExpectedSeq: expectedSeq,
 			Payload:     payload,
 		}, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+			if err := requireDraftGameForSquadEdit(ctx, tx, gameID); err != nil {
+				return nil, err
+			}
 			if _, err := tx.Exec(ctx, `
 				UPDATE game_teams SET name = $1, slot_index = $2 WHERE game_id = $3 AND id = $4
 			`, name, slotIndex, gameID, teamID); err != nil {
@@ -579,6 +712,14 @@ func (s *Server) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
 
 		if procErr == nil {
 			break
+		}
+		if errors.Is(procErr, errSquadEditsClosed) {
+			writeError(r.Context(), w, http.StatusForbidden, "the race has started, so squads can no longer be edited")
+			return
+		}
+		if errors.Is(procErr, errSquadGameNotFound) {
+			writeError(r.Context(), w, http.StatusNotFound, "game not found")
+			return
 		}
 		if errors.Is(procErr, errSlotTaken) {
 			writeError(r.Context(), w, http.StatusConflict, "that team colour is already taken")
@@ -631,6 +772,9 @@ func (s *Server) handleDisbandTeam(w http.ResponseWriter, r *http.Request) {
 			ExpectedSeq: expectedSeq,
 			Payload:     payload,
 		}, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+			if err := requireDraftGameForSquadEdit(ctx, tx, gameID); err != nil {
+				return nil, err
+			}
 			// Check team membership within the transaction to prevent disbanding populated teams.
 			remaining, err := s.countTeamPlayers(ctx, tx, gameID, teamID)
 			if err != nil {
@@ -650,6 +794,14 @@ func (s *Server) handleDisbandTeam(w http.ResponseWriter, r *http.Request) {
 
 		if procErr == nil {
 			break
+		}
+		if errors.Is(procErr, errSquadEditsClosed) {
+			writeError(r.Context(), w, http.StatusForbidden, "the race has started, so squads can no longer be disbanded")
+			return
+		}
+		if errors.Is(procErr, errSquadGameNotFound) {
+			writeError(r.Context(), w, http.StatusNotFound, "game not found")
+			return
 		}
 		if errors.Is(procErr, errSquadOccupied) {
 			writeError(r.Context(), w, http.StatusConflict, "someone is still on that squad")

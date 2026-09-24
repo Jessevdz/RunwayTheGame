@@ -76,12 +76,16 @@ func TestPowerupUseStaysPublic(t *testing.T) {
 	}
 }
 
-// TestCoinBalancesStayPublic pins that hiding purchases did not hide standings coins.
-func TestCoinBalancesStayPublic(t *testing.T) {
+// TestCoinBalancesStayPrivate pins that rival standings omit exact balances while a team keeps its own.
+func TestCoinBalancesStayPrivate(t *testing.T) {
 	p := purchaseProjection(t)
+	p.Coins[blueID] = 12
 	rival := p.RedactFor(blueID, false)
-	if rival.Coins[redID] != 5 {
-		t.Errorf("expected a rival to still read the coin balance, got %d", rival.Coins[redID])
+	if _, ok := rival.Coins[redID]; ok {
+		t.Errorf("a rival can read Red's coin balance: %v", rival.Coins)
+	}
+	if got, ok := rival.Coins[blueID]; !ok || got != 12 {
+		t.Errorf("expected Blue to keep its own 12-coin balance, got %v", rival.Coins)
 	}
 }
 

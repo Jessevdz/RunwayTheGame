@@ -73,10 +73,14 @@ func isJoinCodeShaped(code string) bool {
 	return len(code) > 0
 }
 
-var errGameNotFound = errors.New("game not found")
+var (
+	errGameNotFound           = errors.New("game not found")
+	errInvalidSubscriberToken = errors.New("token is not valid for this game")
+)
 
 type gameCapabilities struct {
-	HostTokenHash string
+	HostTokenHash   string
+	HostTokenHashes []string
 }
 
 func (s *Server) loadGameCapabilities(ctx context.Context, gameID string) (*gameCapabilities, error) {
@@ -86,9 +90,12 @@ func (s *Server) loadGameCapabilities(ctx context.Context, gameID string) (*game
 		return nil, errGameNotFound
 	}
 	var hostHash *string
+	var extraHashes []string
 	err := s.DB.Pool.QueryRow(ctx, `
-		SELECT host_token_hash FROM games WHERE id = $1
-	`, gameID).Scan(&hostHash)
+		SELECT g.host_token_hash,
+		       ARRAY(SELECT h.token_hash FROM game_host_tokens h WHERE h.game_id = g.id)
+		FROM games g WHERE g.id = $1
+	`, gameID).Scan(&hostHash, &extraHashes)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errGameNotFound
@@ -99,7 +106,20 @@ func (s *Server) loadGameCapabilities(ctx context.Context, gameID string) (*game
 	if hostHash != nil {
 		caps.HostTokenHash = *hostHash
 	}
+	caps.HostTokenHashes = extraHashes
 	return caps, nil
+}
+
+func (caps *gameCapabilities) acceptsHostToken(token string) bool {
+	return caps.acceptsHostTokenHash(hashToken(token))
+}
+
+func (caps *gameCapabilities) acceptsHostTokenHash(providedHash string) bool {
+	valid := caps.HostTokenHash != "" && tokensEqual(providedHash, caps.HostTokenHash)
+	for _, storedHash := range caps.HostTokenHashes {
+		valid = tokensEqual(providedHash, storedHash) || valid
+	}
+	return valid
 }
 
 // requireHost restricts access to host routes by checking the provided host capability token.
@@ -121,7 +141,7 @@ func (s *Server) requireHost(next http.Handler) http.Handler {
 			writeError(r.Context(), w, http.StatusInternalServerError, "failed to verify host token: "+err.Error())
 			return
 		}
-		if caps.HostTokenHash == "" || !tokensEqual(hashToken(token), caps.HostTokenHash) {
+		if !caps.acceptsHostToken(token) {
 			writeError(r.Context(), w, http.StatusForbidden, "not the host of this game")
 			return
 		}
@@ -211,7 +231,7 @@ func (s *Server) requireVerdictAuthor(next http.Handler) http.Handler {
 			writeError(r.Context(), w, http.StatusInternalServerError, "failed to verify token: "+err.Error())
 			return
 		}
-		if caps.HostTokenHash != "" && tokensEqual(hashToken(token), caps.HostTokenHash) {
+		if caps.acceptsHostToken(token) {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), verdictAuthorKey, verdictAuthorHost)))
 			return
 		}
@@ -243,25 +263,33 @@ func (s *Server) authorizeSubscriber(ctx context.Context, gameID, token string) 
 	if token == "" {
 		return subscriber{}, errors.New("token required")
 	}
+	return s.authorizeSubscriberHash(ctx, gameID, hashToken(token))
+}
+
+// authorizeSubscriberHash rechecks a previously hashed WebSocket capability without retaining its raw token.
+func (s *Server) authorizeSubscriberHash(ctx context.Context, gameID, tokenHash string) (subscriber, error) {
+	if tokenHash == "" {
+		return subscriber{}, errors.New("token required")
+	}
 	caps, err := s.loadGameCapabilities(ctx, gameID)
 	if err != nil {
 		return subscriber{}, err
 	}
-	if caps.HostTokenHash != "" && tokensEqual(hashToken(token), caps.HostTokenHash) {
+	if caps.acceptsHostTokenHash(tokenHash) {
 		return subscriber{Role: roleHost}, nil
 	}
 
 	var teamID string
 	err = s.DB.Pool.QueryRow(ctx, `
 		SELECT team_id FROM team_tokens WHERE game_id = $1 AND token_hash = $2
-	`, gameID, hashToken(token)).Scan(&teamID)
+	`, gameID, tokenHash).Scan(&teamID)
 	if err == nil {
 		return subscriber{Role: roleTeam, TeamID: teamID}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return subscriber{}, err
 	}
-	return subscriber{}, errors.New("token is not valid for this game")
+	return subscriber{}, errInvalidSubscriberToken
 }
 
 // originAllowed validates whether a browser origin is permitted by configuration or development defaults.
@@ -377,6 +405,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		if origin != "" && allowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Next-Offset")
 			reqHeaders := r.Header.Get("Access-Control-Request-Headers")
 			if reqHeaders != "" {
 				w.Header().Set("Access-Control-Allow-Headers", reqHeaders)

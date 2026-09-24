@@ -79,15 +79,29 @@ func (s *Server) extractAdminKey(r *http.Request) string {
 // a live session (the console, whose cookie the browser holds and whose CSRF
 // token the page echoes) or the raw key in a header (scripts holding no
 // session). This is the one seam every admin-gated handler asks.
-func (s *Server) isAdminAuthorized(r *http.Request) bool {
+func (s *Server) isAdminAuthorized(r *http.Request) (bool, bool) {
 	if s.RoadmapAdminKey == "" {
-		return false
+		return false, false
 	}
 	if s.sessionAuthorized(r) {
-		return true
+		return true, false
 	}
 	adminKey := s.extractAdminKey(r)
-	return adminKey != "" && tokensEqual(adminKey, s.RoadmapAdminKey)
+	if adminKey == "" {
+		return false, false
+	}
+	// Spend/check the address budget before comparing a guessed key so a
+	// depleted bucket cannot keep probing this or any other admin route.
+	if !s.adminAuthLimiter.allow(clientIP(r)) {
+		return false, true
+	}
+	if tokensEqual(adminKey, s.RoadmapAdminKey) {
+		// A valid capability clears the token consumed for this request and any
+		// failures accumulated by someone sharing this address.
+		s.adminAuthLimiter.reset(clientIP(r))
+		return true, false
+	}
+	return false, false
 }
 
 func (s *Server) setupRoadmapRoutes(r chi.Router) {
@@ -138,7 +152,7 @@ func (s *Server) voterFingerprint(r *http.Request) string {
 func (s *Server) handleListRoadmapItems(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	voterID, _ := s.extractVoterID(r)
-	isAdmin := s.isAdminAuthorized(r)
+	isAdmin, _ := s.isAdminAuthorized(r)
 
 	if s.DB == nil || s.DB.Pool == nil {
 		writeError(r.Context(), w, http.StatusServiceUnavailable, "database unavailable")
@@ -254,8 +268,8 @@ func (s *Server) handleCreateRoadmapItem(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleUpdateRoadmapItem(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.isAdminAuthorized(r) {
-		writeError(r.Context(), w, http.StatusUnauthorized, "unauthorized: invalid or missing admin key")
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
+		writeAdminAuthFailure(w, r, limited, "unauthorized: invalid or missing admin key")
 		return
 	}
 
@@ -339,8 +353,8 @@ func (s *Server) handleUpdateRoadmapItem(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleDeleteRoadmapItem(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.isAdminAuthorized(r) {
-		writeError(r.Context(), w, http.StatusUnauthorized, "unauthorized: invalid or missing admin key")
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
+		writeAdminAuthFailure(w, r, limited, "unauthorized: invalid or missing admin key")
 		return
 	}
 

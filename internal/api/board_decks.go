@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -54,6 +55,14 @@ func (s *Server) replaceDeck(w http.ResponseWriter, r *http.Request, table, deck
 		return
 	}
 	defer tx.Rollback(r.Context())
+	if err := lockEditableBoardVersion(r.Context(), tx, boardID, version); err != nil {
+		if errors.Is(err, errBoardVersionRaced) {
+			writeError(r.Context(), w, http.StatusForbidden, err.Error())
+		} else {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to lock editable board: "+err.Error())
+		}
+		return
+	}
 
 	// table is one of the two literals the handlers above pass, never request input.
 	if _, err := tx.Exec(r.Context(), "DELETE FROM "+table+" WHERE board_id = $1 AND board_version = $2", boardID, version); err != nil {

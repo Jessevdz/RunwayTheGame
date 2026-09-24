@@ -2,6 +2,7 @@ package verification_test
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
@@ -28,6 +29,46 @@ func (m *mockBlobDownloader) DownloadBlob(ctx context.Context, blobRef string) (
 		return nil, m.MockErr
 	}
 	return m.MockData, nil
+}
+
+// jpegWithEXIF builds a minimal JPEG whose APP1 segment carries capturedAt as the EXIF DateTimeOriginal.
+func jpegWithEXIF(capturedAt time.Time) []byte {
+	le := binary.LittleEndian
+	date := append([]byte(capturedAt.UTC().Format("2006:01:02 15:04:05")), 0)
+
+	tiff := []byte{'I', 'I', 42, 0, 8, 0, 0, 0}
+	// IFD0 holds one entry pointing at the Exif sub-IFD at offset 26.
+	tiff = le.AppendUint16(tiff, 1)
+	tiff = le.AppendUint16(tiff, 0x8769)
+	tiff = le.AppendUint16(tiff, 4)
+	tiff = le.AppendUint32(tiff, 1)
+	tiff = le.AppendUint32(tiff, 26)
+	tiff = le.AppendUint32(tiff, 0)
+	// The Exif sub-IFD holds DateTimeOriginal, stored out of line at offset 44.
+	tiff = le.AppendUint16(tiff, 1)
+	tiff = le.AppendUint16(tiff, 0x9003)
+	tiff = le.AppendUint16(tiff, 2)
+	tiff = le.AppendUint32(tiff, uint32(len(date)))
+	tiff = le.AppendUint32(tiff, 44)
+	tiff = le.AppendUint32(tiff, 0)
+	tiff = append(tiff, date...)
+
+	segment := append([]byte("Exif\x00\x00"), tiff...)
+	img := []byte{0xff, 0xd8, 0xff, 0xe1}
+	img = binary.BigEndian.AppendUint16(img, uint16(len(segment)+2))
+	img = append(img, segment...)
+	return append(img, 0xff, 0xd9)
+}
+
+func TestExtractEXIFTimestampReadsJPEGFixture(t *testing.T) {
+	want := time.Date(2026, 9, 24, 18, 30, 5, 0, time.UTC)
+	got, ok := verification.ExtractEXIFTimestamp(jpegWithEXIF(want))
+	if !ok || !got.Equal(want) {
+		t.Fatalf("expected %v from the fixture, got %v (ok=%v)", want, got, ok)
+	}
+	if _, ok := verification.ExtractEXIFTimestamp([]byte("fake-jpeg-data")); ok {
+		t.Fatal("expected no timestamp from bytes that are not an image")
+	}
 }
 
 type mockScalewayClient struct {
@@ -254,7 +295,7 @@ func TestWorkerVerificationLoop(t *testing.T) {
 		t.Fatalf("failed to insert challenge submission: %v", err)
 	}
 
-	mockStore := &mockBlobDownloader{MockData: []byte("fake-jpeg-data")}
+	mockStore := &mockBlobDownloader{MockData: jpegWithEXIF(time.Now())}
 	mockLLM := &mockScalewayClient{
 		MockResponse: verification.ScalewayResponse{
 			Verdict:    "pass",
@@ -320,8 +361,8 @@ func TestWorkerVerificationLoop(t *testing.T) {
 	}
 	var cp eventstore.ChallengeCompletedPayload
 	_ = json.Unmarshal([]byte(completedEvt.Payload), &cp)
-	if cp.RoadID != roadID || cp.TeamID != teamID {
-		t.Errorf("expected road %s completed by team %s, got road=%s team=%s", roadID, teamID, cp.RoadID, cp.TeamID)
+	if cp.WaypointID != roadID || cp.RoadID != "" || cp.TeamID != teamID {
+		t.Errorf("expected waypoint %s completed by team %s, got waypoint=%s road=%s team=%s", roadID, teamID, cp.WaypointID, cp.RoadID, cp.TeamID)
 	}
 	if cp.CoinReward != 20 {
 		t.Errorf("expected coin reward 20, got %d", cp.CoinReward)
@@ -373,7 +414,7 @@ func TestWorkerPollingFailureAndRetry(t *testing.T) {
 		t.Fatalf("failed to insert job: %v", err)
 	}
 
-	mockStore := &mockBlobDownloader{MockData: []byte("fake-jpeg-data")}
+	mockStore := &mockBlobDownloader{MockData: jpegWithEXIF(time.Now())}
 	// Simulate LLM error
 	mockLLM := &mockScalewayClient{
 		MockErr: errors.New("Scaleway rate limit exceeded"),

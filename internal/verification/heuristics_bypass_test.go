@@ -93,7 +93,7 @@ func TestHeuristicsRejectUnusableNumbers(t *testing.T) {
 // TestExifDriftIsRefusedNotJustLogged tests that photos with significant EXIF timestamp drift are rejected.
 func TestExifDriftIsRefusedNotJustLogged(t *testing.T) {
 	now := time.Now()
-	old := now.Add(-3 * time.Hour)
+	old := now.Add(-25 * time.Hour)
 	payload := verification.VerificationJobPayload{
 		Prompt: "Observatory statue",
 		Rubric: rules.RubricDetail{MustShow: []string{"statue"}},
@@ -101,7 +101,7 @@ func TestExifDriftIsRefusedNotJustLogged(t *testing.T) {
 		Exif:   &verification.ExifFix{Timestamp: &old},
 	}
 	if passed, _ := verification.VerifyHeuristics(t.Context(), payload); passed {
-		t.Error("a photo timestamped three hours before submission was accepted")
+		t.Error("a photo timestamped 25 hours before submission, past the 24-hour offline window, was accepted")
 	}
 
 	// A phone clock a few minutes out is not a cheat.

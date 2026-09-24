@@ -7,6 +7,7 @@ import (
 
 	"github.com/Jessevdz/RunwayTheGame/internal/eventstore"
 	"github.com/Jessevdz/RunwayTheGame/internal/logger"
+	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
 // foldCtx holds contextual resources passed to fold handlers.
@@ -32,7 +33,9 @@ var folds = map[string]foldFunc{
 	"SubmissionCreated":       lenient(foldSubmissionCreated),
 	"VerdictReturned":         lenient(foldVerdictReturned),
 	"ChallengeCompleted":      lenient(foldChallengeCompleted),
+	"ChallengeRevoked":        lenient(foldChallengeRevoked),
 	"ChallengeVetoed":         lenient(foldChallengeVetoed),
+	"ChallengeSkipped":        lenient(foldChallengeSkipped),
 	"ChallengeConflictNoted":  lenient(foldChallengeConflictNoted),
 
 	"WaypointReached": lenient(foldWaypointReached),
@@ -44,16 +47,47 @@ var folds = map[string]foldFunc{
 	"PowerupUsed":      lenient(foldPowerupUsed),
 	"CardDrawn":        lenient(foldCardDrawn),
 
-	"RoadblockPlaced":  lenient(foldRoadblockPlaced),
-	"RoadblockCleared": lenient(foldRoadblockCleared),
-	"CurseApplied":     lenient(foldCurseApplied),
-	"CurseCleared":     lenient(foldCurseCleared),
-	"TeamFrozen":       lenient(foldTeamFrozen),
-	"TrackerToggled":   lenient(foldTrackerToggled),
-	"EffectCleared":    lenient(foldEffectCleared),
+	"RoadblockPlaced":       lenient(foldRoadblockPlaced),
+	"RoadblockCleared":      lenient(foldRoadblockCleared),
+	"RoadblockClearRevoked": lenient(foldRoadblockClearRevoked),
+	"CurseApplied":          lenient(foldCurseApplied),
+	"CurseCleared":          lenient(foldCurseCleared),
+	"TeamFrozen":            lenient(foldTeamFrozen),
+	"TrackerToggled":        lenient(foldTrackerToggled),
+	"EffectCleared":         lenient(foldEffectCleared),
 
 	"DisputeRaised":   lenient(foldDisputeRaised),
 	"DisputeResolved": lenient(foldDisputeResolved),
+}
+
+func legacyChallengeSkipPayload(board rules.Board, previous, event eventstore.Event) (eventstore.ChallengeSkippedPayload, bool) {
+	if previous.Type != "PowerupUsed" || event.Type != "ChallengeVetoed" {
+		return eventstore.ChallengeSkippedPayload{}, false
+	}
+	var used eventstore.PowerupUsedPayload
+	if err := json.Unmarshal([]byte(previous.Payload), &used); err != nil {
+		return eventstore.ChallengeSkippedPayload{}, false
+	}
+	effect := used.Powerup
+	for _, powerup := range board.Powerups {
+		if powerup.ID == used.Powerup {
+			effect = rules.EffectivePowerupEffect(powerup)
+			break
+		}
+	}
+	if effect != "challenge_skip" {
+		return eventstore.ChallengeSkippedPayload{}, false
+	}
+	var veto eventstore.ChallengeVetoedPayload
+	if err := json.Unmarshal([]byte(event.Payload), &veto); err != nil {
+		return eventstore.ChallengeSkippedPayload{}, false
+	}
+	return eventstore.ChallengeSkippedPayload{
+		TeamID:      veto.TeamID,
+		WaypointID:  veto.WaypointID,
+		RoadID:      veto.RoadID,
+		ChallengeID: veto.ChallengeID,
+	}, true
 }
 
 // RebuildProjection builds the state projection up to sequence number upToSeq.
@@ -66,8 +100,14 @@ func RebuildProjection(ctx context.Context, conn eventstore.DBConnection, gameID
 	p := emptyProjection(gameID)
 	fc := foldCtx{ctx: ctx, conn: conn}
 
-	for _, event := range stream {
+	for i, event := range stream {
 		p.LastSequence = event.Sequence
+		if i > 0 {
+			if skipped, ok := legacyChallengeSkipPayload(p.Board, stream[i-1], event); ok {
+				foldChallengeSkipped(p, event, skipped)
+				continue
+			}
+		}
 		fold, ok := folds[event.Type]
 		if !ok {
 			// Log an error if an unhandled event type is encountered during projection rebuild.
@@ -82,12 +122,17 @@ func RebuildProjection(ctx context.Context, conn eventstore.DBConnection, gameID
 			return nil, err
 		}
 	}
+	if p.Board.ID == "" {
+		return nil, fmt.Errorf("failed to initialize projection for game %s: event stream has no GameCreated board", gameID)
+	}
 
 	if err := hydratePositions(ctx, conn, gameID, p); err != nil {
 		return nil, fmt.Errorf("failed to hydrate positions: %w", err)
 	}
 
-	hydrateRuleset(ctx, conn, gameID, p)
+	if err := hydrateRuleset(ctx, conn, gameID, p); err != nil {
+		return nil, fmt.Errorf("failed to hydrate game ruleset: %w", err)
+	}
 
 	// Calculate the coin rush deadline before computing standings.
 	applyCoinRushDeadline(p)

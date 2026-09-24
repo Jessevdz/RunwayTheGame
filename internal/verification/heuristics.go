@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/Jessevdz/RunwayTheGame/internal/logger"
 	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
-// maxExifDriftMinutes is the maximum allowed difference (in minutes) between photo EXIF timestamp and submission time.
-const maxExifDriftMinutes = 15.0
+// maxExifDrift is aligned with the server's offline-capture acceptance window.
+const maxExifDrift = 24 * time.Hour
 
 // VerifyHeuristics checks cheap constraints like GPS accuracy and implausible velocity.
 // Returns (passed, rejectionRationale)
@@ -58,9 +59,9 @@ func VerifyHeuristics(ctx context.Context, payload VerificationJobPayload) (bool
 	if diff < 0 {
 		diff = -diff
 	}
-	if diff.Minutes() > maxExifDriftMinutes {
+	if diff > maxExifDrift {
 		logger.Warn(ctx, "EXIF timestamp deviates significantly from submission time", map[string]interface{}{"diff_minutes": diff.Minutes()})
-		return false, fmt.Sprintf("Photo timestamp is %.0f minutes from the submission (limit %.0f)", diff.Minutes(), maxExifDriftMinutes)
+		return false, fmt.Sprintf("Photo timestamp is %.0f hours from the submission (limit %.0f)", diff.Hours(), maxExifDrift.Hours())
 	}
 
 	return true, ""

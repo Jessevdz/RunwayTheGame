@@ -14,15 +14,18 @@ import (
 
 	"github.com/Jessevdz/RunwayTheGame/internal/commands"
 	"github.com/Jessevdz/RunwayTheGame/internal/eventstore"
+	"github.com/Jessevdz/RunwayTheGame/internal/projections"
 	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
 // VerdictRequest defines the payload for submitting a submission verdict.
 type VerdictRequest struct {
-	SubmissionID string  `json:"submission_id"`
-	Verdict      string  `json:"verdict"` // "pass" | "fail"
-	Confidence   float64 `json:"confidence"`
-	Rationale    string  `json:"rationale"`
+	SubmissionID string   `json:"submission_id"`
+	Verdict      string   `json:"verdict"` // "pass" | "fail"
+	Confidence   float64  `json:"confidence"`
+	Rationale    string   `json:"rationale"`
+	MetricValue  *float64 `json:"metric_value,omitempty"`
+	RegradeKey   string   `json:"regrade_key,omitempty"`
 }
 
 // verdictResponse reports the result of a submission grading verdict.
@@ -49,6 +52,7 @@ type gradedSubmission struct {
 	ID               string
 	TeamID           string
 	RoadID           string
+	WaypointID       string
 	ChallengeID      string
 	Kind             string // "challenge" | "roadblock"
 	ServerReceivedAt *time.Time
@@ -58,6 +62,26 @@ type gradedSubmission struct {
 type verdictResult struct {
 	Outcome     string
 	ConflictMsg string
+}
+
+type displacedRoadPass struct {
+	SubmissionID string
+	TeamID       string
+	ChallengeID  string
+	WaypointID   string
+	CoinReward   int
+}
+
+// challengeEventTarget keeps a challenge's active waypoint separate from its
+// target road. Legacy waypoint events stored the waypoint ID in RoadID only.
+func challengeEventTarget(waypointID, targetID string) (string, string) {
+	if waypointID == "" {
+		return targetID, ""
+	}
+	if waypointID == targetID {
+		return waypointID, ""
+	}
+	return waypointID, targetID
 }
 
 // applyVerdict applies a submission verdict and updates game progress and coin balances within a transaction.
@@ -70,6 +94,7 @@ func (s *Server) applyVerdict(
 	confidence float64,
 	rationale string,
 	source string,
+	metricValue *float64,
 ) ([]eventstore.Event, verdictResult, error) {
 	var res verdictResult
 
@@ -78,7 +103,7 @@ func (s *Server) applyVerdict(
 		Verdict:      verdict,
 		Confidence:   confidence,
 		Rationale:    rationale,
-		MetricValue:  0.0,
+		MetricValue:  metricValue,
 		Source:       source,
 	})
 	events := []eventstore.Event{
@@ -108,35 +133,100 @@ func (s *Server) applyVerdict(
 		return events, res, nil
 	}
 
-	winner, msg, err := s.resolveRoadConflict(ctx, tx, game.ID, sub.RoadID, sub.TeamID, sub.ServerReceivedAt)
+	winner, msg, displaced, err := s.resolveRoadConflict(ctx, tx, game.ID, sub.RoadID, sub.TeamID, sub.ServerReceivedAt)
 	if err != nil {
 		return nil, res, err
 	}
+	for _, prior := range displaced {
+		tag, err := tx.Exec(ctx, `
+			UPDATE challenge_submissions SET status = 'fail'
+			WHERE id = $1 AND game_id = $2 AND status = 'pass' AND kind = 'challenge'
+		`, prior.SubmissionID, game.ID)
+		if err != nil {
+			return nil, res, fmt.Errorf("withdrawing displaced road submission: %w", err)
+		}
+		if tag.RowsAffected() != 1 {
+			return nil, res, fmt.Errorf("displaced road submission %s changed during verdict", prior.SubmissionID)
+		}
+
+		verdictBytes, _ := json.Marshal(eventstore.VerdictReturnedPayload{
+			SubmissionID: prior.SubmissionID,
+			Verdict:      "fail",
+			Confidence:   1,
+			Rationale:    "A team with an earlier received passing submission completed this road first.",
+			Source:       "system",
+		})
+		waypointID, roadID := challengeEventTarget(prior.WaypointID, sub.RoadID)
+		revokedBytes, _ := json.Marshal(eventstore.ChallengeRevokedPayload{
+			SubmissionID: prior.SubmissionID,
+			TeamID:       prior.TeamID,
+			WaypointID:   waypointID,
+			RoadID:       roadID,
+			ChallengeID:  prior.ChallengeID,
+			CoinReward:   prior.CoinReward,
+			RevokeClear:  true,
+		})
+		events = append(events,
+			eventstore.Event{Type: "VerdictReturned", Payload: string(verdictBytes)},
+			eventstore.Event{Type: "ChallengeRevoked", Payload: string(revokedBytes)},
+		)
+		if prior.CoinReward > 0 {
+			var newBalance int
+			if err := tx.QueryRow(ctx, `
+				UPDATE team_coins SET balance = balance - $3
+				WHERE game_id = $1 AND team_id = $2
+				RETURNING balance
+			`, game.ID, prior.TeamID, prior.CoinReward).Scan(&newBalance); err != nil {
+				return nil, res, fmt.Errorf("withdrawing displaced road award: %w", err)
+			}
+			coinsBytes, _ := json.Marshal(eventstore.CoinsChangedPayload{
+				TeamID:       prior.TeamID,
+				Delta:        -prior.CoinReward,
+				BalanceAfter: newBalance,
+				Reason:       "road_first_completer_corrected",
+				Source:       "system",
+			})
+			events = append(events, eventstore.Event{Type: "CoinsChanged", Payload: string(coinsBytes)})
+		}
+	}
 
 	var challengeReward int
-	err = tx.QueryRow(ctx, `
+	err = pgx.ErrNoRows
+	if sub.ChallengeID != "" {
+		err = tx.QueryRow(ctx, `
 		SELECT coin_reward FROM challenges
-		WHERE (id::text = $1 OR waypoint_id::text = $1) AND board_id = $2 AND board_version = $3
-		LIMIT 1
+		WHERE id::text = $1 AND board_id = $2 AND board_version = $3
 	`, sub.ChallengeID, game.BoardID, game.BoardVersion).Scan(&challengeReward)
+	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, res, fmt.Errorf("reading challenge reward: %w", err)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		lookupKey := sub.ChallengeID
-		if lookupKey == "" {
-			lookupKey = sub.RoadID
+		isRoadTarget := sub.WaypointID != "" && sub.RoadID != "" && sub.WaypointID != sub.RoadID
+		if isRoadTarget {
+			err = tx.QueryRow(ctx, `
+				SELECT c.coin_reward
+				FROM challenges c
+				JOIN board_roads road ON road.challenge_id = c.id
+				WHERE road.id::text = $1 AND c.board_id = $2 AND c.board_version = $3
+				  AND road.board_id = c.board_id AND road.board_version = c.board_version
+			`, sub.RoadID, game.BoardID, game.BoardVersion).Scan(&challengeReward)
+		} else {
+			waypointID := sub.WaypointID
+			if waypointID == "" {
+				waypointID = sub.RoadID
+			}
+			if waypointID != "" {
+				err = tx.QueryRow(ctx, `
+					SELECT coin_reward FROM challenges
+					WHERE waypoint_id::text = $1 AND board_id = $2 AND board_version = $3
+				`, waypointID, game.BoardID, game.BoardVersion).Scan(&challengeReward)
+			} else {
+				err = pgx.ErrNoRows
+			}
 		}
-		// Fall back to looking up challenge by road when not attached directly to a waypoint.
-		err = tx.QueryRow(ctx, `
-			SELECT c.coin_reward
-			FROM challenges c
-			JOIN board_roads s ON s.challenge_id = c.id
-			WHERE (c.id::text = $1 OR c.waypoint_id::text = $1 OR s.id::text = $1) AND c.board_id = $2 AND c.board_version = $3
-			LIMIT 1
-		`, lookupKey, game.BoardID, game.BoardVersion).Scan(&challengeReward)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, res, fmt.Errorf("reading challenge reward by road: %w", err)
+			return nil, res, fmt.Errorf("reading challenge reward by target: %w", err)
 		}
 	}
 
@@ -178,12 +268,15 @@ func (s *Server) applyVerdict(
 		res.Outcome = "conflict_lost"
 	}
 
+	waypointID, roadID := challengeEventTarget(sub.WaypointID, sub.RoadID)
 	completeBytes, _ := json.Marshal(eventstore.ChallengeCompletedPayload{
-		RoadID:         sub.RoadID,
+		WaypointID:     waypointID,
+		RoadID:         roadID,
 		ChallengeID:    sub.ChallengeID,
 		TeamID:         sub.TeamID,
 		CoinReward:     coinReward,
 		FirstCompleter: firstCompleter,
+		MetricValue:    metricValue,
 	})
 	events = append(events, eventstore.Event{Type: "ChallengeCompleted", Payload: string(completeBytes)})
 
@@ -217,9 +310,9 @@ func (s *Server) loadGradedSubmission(ctx context.Context, gameID, submissionID 
 	var status string
 	sub.ID = submissionID
 	err := s.DB.Pool.QueryRow(ctx, `
-		SELECT team_id, road_id, challenge_id, COALESCE(kind, 'challenge'), status, server_received_at
+		SELECT team_id, road_id, COALESCE(waypoint_id::text, ''), challenge_id, COALESCE(kind, 'challenge'), status, server_received_at
 		FROM challenge_submissions WHERE id = $1 AND game_id = $2
-	`, submissionID, gameID).Scan(&sub.TeamID, &sub.RoadID, &sub.ChallengeID, &sub.Kind, &status, &sub.ServerReceivedAt)
+	`, submissionID, gameID).Scan(&sub.TeamID, &sub.RoadID, &sub.WaypointID, &sub.ChallengeID, &sub.Kind, &status, &sub.ServerReceivedAt)
 	return sub, status, err
 }
 
@@ -242,6 +335,11 @@ func (s *Server) handleVerdict(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusNotFound, "game not found")
 		return
 	}
+	proj, err := projections.RebuildProjection(r.Context(), s.DB.Pool, gameID, 0)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load game state")
+		return
+	}
 
 	author := verdictAuthorFrom(r.Context())
 
@@ -249,8 +347,8 @@ func (s *Server) handleVerdict(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusConflict, "this game is not graded by the verification worker")
 		return
 	}
-	if author == verdictAuthorHost && game.Ruleset.Verification != rules.VerificationHost {
-		writeError(r.Context(), w, http.StatusConflict, "this game is not graded by its host")
+	if author == verdictAuthorHost && game.Ruleset.Verification != rules.VerificationHost && game.Ruleset.Verification != rules.VerificationLLM {
+		writeError(r.Context(), w, http.StatusConflict, "this game does not allow host review")
 		return
 	}
 
@@ -272,6 +370,10 @@ func (s *Server) handleVerdict(w http.ResponseWriter, r *http.Request) {
 	if author == verdictAuthorHost {
 		source = rules.VerificationHost
 	}
+	metricValue := req.MetricValue
+	if author != verdictAuthorWorker {
+		metricValue = nil
+	}
 	rationale := strings.TrimSpace(req.Rationale)
 	if len([]rune(rationale)) > maxVerdictRationaleRunes {
 		rationale = string([]rune(rationale)[:maxVerdictRationaleRunes])
@@ -282,54 +384,62 @@ func (s *Server) handleVerdict(w http.ResponseWriter, r *http.Request) {
 		Verdict:      req.Verdict,
 		Confidence:   req.Confidence,
 		Rationale:    rationale,
+		MetricValue:  metricValue,
 		Source:       source,
 	})
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
+	expectedSeq := proj.LastSequence + 1
+	idempotencyKey := "verdict-" + req.SubmissionID
+	if author == verdictAuthorWorker && req.RegradeKey != "" {
+		idempotencyKey += "-regrade-" + req.RegradeKey
 	}
 	cmdReq := commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "VerdictReturned",
-		ExpectedSeq:    expectedSeq,
-		IdempotencyKey: "verdict-" + req.SubmissionID,
-		Payload:        verdictPayload,
+		GameID:             gameID,
+		CommandType:        "VerdictReturned",
+		PrincipalID:        string(author),
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     idempotencyKey,
+		Payload:            verdictPayload,
 	}
 
-	var applied verdictResult
-
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
-		events, res, err := s.applyVerdict(ctx, tx, game, sub, req.Verdict, req.Confidence, rationale, source)
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		if err := guardLiveGameMutation(ctx, tx, gameID, proj); err != nil {
+			return nil, err
+		}
+		events, res, err := s.applyVerdict(ctx, tx, game, sub, req.Verdict, req.Confidence, rationale, source, metricValue)
 		if err != nil {
 			return nil, err
 		}
-		applied = res
 		return &commands.CommandResult{
 			ResponseCode: http.StatusOK,
-			ResponseBody: verdictAck{Verdict: req.Verdict},
-			Events:       events,
+			ResponseBody: verdictResponse{
+				Verdict: req.Verdict, Status: "applied", Outcome: res.Outcome,
+				ConflictMessage: res.ConflictMsg,
+			},
+			Events: events,
 		}, nil
 	})
 	if err != nil {
+		if writeGameMutationGuardError(r.Context(), w, err) {
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to apply verdict: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, verdictResponse{
-		Verdict:         req.Verdict,
-		Status:          "applied",
-		Outcome:         applied.Outcome,
-		ConflictMessage: applied.ConflictMsg,
-	})
+	writeCommandResponse(r.Context(), w, response)
 }
 
 // resolveRoadConflict determines first-completer ownership for concurrent road submissions.
-func (s *Server) resolveRoadConflict(ctx context.Context, tx pgx.Tx, gameID, roadID, requestingTeamID string, requestingReceivedAt *time.Time) (string, string, error) {
+func (s *Server) resolveRoadConflict(ctx context.Context, tx pgx.Tx, gameID, roadID, requestingTeamID string, requestingReceivedAt *time.Time) (string, string, []displacedRoadPass, error) {
 	var existingTeamID string
 	var existingTeamName string
 	var existingReceivedAt time.Time
+	var displaced []displacedRoadPass
 	// Filter for challenge submissions to ignore concurrent roadblock clearances.
 	err := tx.QueryRow(ctx, `
 		SELECT s.team_id, COALESCE(t.name, ''), s.server_received_at
@@ -341,27 +451,69 @@ func (s *Server) resolveRoadConflict(ctx context.Context, tx pgx.Tx, gameID, roa
 	`, gameID, roadID).Scan(&existingTeamID, &existingTeamName, &existingReceivedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return requestingTeamID, "", nil
+			return requestingTeamID, "", nil, nil
 		}
-		return "", "", err
+		return "", "", nil, err
 	}
 
 	if existingTeamID == requestingTeamID {
-		return requestingTeamID, "", nil
+		return requestingTeamID, "", nil, nil
 	}
 
 	if requestingReceivedAt == nil {
-		return existingTeamID, "road was already completed by another team", nil
+		return existingTeamID, "road was already completed by another team", nil, nil
 	}
 
 	if requestingReceivedAt.Before(existingReceivedAt) {
-		if _, err := tx.Exec(ctx, `
-			UPDATE challenge_submissions SET status = 'fail'
-			WHERE game_id = $1 AND road_id = $2 AND team_id = $3 AND status = 'pass' AND kind = 'challenge'
-		`, gameID, roadID, existingTeamID); err != nil {
-			return "", "", err
+		rows, err := tx.Query(ctx, `
+			SELECT s.id::text, s.team_id::text, s.challenge_id::text, COALESCE(s.waypoint_id::text, '')
+			FROM challenge_submissions s
+			WHERE s.game_id = $1 AND s.road_id = $2 AND s.server_received_at > $3
+			  AND s.team_id <> $4 AND s.status = 'pass' AND s.kind = 'challenge'
+			ORDER BY s.server_received_at, s.id
+		`, gameID, roadID, requestingReceivedAt, requestingTeamID)
+		if err != nil {
+			return "", "", nil, err
 		}
-		return requestingTeamID, "", nil
+		var candidates []displacedRoadPass
+		for rows.Next() {
+			var pass displacedRoadPass
+			if err := rows.Scan(&pass.SubmissionID, &pass.TeamID, &pass.ChallengeID, &pass.WaypointID); err != nil {
+				rows.Close()
+				return "", "", nil, err
+			}
+			candidates = append(candidates, pass)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return "", "", nil, err
+		}
+		rows.Close()
+		for _, pass := range candidates {
+			if err := tx.QueryRow(ctx, `
+				SELECT COALESCE((
+					SELECT (completion.payload->>'coin_reward')::integer
+					FROM events verdict
+					JOIN LATERAL (
+						SELECT e.payload
+						FROM events e
+						WHERE e.game_id = verdict.game_id AND e.sequence > verdict.sequence
+						  AND e.event_type = 'ChallengeCompleted'
+						  AND (e.payload->>'road_id' = $2 OR e.payload->>'waypoint_id' = $2)
+						  AND e.payload->>'team_id' = $3
+						ORDER BY e.sequence LIMIT 1
+					) completion ON TRUE
+					WHERE verdict.game_id = $1 AND verdict.event_type = 'VerdictReturned'
+					  AND verdict.payload->>'submission_id' = $4
+					  AND verdict.payload->>'verdict' = 'pass'
+					ORDER BY verdict.sequence DESC LIMIT 1
+				), 0)
+			`, gameID, roadID, pass.TeamID, pass.SubmissionID).Scan(&pass.CoinReward); err != nil {
+				return "", "", nil, fmt.Errorf("reading displaced road award: %w", err)
+			}
+			displaced = append(displaced, pass)
+		}
+		return requestingTeamID, "", displaced, nil
 	}
 
 	delta := requestingReceivedAt.Sub(existingReceivedAt)
@@ -369,5 +521,5 @@ func (s *Server) resolveRoadConflict(ctx context.Context, tx pgx.Tx, gameID, roa
 		existingTeamName = "another team"
 	}
 	msg := "road already completed by team " + existingTeamName + " (by " + delta.Round(time.Second).String() + ")"
-	return existingTeamID, msg, nil
+	return existingTeamID, msg, nil, nil
 }

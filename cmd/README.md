@@ -119,8 +119,8 @@ The `cmd/server` binary initializes infrastructure dependencies and starts the H
 | `RUNWAY_ALLOWED_ORIGINS` | *Loopback/LAN* | Comma-separated list of allowed browser origins for CORS and WebSocket connections. |
 | `RUNWAY_TICK_INTERVAL_SECONDS` | `10` | Frequency of game state scoring calculations and coin rush checks. |
 | `RUNWAY_RETENTION_INTERVAL_MINUTES`| `60` | Interval between data retention sweeps. |
-| `S3_ENDPOINT` | *None* | S3/MinIO endpoint for presigned upload URLs. |
-| `S3_PUBLIC_ENDPOINT` | *None* | Browser-accessible S3/MinIO endpoint when different from internal network address. |
+| `S3_ENDPOINT` | *None* | Internal S3/MinIO endpoint used by the server and worker. |
+| `S3_PUBLIC_ENDPOINT` | `http://localhost` in Compose | Browser-facing app proxy URL for signed evidence uploads. Route `/runway-evidence/` through a proxy with an upload-size limit; do not expose MinIO's API port directly. |
 | `S3_REGION` | `us-east-1` | S3 bucket region. |
 | `S3_BUCKET` | `runway-evidence` | S3 bucket name for photo evidence. |
 | `S3_ACCESS_KEY` | *None* | S3 access key ID. |
@@ -149,7 +149,8 @@ The `cmd/worker` binary runs the worker pool responsible for asynchronously veri
 | :--- | :--- | :--- |
 | `RUNWAY_WORKER_TOKEN` | **Required** | Shared secret used to authenticate verdict submissions against `cmd/server`. Process halts at startup if unset. |
 | `RUNWAY_API_BASE_URL` | `http://localhost:8080` | Base URL of the `cmd/server` REST API. |
-| `BLOB_DOWNLOAD_BASE_URL` | `http://localhost:9000/runway-evidence` | Base URL for downloading evidence images from object storage. |
+| `S3_ENDPOINT` | `minio:9000` | Internal S3-compatible endpoint used to sign evidence downloads. |
+| `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_USE_SSL`, `S3_PATH_STYLE` | See `.env.example` | Object storage settings used for signed evidence downloads. |
 | `WORKER_POLL_INTERVAL_MS` | `500` | Polling interval for checking new jobs in the outbox when idle. |
 | `SCALEWAY_API_KEY` / `SCW_SECRET_KEY` | *None* | API key for Scaleway Multimodal Generative LLM services. |
 | `SCALEWAY_BASE_URL` | `https://api.scaleway.ai/v1` | Base URL for Scaleway generative API endpoints. |
@@ -183,6 +184,12 @@ go run ./cmd/server
 # Start the worker (in a separate terminal)
 RUNWAY_WORKER_TOKEN=your-secret-token go run ./cmd/worker
 ```
+
+When running the worker outside Docker Compose, set the same `S3_ENDPOINT`,
+`S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_USE_SSL`, and
+`S3_PATH_STYLE` values used by the server. The worker signs private object
+downloads with these credentials; `S3_ENDPOINT` must be reachable from the
+worker process.
 
 ### Running Tests
 

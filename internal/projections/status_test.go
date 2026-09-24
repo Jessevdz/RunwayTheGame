@@ -3,6 +3,7 @@ package projections
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -19,8 +20,30 @@ func rebuildFrom(t *testing.T, types []string, payloads []interface{}) *GameStat
 	t.Cleanup(func() { database.Close() })
 
 	gameID := uuid.New().String()
+	created, ok := payloads[0].(eventstore.GameCreatedPayload)
+	if !ok {
+		t.Fatalf("first test event must be GameCreatedPayload")
+	}
+	version := created.BoardVersion
+	if version < 1 {
+		version = 1
+	}
+	if _, err := database.Pool.Exec(ctx, `
+		INSERT INTO boards (id, version, name) VALUES ($1, $2, 'Projection status fixture')
+		ON CONFLICT (id, version) DO NOTHING
+	`, created.BoardID, version); err != nil {
+		t.Fatalf("failed to insert fixture board: %v", err)
+	}
+	if _, err := database.Pool.Exec(ctx, `
+		INSERT INTO games (id, board_id, board_version, ruleset, starts_at, ends_at)
+		VALUES ($1, $2, $3, '{}', $4, $5)
+	`, gameID, created.BoardID, version, time.Now().UTC(), time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatalf("failed to insert fixture game: %v", err)
+	}
 	t.Cleanup(func() {
 		_, _ = database.Pool.Exec(ctx, "DELETE FROM events WHERE game_id = $1", gameID)
+		_, _ = database.Pool.Exec(ctx, "DELETE FROM games WHERE id = $1", gameID)
+		_, _ = database.Pool.Exec(ctx, "DELETE FROM boards WHERE id = $1 AND version = $2", created.BoardID, version)
 	})
 
 	events := make([]eventstore.Event, 0, len(types))

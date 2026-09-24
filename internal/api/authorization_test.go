@@ -137,11 +137,7 @@ func TestGMRoutesRequireTheHostToken(t *testing.T) {
 // TestVerdictRequiresAGradingCapability covers S3: anyone could post a passing
 // verdict for any submission id and win the race.
 //
-// Two capabilities open this route now — the worker's shared secret and the
-// game's own host token — but which one is accepted depends on how the game is
-// graded. The fixture game is graded by the model, so the host is a legitimate
-// verdict author with nothing to grade here, and that is a 409 rather than a
-// 403: the distinction is real and the message has to be actionable.
+// Only the worker's shared secret and the game's own host token may post a verdict, never a team or stranger token.
 func TestVerdictRequiresAGradingCapability(t *testing.T) {
 	database, ctx := getTestDB(t)
 	if database == nil {
@@ -171,11 +167,10 @@ func TestVerdictRequiresAGradingCapability(t *testing.T) {
 		t.Errorf("verdict with a stranger's token: expected 403, got %d (%s)", w.Code, strings.TrimSpace(w.Body.String()))
 	}
 
-	// A host holding a real capability, on a game the model grades. Refused, but
-	// as a mode conflict rather than an authorization failure.
+	// A host may review withheld passes on a model-graded game, so the made-up submission is a 404.
 	w, _ = serve(t, ctx, server, jsonRequest("POST", path, body, fx.hostToken))
-	if w.Code != http.StatusConflict {
-		t.Errorf("host verdict on an llm-graded game: expected 409, got %d (%s)", w.Code, strings.TrimSpace(w.Body.String()))
+	if w.Code != http.StatusNotFound {
+		t.Errorf("host verdict on an llm-graded game: expected 404 for an unknown submission, got %d (%s)", w.Code, strings.TrimSpace(w.Body.String()))
 	}
 
 	// With the right token the request gets past authorization; the submission id

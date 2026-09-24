@@ -233,8 +233,8 @@ func (s *Server) handleCreateBugReport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListBugReports(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.isAdminAuthorized(r) {
-		writeError(ctx, w, http.StatusUnauthorized, "unauthorized: invalid or missing admin key")
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
+		writeAdminAuthFailure(w, r, limited, "unauthorized: invalid or missing admin key")
 		return
 	}
 
@@ -242,12 +242,17 @@ func (s *Server) handleListBugReports(w http.ResponseWriter, r *http.Request) {
 		writeError(ctx, w, http.StatusServiceUnavailable, "database unavailable")
 		return
 	}
+	limit, offset, err := parseListPagination(r, 200, 200)
+	if err != nil {
+		writeError(ctx, w, http.StatusBadRequest, "invalid pagination: "+err.Error())
+		return
+	}
 
 	rows, err := s.DB.Pool.Query(ctx, `
 		SELECT id, summary, details, severity, status, context, created_at
 		FROM bug_reports
-		ORDER BY created_at DESC
-		LIMIT 200`)
+		ORDER BY created_at DESC, id ASC
+		LIMIT $1 OFFSET $2`, limit+1, offset)
 	if err != nil {
 		logger.Error(ctx, "failed to query bug reports", map[string]interface{}{"error": err.Error()})
 		writeError(ctx, w, http.StatusInternalServerError, "failed to load bug reports: "+err.Error())
@@ -256,6 +261,7 @@ func (s *Server) handleListBugReports(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	reports := make([]BugReportResponse, 0)
+	hasMore := false
 	for rows.Next() {
 		var report BugReportResponse
 		var raw []byte
@@ -263,6 +269,10 @@ func (s *Server) handleListBugReports(w http.ResponseWriter, r *http.Request) {
 			logger.Error(ctx, "failed to scan bug report", map[string]interface{}{"error": err.Error()})
 			writeError(ctx, w, http.StatusInternalServerError, "failed to parse bug reports: "+err.Error())
 			return
+		}
+		if len(reports) == limit {
+			hasMore = true
+			break
 		}
 		// A context that will not parse is not worth losing the report over.
 		if err := json.Unmarshal(raw, &report.Context); err != nil {
@@ -273,14 +283,20 @@ func (s *Server) handleListBugReports(w http.ResponseWriter, r *http.Request) {
 		}
 		reports = append(reports, report)
 	}
+	if err := rows.Err(); err != nil {
+		logger.Error(ctx, "failed to read bug reports", map[string]interface{}{"error": err.Error()})
+		writeError(ctx, w, http.StatusInternalServerError, "failed to load bug reports: "+err.Error())
+		return
+	}
 
+	setNextOffset(w, hasMore, offset, limit)
 	writeJSON(ctx, w, http.StatusOK, reports)
 }
 
 func (s *Server) handleUpdateBugReport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.isAdminAuthorized(r) {
-		writeError(ctx, w, http.StatusUnauthorized, "unauthorized: invalid or missing admin key")
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
+		writeAdminAuthFailure(w, r, limited, "unauthorized: invalid or missing admin key")
 		return
 	}
 
@@ -337,8 +353,8 @@ func (s *Server) handleUpdateBugReport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteBugReport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.isAdminAuthorized(r) {
-		writeError(ctx, w, http.StatusUnauthorized, "unauthorized: invalid or missing admin key")
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
+		writeAdminAuthFailure(w, r, limited, "unauthorized: invalid or missing admin key")
 		return
 	}
 

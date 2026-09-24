@@ -26,6 +26,8 @@ const (
 	soloRunDuration = 24 * time.Hour
 	// soloRunnerNameMaxRunes is the maximum character length for a solo runner name.
 	soloRunnerNameMaxRunes = 64
+	// teamNameMaxRunes bounds team names stored in game_teams.
+	teamNameMaxRunes = 64
 	// playerNameMaxRunes is the maximum character length for a player display name.
 	playerNameMaxRunes = 40
 )

@@ -21,7 +21,7 @@ func PublishBoard(ctx context.Context, database *db.DB, boardID string, version 
 	// Re-publishing is how an edited draft gets re-validated and its road lengths
 	// recomputed, so an existing published_at is not an error.
 	err = tx.QueryRow(ctx, `
-		SELECT name FROM boards WHERE id = $1 AND version = $2
+		SELECT name FROM boards WHERE id = $1 AND version = $2 FOR UPDATE
 	`, boardID, version).Scan(&name)
 	if err != nil {
 		return rules.Board{}, fmt.Errorf("failed to fetch draft board: %w", err)
@@ -88,7 +88,7 @@ func PublishBoard(ctx context.Context, database *db.DB, boardID string, version 
 		}
 	}
 
-	errors, _, err := ValidateBoard(ctx, database, b)
+	errors, _, err := validateBoard(ctx, tx, b)
 	if err != nil {
 		return rules.Board{}, fmt.Errorf("failed to validate board: %w", err)
 	}

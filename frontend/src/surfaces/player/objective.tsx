@@ -27,10 +27,10 @@ export interface ObjectiveInput {
   route: RaceRouteView;
   /** The three things the card's buttons can ask for. */
   on: {
-    startChallenge: (waypointId: string) => void;
+    startChallenge: (waypointId: string, roadId?: string) => void;
     arrive: (waypointId: string) => void;
     /** Opens the confirmation dialog for skipping a challenge. */
-    askVeto: (waypointId: string) => void;
+    askVeto: (waypointId: string, roadId?: string) => void;
   };
 }
 
@@ -75,11 +75,13 @@ export function buildObjective({
       };
     }
     if (coinRush && gameState.winner) {
-      const winnerCoins = gameState.standings.find((s) => s.teamId === gameState.winner)?.coins ?? 0;
+      const winnerCoins = gameState.standings.find((s) => s.teamId === gameState.winner)?.coins;
       return {
         tone: 'done',
         title: iWon ? 'You won' : `${getTeamName(gameState.winner, gameState.teams)} won`,
-        say: <><IconCoin /> {winnerCoins} banked. {iWon ? 'Richest on the board.' : 'Full breakdown is below.'}</>,
+        say: winnerCoins == null
+          ? 'The winner’s coin balance is hidden in this view.'
+          : <><IconCoin /> {winnerCoins} banked. {iWon ? 'Richest on the board.' : 'Full breakdown is below.'}</>,
         readout: { value: `${coins}`, unit: 'your final coins' }
       };
     }
@@ -117,9 +119,8 @@ export function buildObjective({
       return {
         tone: 'stop',
         title: currentWaypoint.name,
-        say: 'You skipped a challenge, so you cannot take on a new one yet. Walking is still allowed — skip this one as well to open the road out.',
-        readout: { value: formatClock(vetoLeft), unit: 'until you can take on a challenge' },
-        primary: { label: skipLabel, icon: '⏭️', onClick: () => on.askVeto(currentWaypoint.id) }
+        say: 'You cannot start another challenge or skip one while this cooldown is active. Wait for it to end, then clear or skip this challenge.',
+        readout: { value: formatClock(vetoLeft), unit: 'until challenges unlock' }
       };
     }
     return {
@@ -161,6 +162,33 @@ export function buildObjective({
   }
 
   const next = destination.waypoint;
+
+  if (destination.road.challengeId && destination.road.lockState === 'locked') {
+    const skipLabel = timeTrial
+      ? `Skip it (+${formatClock(vetoTimePenalty)})`
+      : solo
+        ? 'Skip this challenge'
+        : `Skip it (${formatDurationWords(vetoCooldown)} penalty)`;
+    if (vetoLeft > 0) {
+      return {
+        tone: 'stop',
+        title: `Road to ${next.name}`,
+        say: 'You cannot start another challenge or skip one while this cooldown is active. Wait for it to end, then clear or skip this road challenge.',
+        readout: { value: formatClock(vetoLeft), unit: 'until challenges unlock' }
+      };
+    }
+    return {
+      tone: 'challenge',
+      title: `Road to ${next.name}`,
+      say: 'Photograph the challenge on this road from the waypoint where you are standing to open this route.',
+      primary: {
+        label: 'Do the road challenge',
+        icon: '📸',
+        onClick: () => on.startChallenge(currentWaypoint.id, destination.road.id)
+      },
+      minor: { label: skipLabel, onClick: () => on.askVeto(currentWaypoint.id, destination.road.id) }
+    };
+  }
 
   /* Roadblock objective inactive for current PoC
   if (destination.blocked) {

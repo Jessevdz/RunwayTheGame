@@ -91,14 +91,13 @@ func (s *Server) setupRoutes() {
 // still good — the console asks it on load to find out if the session cookie
 // this browser already holds has outlived a restart or its TTL.
 func (s *Server) handleVerifyAdminKey(w http.ResponseWriter, r *http.Request) {
-	if !s.isAdminAuthorized(r) {
-		// A rejected credential is a guess; an empty request is not. Charging
-		// only the former keeps this endpoint from being a free oracle without
-		// letting a passer-by exhaust an admin's sign-in budget.
-		if adminCredentialPresented(r) {
-			s.adminAuthLimiter.penalize(clientIP(r))
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
+		// Raw keys were already charged by the shared authorization check.
+		// Invalid session capabilities are charged here as well.
+		if adminCredentialPresented(r) && !rawAdminKeyPresented(r) {
+			limited = !s.adminAuthLimiter.allow(clientIP(r))
 		}
-		writeError(r.Context(), w, http.StatusUnauthorized, "unauthorized: invalid or missing admin credential")
+		writeAdminAuthFailure(w, r, limited, "unauthorized: invalid or missing admin credential")
 		return
 	}
 	writeJSON(r.Context(), w, http.StatusOK, adminKeyResponse{Valid: true})
@@ -144,6 +143,33 @@ func clearBoardVersion(ctx context.Context, tx pgx.Tx, boardID string, version i
 // clearBoardAllVersions deletes every child row of a board across all versions.
 func clearBoardAllVersions(ctx context.Context, tx pgx.Tx, boardID string) error {
 	return deleteBoardChildren(ctx, tx, "WHERE board_id = $1", boardID)
+}
+
+// clearUnreferencedBoardVersions deletes child rows only for editable board
+// versions no game has pinned. Frozen snapshots are retained until the orphan
+// snapshot sweeper sees no game reference, closing the gap between snapshot
+// creation and the subsequent game-row insert. Callers lock the board rows
+// first so a concurrent launch cannot snapshot a version being deleted.
+func clearUnreferencedBoardVersions(ctx context.Context, tx pgx.Tx, boardID string) error {
+	for _, table := range boardChildTables {
+		// Table names come from boardChildTables, never from a request.
+		sql := fmt.Sprintf(`
+			DELETE FROM %s child
+			WHERE child.board_id = $1
+			  AND NOT EXISTS (
+				  SELECT 1 FROM games g
+				  WHERE g.board_id = child.board_id AND g.board_version = child.board_version
+			  )
+			  AND NOT EXISTS (
+				  SELECT 1 FROM boards b
+				  WHERE b.id = child.board_id AND b.version = child.board_version AND b.is_snapshot = TRUE
+			  )
+		`, table)
+		if _, err := tx.Exec(ctx, sql, boardID); err != nil {
+			return fmt.Errorf("failed to clear unreferenced %s: %w", table, err)
+		}
+	}
+	return nil
 }
 
 func deleteBoardChildren(ctx context.Context, tx pgx.Tx, where string, args ...interface{}) error {

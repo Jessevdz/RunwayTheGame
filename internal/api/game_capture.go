@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -47,6 +48,9 @@ type SubmissionRequest struct {
 	ClientCapturedAt time.Time `json:"client_captured_at"`
 }
 
+var errEvidenceBlobAlreadyUsed = errors.New("evidence blob has already been submitted")
+var errSubmissionAlreadyPending = errors.New("an evidence submission for this challenge is already pending")
+
 type VetoRequest struct {
 	WaypointID     string `json:"waypoint_id"`
 	RoadID         string `json:"road_id,omitempty"`
@@ -55,8 +59,9 @@ type VetoRequest struct {
 
 // challengeStartResponse acknowledges a challenge start request with prompt details.
 type challengeStartResponse struct {
-	ChallengeID string `json:"challenge_id"`
-	Prompt      string `json:"prompt"`
+	ChallengeID string             `json:"challenge_id"`
+	Prompt      string             `json:"prompt"`
+	Rubric      rules.RubricDetail `json:"rubric"`
 }
 
 // presignResponse contains a presigned upload URL and blob reference.
@@ -88,11 +93,9 @@ func (s *Server) handleChallengeStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	waypointID := req.WaypointID
-	if waypointID == "" {
-		waypointID = req.RoadID
-	}
-	if waypointID == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, "waypoint_id is required")
+	roadID := req.RoadID
+	if waypointID == "" && roadID == "" {
+		writeError(r.Context(), w, http.StatusBadRequest, "waypoint_id or road_id is required")
 		return
 	}
 
@@ -116,6 +119,15 @@ func (s *Server) handleChallengeStart(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusForbidden, reason)
 		return
 	}
+	if waypointID == "" {
+		waypointID = prog.CurrentWaypointID
+	}
+	// Older player clients mirror waypoint_id into road_id. Preserve that
+	// waypoint challenge request shape while reserving distinct road_id values
+	// for actual road challenges.
+	if roadID == waypointID {
+		roadID = ""
+	}
 	if prog.CurrentWaypointID != waypointID {
 		writeError(r.Context(), w, http.StatusForbidden, "you must be at the waypoint to attempt its challenge")
 		return
@@ -133,9 +145,29 @@ func (s *Server) handleChallengeStart(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to query waypoint coordinates")
 		return
 	}
+	if roadID != "" {
+		var waypointA, waypointB string
+		err = s.DB.Pool.QueryRow(r.Context(), `
+			SELECT waypoint_id_a::text, waypoint_id_b::text
+			FROM board_roads
+			WHERE board_id = $1 AND board_version = $2 AND id = $3
+		`, game.BoardID, game.BoardVersion, roadID).Scan(&waypointA, &waypointB)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(r.Context(), w, http.StatusNotFound, "road not found on this game's board")
+			return
+		}
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to query road endpoints")
+			return
+		}
+		if waypointID != waypointA && waypointID != waypointB {
+			writeError(r.Context(), w, http.StatusForbidden, "you must be at an endpoint of the challenged road")
+			return
+		}
+	}
 
 	// Finish line waypoints carry no challenges.
-	if wpIsFinish {
+	if wpIsFinish && roadID == "" {
 		writeError(r.Context(), w, http.StatusBadRequest, "the finish line carries no challenge: arriving here is the objective")
 		return
 	}
@@ -147,24 +179,25 @@ func (s *Server) handleChallengeStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load challenge definition
-	var challengeID, prompt string
-	err = s.DB.Pool.QueryRow(r.Context(), `
-		SELECT id::text, prompt
-		FROM challenges
-		WHERE board_id = $1 AND board_version = $2 AND waypoint_id = $3
-	`, game.BoardID, game.BoardVersion, waypointID).Scan(&challengeID, &prompt)
-	if err != nil {
-		// Fallback query for backwards compatibility
+	var challengeID, prompt, rubricJSON string
+	if roadID != "" {
 		err = s.DB.Pool.QueryRow(r.Context(), `
-			SELECT c.id::text, c.prompt
+			SELECT c.id::text, c.prompt, c.rubric::text
 			FROM challenges c
 			JOIN board_roads s ON s.challenge_id = c.id
 			WHERE s.board_id = $1 AND s.board_version = $2 AND s.id = $3
-		`, game.BoardID, game.BoardVersion, waypointID).Scan(&challengeID, &prompt)
-		if err != nil {
-			writeError(r.Context(), w, http.StatusNotFound, "challenge definition not found")
-			return
-		}
+			  AND c.board_id = s.board_id AND c.board_version = s.board_version
+		`, game.BoardID, game.BoardVersion, roadID).Scan(&challengeID, &prompt, &rubricJSON)
+	} else {
+		err = s.DB.Pool.QueryRow(r.Context(), `
+			SELECT id::text, prompt, rubric::text
+			FROM challenges
+			WHERE board_id = $1 AND board_version = $2 AND waypoint_id = $3
+		`, game.BoardID, game.BoardVersion, waypointID).Scan(&challengeID, &prompt, &rubricJSON)
+	}
+	if err != nil {
+		writeError(r.Context(), w, http.StatusNotFound, "challenge definition not found")
+		return
 	}
 
 	// Check freeze/veto penalties
@@ -180,44 +213,51 @@ func (s *Server) handleChallengeStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var rubric rules.RubricDetail
+	if err := json.Unmarshal([]byte(rubricJSON), &rubric); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to read challenge rubric")
+		return
+	}
+
 	nonce := uuid.New().String()
 	payloadBytes, _ := json.Marshal(eventstore.ChallengeAttemptStartedPayload{
 		TeamID:      team.ID,
 		WaypointID:  waypointID,
-		RoadID:      req.RoadID,
+		RoadID:      roadID,
 		ChallengeID: challengeID,
 		Prompt:      prompt,
 		Nonce:       nonce,
 	})
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 
 	cmdReq := commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "ChallengeAttemptStarted",
-		ExpectedSeq:    expectedSeq,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        payloadBytes,
+		GameID:             gameID,
+		CommandType:        "ChallengeAttemptStarted",
+		PrincipalID:        team.ID,
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            payloadBytes,
 	}
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
 		return &commands.CommandResult{
 			ResponseCode: http.StatusOK,
-			ResponseBody: challengeStartResponse{ChallengeID: challengeID, Prompt: prompt},
+			ResponseBody: challengeStartResponse{ChallengeID: challengeID, Prompt: prompt, Rubric: rubric},
 			Events: []eventstore.Event{
 				{Type: "ChallengeAttemptStarted", Payload: string(cr.Payload)},
 			},
 		}, nil
 	})
 	if err != nil {
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to start challenge: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, challengeStartResponse{ChallengeID: challengeID, Prompt: prompt})
+	writeCommandResponse(r.Context(), w, response)
 }
 
 func (s *Server) handlePresign(w http.ResponseWriter, r *http.Request) {
@@ -252,6 +292,10 @@ func (s *Server) handlePresign(w http.ResponseWriter, r *http.Request) {
 	contentType := req.ContentType
 	if contentType == "" {
 		contentType = "image/jpeg"
+	}
+	if err := blobstore.ValidateEvidenceContentType(contentType); err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	reqHost, reqScheme := forwardedHostAndScheme(r)
@@ -300,11 +344,9 @@ func (s *Server) handleSubmission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	waypointID := req.WaypointID
-	if waypointID == "" {
-		waypointID = req.RoadID
-	}
-	if req.BlobRef == "" || waypointID == "" || req.ChallengeID == "" || req.IdempotencyKey == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, "blob_ref, waypoint_id, challenge_id, and idempotency_key are required")
+	roadID := req.RoadID
+	if req.BlobRef == "" || (waypointID == "" && roadID == "") || req.ChallengeID == "" || req.IdempotencyKey == "" {
+		writeError(r.Context(), w, http.StatusBadRequest, "blob_ref, waypoint_id or road_id, challenge_id, and idempotency_key are required")
 		return
 	}
 	if req.Lat == nil || req.Lon == nil {
@@ -339,17 +381,52 @@ func (s *Server) handleSubmission(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load game state")
 		return
 	}
-	if reason, locked := coinRushLocksOut(game.Mode, proj.Progress[team.ID]); locked {
+	prog := proj.Progress[team.ID]
+	if reason, locked := coinRushLocksOut(game.Mode, prog); locked {
 		writeError(r.Context(), w, http.StatusForbidden, reason)
 		return
 	}
-	if prog := proj.Progress[team.ID]; prog.CurrentWaypointID != waypointID {
+	if waypointID == "" {
+		waypointID = prog.CurrentWaypointID
+	}
+	if roadID == waypointID {
+		roadID = ""
+	}
+	if rules.IsFrozen(proj.Effects[team.ID], s.nowUTC()) {
+		writeError(r.Context(), w, http.StatusForbidden, "team is frozen")
+		return
+	}
+	if prog.CurrentWaypointID != waypointID {
 		writeError(r.Context(), w, http.StatusForbidden, "you must be at the waypoint to submit evidence for its challenge")
 		return
 	}
+	if roadID != "" {
+		var waypointA, waypointB string
+		err = s.DB.Pool.QueryRow(r.Context(), `
+			SELECT waypoint_id_a::text, waypoint_id_b::text
+			FROM board_roads
+			WHERE board_id = $1 AND board_version = $2 AND id = $3
+		`, game.BoardID, game.BoardVersion, roadID).Scan(&waypointA, &waypointB)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(r.Context(), w, http.StatusNotFound, "road not found on this game's board")
+			return
+		}
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to query road endpoints")
+			return
+		}
+		if waypointID != waypointA && waypointID != waypointB {
+			writeError(r.Context(), w, http.StatusForbidden, "you must be at an endpoint of the challenged road")
+			return
+		}
+	}
+	challengeTargetID := waypointID
+	if roadID != "" {
+		challengeTargetID = roadID
+	}
 
 	// Verify an active challenge attempt exists.
-	if err := s.requireChallengeAttempt(r.Context(), gameID, team.ID, waypointID); err != nil {
+	if err := s.requireChallengeAttempt(r.Context(), gameID, team.ID, waypointID, roadID); err != nil {
 		writeError(r.Context(), w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -378,34 +455,39 @@ func (s *Server) handleSubmission(w http.ResponseWriter, r *http.Request) {
 	submissionID := uuid.New().String()
 	serverReceivedAt := time.Now().UTC()
 
-	var prompt, rubricJSON string
-	err = s.DB.Pool.QueryRow(r.Context(), `
-		SELECT prompt, rubric::text
-		FROM challenges
-		WHERE (id::text = $1 OR waypoint_id::text = $1) AND board_id = $2 AND board_version = $3
-		LIMIT 1
-	`, req.ChallengeID, game.BoardID, game.BoardVersion).Scan(&prompt, &rubricJSON)
-	if err != nil {
+	var prompt, rubricJSON, challengeID string
+	if roadID != "" {
 		err = s.DB.Pool.QueryRow(r.Context(), `
-			SELECT c.prompt, c.rubric::text
+			SELECT c.id::text, c.prompt, c.rubric::text
 			FROM challenges c
 			JOIN board_roads s ON s.challenge_id = c.id
-			WHERE (c.id::text = $1 OR c.waypoint_id::text = $1 OR s.id::text = $1) AND c.board_id = $2 AND c.board_version = $3
-			LIMIT 1
-		`, req.ChallengeID, game.BoardID, game.BoardVersion).Scan(&prompt, &rubricJSON)
-		if err != nil {
-			// Ensure challenge definition belongs to the current board version.
-			writeError(r.Context(), w, http.StatusNotFound, "challenge not found on this game's board")
-			return
-		}
+			WHERE s.board_id = $1 AND s.board_version = $2 AND s.id = $3
+			  AND c.board_id = s.board_id AND c.board_version = s.board_version
+		`, game.BoardID, game.BoardVersion, roadID).Scan(&challengeID, &prompt, &rubricJSON)
+	} else {
+		err = s.DB.Pool.QueryRow(r.Context(), `
+			SELECT id::text, prompt, rubric::text
+			FROM challenges
+			WHERE board_id = $1 AND board_version = $2 AND waypoint_id::text = $3
+		`, game.BoardID, game.BoardVersion, waypointID).Scan(&challengeID, &prompt, &rubricJSON)
+	}
+	if err != nil {
+		// Challenge identity is resolved from the selected board target, never a
+		// client-supplied ID.
+		writeError(r.Context(), w, http.StatusNotFound, "challenge not found on this game's board")
+		return
+	}
+	if req.ChallengeID != challengeID {
+		writeError(r.Context(), w, http.StatusBadRequest, "challenge_id does not match the selected board target")
+		return
 	}
 
 	payloadBytes, _ := json.Marshal(eventstore.SubmissionCreatedPayload{
 		SubmissionID:   submissionID,
 		TeamID:         team.ID,
 		WaypointID:     waypointID,
-		RoadID:         req.RoadID,
-		ChallengeID:    req.ChallengeID,
+		RoadID:         roadID,
+		ChallengeID:    challengeID,
 		BlobRef:        req.BlobRef,
 		IdempotencyKey: req.IdempotencyKey,
 	})
@@ -417,8 +499,8 @@ func (s *Server) handleSubmission(w http.ResponseWriter, r *http.Request) {
 		"game_id":       gameID,
 		"team_id":       team.ID,
 		"waypoint_id":   waypointID,
-		"road_id":       req.RoadID,
-		"challenge_id":  req.ChallengeID,
+		"road_id":       roadID,
+		"challenge_id":  challengeID,
 		"blob_ref":      req.BlobRef,
 		"prompt":        prompt,
 		"rubric":        json.RawMessage(rubricJSON),
@@ -436,34 +518,53 @@ func (s *Server) handleSubmission(w http.ResponseWriter, r *http.Request) {
 		verifyPayload["previous_gps"] = prev
 	}
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence: "+err.Error())
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 	cmdReq := commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "SubmissionCreated",
-		ExpectedSeq:    expectedSeq,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        payloadBytes,
+		GameID:             gameID,
+		CommandType:        "SubmissionCreated",
+		PrincipalID:        team.ID,
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            payloadBytes,
 	}
 	// Determine submission status based on ruleset verification mode.
 	grading := game.Ruleset.Verification
 	submissionStatus := "pending"
 
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
-		var roadIDNull *string
-		if waypointID != "" {
-			roadIDNull = &waypointID
-		} else if req.RoadID != "" {
-			roadIDNull = &req.RoadID
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		// Serialize checks for the same object key, including the no-row case,
+		// so concurrent requests cannot both consume one uploaded image.
+		if _, dbErr := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, req.BlobRef); dbErr != nil {
+			return nil, dbErr
 		}
+		var blobAlreadyUsed bool
+		if dbErr := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM challenge_submissions WHERE blob_ref = $1)`, req.BlobRef).Scan(&blobAlreadyUsed); dbErr != nil {
+			return nil, dbErr
+		}
+		if blobAlreadyUsed {
+			return nil, errEvidenceBlobAlreadyUsed
+		}
+		var submissionPending bool
+		if dbErr := tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM challenge_submissions
+				WHERE game_id = $1 AND team_id = $2 AND road_id = $3
+				  AND kind = 'challenge' AND status = 'pending'
+			)
+		`, gameID, team.ID, challengeTargetID).Scan(&submissionPending); dbErr != nil {
+			return nil, dbErr
+		}
+		if submissionPending {
+			return nil, errSubmissionAlreadyPending
+		}
+
+		roadIDNull := &challengeTargetID
 		_, dbErr := tx.Exec(ctx, `
 			INSERT INTO challenge_submissions
-			  (id, game_id, team_id, road_id, challenge_id, blob_ref, idempotency_key, client_captured_at, server_received_at, lat, lon, accuracy_m)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		`, submissionID, gameID, team.ID, roadIDNull, req.ChallengeID, req.BlobRef, req.IdempotencyKey, clientCapturedAt, serverReceivedAt,
+			  (id, game_id, team_id, road_id, waypoint_id, challenge_id, blob_ref, idempotency_key, client_captured_at, server_received_at, lat, lon, accuracy_m)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		`, submissionID, gameID, team.ID, roadIDNull, waypointID, challengeID, req.BlobRef, req.IdempotencyKey, clientCapturedAt, serverReceivedAt,
 			*req.Lat, *req.Lon, req.AccuracyM)
 		if dbErr != nil {
 			return nil, dbErr
@@ -484,11 +585,12 @@ func (s *Server) handleSubmission(w http.ResponseWriter, r *http.Request) {
 					ID:               submissionID,
 					TeamID:           team.ID,
 					RoadID:           derefOr(roadIDNull, ""),
-					ChallengeID:      req.ChallengeID,
+					WaypointID:       waypointID,
+					ChallengeID:      challengeID,
 					Kind:             "challenge",
 					ServerReceivedAt: &serverReceivedAt,
 				},
-				"pass", 1.0, trustRationale, rules.VerificationTrust)
+				"pass", 1.0, trustRationale, rules.VerificationTrust, nil)
 			if applyErr != nil {
 				return nil, applyErr
 			}
@@ -509,14 +611,22 @@ func (s *Server) handleSubmission(w http.ResponseWriter, r *http.Request) {
 		return result, nil
 	})
 	if err != nil {
+		if errors.Is(err, errSubmissionAlreadyPending) {
+			writeError(r.Context(), w, http.StatusConflict, "an earlier evidence submission for this challenge is still being reviewed")
+			return
+		}
+		if errors.Is(err, errEvidenceBlobAlreadyUsed) {
+			writeError(r.Context(), w, http.StatusConflict, "this evidence upload has already been used")
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to record submission: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusCreated, submissionResponse{
-		SubmissionID: submissionID,
-		Status:       submissionStatus,
-	})
+	writeCommandResponse(r.Context(), w, response)
 }
 
 func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
@@ -528,11 +638,9 @@ func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	waypointID := req.WaypointID
-	if waypointID == "" {
-		waypointID = req.RoadID
-	}
-	if waypointID == "" {
-		writeError(r.Context(), w, http.StatusBadRequest, "waypoint_id is required")
+	roadID := req.RoadID
+	if waypointID == "" && roadID == "" {
+		writeError(r.Context(), w, http.StatusBadRequest, "waypoint_id or road_id is required")
 		return
 	}
 
@@ -545,32 +653,74 @@ func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var challengeID string
-	var vetoPenaltySeconds int
-	err := s.DB.Pool.QueryRow(r.Context(), `
-		SELECT id::text, veto_penalty_seconds FROM challenges
-		WHERE board_id = $1 AND board_version = $2 AND waypoint_id = $3
-	`, game.BoardID, game.BoardVersion, waypointID).Scan(&challengeID, &vetoPenaltySeconds)
-	if err != nil {
-		// Fallback query
-		err = s.DB.Pool.QueryRow(r.Context(), `
-			SELECT c.id::text, c.veto_penalty_seconds FROM challenges c
-			JOIN board_roads s ON s.challenge_id = c.id
-			WHERE s.board_id = $1 AND s.board_version = $2 AND s.id = $3
-		`, game.BoardID, game.BoardVersion, waypointID).Scan(&challengeID, &vetoPenaltySeconds)
-		if err != nil {
-			// Fallback to ruleset minimum penalty when challenge definition specifies none.
-			vetoPenaltySeconds = game.Ruleset.VetoPenaltyMinSeconds
-		}
-	}
-	// Calculate veto penalty cost based on game mode and ruleset.
-	cost := game.Ruleset.VetoCostFor(game.Mode, vetoPenaltySeconds)
-
 	proj, err := projections.RebuildProjection(r.Context(), s.DB.Pool, gameID, 0)
 	if err != nil {
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load projection")
 		return
 	}
+	currentWaypointID := proj.Progress[team.ID].CurrentWaypointID
+	if waypointID == "" {
+		waypointID = currentWaypointID
+	}
+	if roadID == waypointID {
+		roadID = ""
+	}
+	if currentWaypointID != waypointID {
+		writeError(r.Context(), w, http.StatusForbidden, "you must be at the waypoint to veto its challenge")
+		return
+	}
+	vetoTargetID := waypointID
+	var challengeID string
+	var vetoPenaltySeconds int
+	if roadID != "" {
+		var waypointA, waypointB string
+		err = s.DB.Pool.QueryRow(r.Context(), `
+			SELECT waypoint_id_a::text, waypoint_id_b::text
+			FROM board_roads
+			WHERE board_id = $1 AND board_version = $2 AND id = $3
+		`, game.BoardID, game.BoardVersion, roadID).Scan(&waypointA, &waypointB)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(r.Context(), w, http.StatusNotFound, "road not found on this game's board")
+			return
+		}
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to query road endpoints")
+			return
+		}
+		if waypointID != waypointA && waypointID != waypointB {
+			writeError(r.Context(), w, http.StatusForbidden, "you must be at an endpoint of the challenged road")
+			return
+		}
+		err = s.DB.Pool.QueryRow(r.Context(), `
+			SELECT c.id::text, c.veto_penalty_seconds
+			FROM challenges c
+			JOIN board_roads s ON s.challenge_id = c.id
+			WHERE s.board_id = $1 AND s.board_version = $2 AND s.id = $3
+			  AND c.board_id = s.board_id AND c.board_version = s.board_version
+		`, game.BoardID, game.BoardVersion, roadID).Scan(&challengeID, &vetoPenaltySeconds)
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(r.Context(), w, http.StatusNotFound, "challenge not found on this road")
+			return
+		}
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to query road challenge")
+			return
+		}
+		vetoTargetID = roadID
+	} else {
+		err = s.DB.Pool.QueryRow(r.Context(), `
+			SELECT id::text, veto_penalty_seconds FROM challenges
+			WHERE board_id = $1 AND board_version = $2 AND waypoint_id = $3
+		`, game.BoardID, game.BoardVersion, waypointID).Scan(&challengeID, &vetoPenaltySeconds)
+		if errors.Is(err, pgx.ErrNoRows) {
+			vetoPenaltySeconds = game.Ruleset.VetoPenaltyMinSeconds
+		} else if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to query waypoint challenge")
+			return
+		}
+	}
+	// Calculate veto penalty cost based on game mode and ruleset.
+	cost := game.Ruleset.VetoCostFor(game.Mode, vetoPenaltySeconds)
 
 	if reason, locked := coinRushLocksOut(game.Mode, proj.Progress[team.ID]); locked {
 		writeError(r.Context(), w, http.StatusForbidden, reason)
@@ -578,12 +728,11 @@ func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	effects := proj.Effects[team.ID]
-	if rules.IsFrozen(effects, time.Now().UTC()) {
+	now := time.Now().UTC()
+	if rules.IsFrozen(effects, now) {
 		writeError(r.Context(), w, http.StatusForbidden, "team is frozen")
 		return
 	}
-
-	now := time.Now().UTC()
 	// Set veto penalty duration.
 	penaltyUntil := now
 	if cost.CooldownSeconds > 0 {
@@ -592,7 +741,7 @@ func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
 	payloadBytes, _ := json.Marshal(eventstore.ChallengeVetoedPayload{
 		TeamID:             team.ID,
 		WaypointID:         waypointID,
-		RoadID:             req.RoadID,
+		RoadID:             roadID,
 		ChallengeID:        challengeID,
 		PenaltyUntil:       penaltyUntil,
 		TimePenaltySeconds: cost.TimePenaltySeconds,
@@ -606,25 +755,23 @@ func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
 		TimePenaltySeconds: cost.TimePenaltySeconds,
 	}
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 	cmdReq := commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "ChallengeVetoed",
-		ExpectedSeq:    expectedSeq,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        payloadBytes,
+		GameID:             gameID,
+		CommandType:        "ChallengeVetoed",
+		PrincipalID:        team.ID,
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            payloadBytes,
 	}
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
 		// Record veto bypass for team progression.
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO team_road_bypass (game_id, team_id, road_id, reason)
 			VALUES ($1, $2, $3, 'veto')
 			ON CONFLICT (game_id, team_id, road_id) DO UPDATE SET reason = EXCLUDED.reason
-		`, gameID, team.ID, waypointID); err != nil {
+		`, gameID, team.ID, vetoTargetID); err != nil {
 			return nil, fmt.Errorf("recording the veto bypass: %w", err)
 		}
 
@@ -633,7 +780,7 @@ func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO team_effects (id, game_id, team_id, kind, until, meta)
 				VALUES ($1, $2, $3, 'veto_penalty', $4, to_jsonb($5::text))
-			`, uuid.New().String(), gameID, team.ID, penaltyUntil, waypointID); err != nil {
+			`, uuid.New().String(), gameID, team.ID, penaltyUntil, vetoTargetID); err != nil {
 				return nil, fmt.Errorf("recording the veto penalty: %w", err)
 			}
 		}
@@ -647,11 +794,14 @@ func (s *Server) handleVeto(w http.ResponseWriter, r *http.Request) {
 		}, nil
 	})
 	if err != nil {
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to apply veto: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, vetoResponse)
+	writeCommandResponse(r.Context(), w, response)
 }
 
 const (

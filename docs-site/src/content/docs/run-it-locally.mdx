@@ -36,7 +36,7 @@ Browsers refuse geolocation and the camera outside a secure context.
    | `S3_SECRET_KEY` | The MinIO root password / S3 secret access key |
    | `RUNWAY_WORKER_TOKEN` | Shared secret authenticating the background verification worker when submitting AI photo grading verdicts to the server |
    | `RUNWAY_ROADMAP_ADMIN_KEY` | Secret key for roadmap and admin management|
-   | `S3_PUBLIC_ENDPOINT` | Your public URL, e.g. `https://race.example.com`.|
+   | `S3_PUBLIC_ENDPOINT` | The browser-facing app URL, e.g. `http://localhost` locally or `https://race.example.com` in production. Evidence uploads should pass through the frontend proxy's 50 MB limit. |
    | `RUNWAY_ALLOWED_ORIGINS` | Comma-separated browser origins for the API and WebSocket (e.g. `https://race.example.com`). Leave empty locally for loopback/LAN origins |
    | `SCALEWAY_API_KEY` | Optional: Scaleway API key to enable AI photo grading (or `GEMINI_API_KEY` for Google Gemini) |
 

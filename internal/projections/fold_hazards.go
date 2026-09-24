@@ -1,7 +1,6 @@
 package projections
 
 import (
-
 	"github.com/Jessevdz/RunwayTheGame/internal/eventstore"
 	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
@@ -40,6 +39,17 @@ func foldRoadblockCleared(p *GameStateProjection, _ eventstore.Event, payload ev
 		p.Roadblocks[payload.RoadID] = rb
 	}
 	p.logf("Team %s cleared the roadblock on %s", p.teamLabel(payload.TeamID), p.roadLabel(payload.RoadID))
+}
+
+// foldRoadblockClearRevoked removes a team's prior clear when its accepted evidence is revoked.
+func foldRoadblockClearRevoked(p *GameStateProjection, _ eventstore.Event, payload eventstore.RoadblockClearRevokedPayload) {
+	if payload.RevokeClear {
+		if rb, ok := p.Roadblocks[payload.RoadID]; ok {
+			delete(rb.ClearedBy, payload.TeamID)
+			p.Roadblocks[payload.RoadID] = rb
+		}
+	}
+	p.logf("Roadblock clear revoked for team %s on %s", p.teamLabel(payload.TeamID), p.roadLabel(payload.RoadID))
 }
 
 // foldCurseApplied applies a curse effect to the target team.

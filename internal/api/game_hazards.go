@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -193,23 +194,44 @@ func (s *Server) handleRoadblockClear(w http.ResponseWriter, r *http.Request) {
 		IdempotencyKey: req.IdempotencyKey,
 	})
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence: "+err.Error())
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 	cmdReq := commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "SubmissionCreated",
-		ExpectedSeq:    expectedSeq,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        payloadBytes,
+		GameID:             gameID,
+		CommandType:        "SubmissionCreated",
+		PrincipalID:        team.ID,
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            payloadBytes,
 	}
 	// Evaluate roadblock clearance evidence according to the configured verification mode.
 	grading := game.Ruleset.Verification
 	submissionStatus := "pending"
 
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		if _, dbErr := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, req.BlobRef); dbErr != nil {
+			return nil, dbErr
+		}
+		var blobAlreadyUsed bool
+		if dbErr := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM challenge_submissions WHERE blob_ref = $1)`, req.BlobRef).Scan(&blobAlreadyUsed); dbErr != nil {
+			return nil, dbErr
+		}
+		if blobAlreadyUsed {
+			return nil, errEvidenceBlobAlreadyUsed
+		}
+		var submissionPending bool
+		if dbErr := tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM challenge_submissions
+				WHERE game_id = $1 AND team_id = $2 AND road_id = $3
+				  AND kind = 'roadblock' AND status = 'pending'
+			)
+		`, gameID, team.ID, req.RoadID).Scan(&submissionPending); dbErr != nil {
+			return nil, dbErr
+		}
+		if submissionPending {
+			return nil, errSubmissionAlreadyPending
+		}
 		_, dbErr := tx.Exec(ctx, `
 			INSERT INTO challenge_submissions
 			  (id, game_id, team_id, road_id, challenge_id, blob_ref, idempotency_key, kind, client_captured_at, server_received_at, lat, lon, accuracy_m)
@@ -238,7 +260,7 @@ func (s *Server) handleRoadblockClear(w http.ResponseWriter, r *http.Request) {
 					Kind:             "roadblock",
 					ServerReceivedAt: &serverReceivedAt,
 				},
-				"pass", 1.0, trustRationale, rules.VerificationTrust)
+				"pass", 1.0, trustRationale, rules.VerificationTrust, nil)
 			if applyErr != nil {
 				return nil, applyErr
 			}
@@ -254,19 +276,26 @@ func (s *Server) handleRoadblockClear(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		result.ResponseBody = submissionResponse{SubmissionID: submissionID, Status: submissionStatus}
+		result.ResponseBody = roadblockClearResponse{SubmissionID: submissionID, RoadID: req.RoadID, Status: submissionStatus}
 		return result, nil
 	})
 	if err != nil {
+		if errors.Is(err, errSubmissionAlreadyPending) {
+			writeError(r.Context(), w, http.StatusConflict, "an earlier roadblock submission is still being reviewed")
+			return
+		}
+		if errors.Is(err, errEvidenceBlobAlreadyUsed) {
+			writeError(r.Context(), w, http.StatusConflict, "this evidence upload has already been used")
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to record roadblock clearance attempt: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusCreated, roadblockClearResponse{
-		SubmissionID: submissionID,
-		RoadID:       req.RoadID,
-		Status:       submissionStatus,
-	})
+	writeCommandResponse(r.Context(), w, response)
 }
 
 // handleCurseResolve clears an active curse card effect satisfied by the team.
@@ -317,19 +346,17 @@ func (s *Server) handleCurseResolve(w http.ResponseWriter, r *http.Request) {
 		Reason:       "resolved",
 	})
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 	cmdReq := commands.CommandRequest{
-		GameID:         gameID,
-		CommandType:    "CurseCleared",
-		ExpectedSeq:    expectedSeq,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        payloadBytes,
+		GameID:             gameID,
+		CommandType:        "CurseCleared",
+		PrincipalID:        team.ID,
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     req.IdempotencyKey,
+		Payload:            payloadBytes,
 	}
-	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+	response, err := s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
 		// team_effects is the runtime mirror of the projection; leaving the row
 		// behind would resurrect the curse for anything that reads the table.
 		_, dbErr := tx.Exec(ctx, `
@@ -348,9 +375,12 @@ func (s *Server) handleCurseResolve(w http.ResponseWriter, r *http.Request) {
 		}, nil
 	})
 	if err != nil {
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve curse: "+err.Error())
 		return
 	}
 
-	writeJSON(r.Context(), w, http.StatusOK, curseResolvedResponse{Status: "resolved", CardID: req.CardID})
+	writeCommandResponse(r.Context(), w, response)
 }

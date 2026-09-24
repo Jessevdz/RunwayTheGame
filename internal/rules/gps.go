@@ -65,13 +65,24 @@ func CheckArrival(distanceM, radiusM, accuracyM float64) ArrivalCheck {
 	}
 
 	radiusM = ClampArrivalRadiusM(radiusM)
-	slack := math.Min(accuracyM, radiusM)
-	if distanceM > radiusM+slack {
+	// Keep the whole reported accuracy envelope inside the configured radius.
+	// This uses accuracy as a margin within the radius instead of extending the
+	// radius by up to another full waypoint radius.
+	maxDistanceM := radiusM - accuracyM
+	if maxDistanceM < 0 {
 		return ArrivalCheck{
 			Reason: ArrivalReasonOutOfRange,
 			Message: fmt.Sprintf(
-				"you are %.0f m from the waypoint; get within %.0f m",
-				distanceM, radiusM),
+				"GPS accuracy of %.0f m exceeds the waypoint radius of %.0f m; wait for a more accurate fix",
+				accuracyM, radiusM),
+		}
+	}
+	if distanceM > maxDistanceM {
+		return ArrivalCheck{
+			Reason: ArrivalReasonOutOfRange,
+			Message: fmt.Sprintf(
+				"you are %.0f m from the waypoint with %.0f m GPS accuracy; get within %.0f m",
+				distanceM, accuracyM, maxDistanceM),
 		}
 	}
 	return ArrivalCheck{Allowed: true}
@@ -99,8 +110,11 @@ func ImplausibleSpeed(distanceM float64, elapsed time.Duration) (bool, float64) 
 		return false, 0
 	}
 	seconds := elapsed.Seconds()
-	if seconds <= 0 {
-		return false, 0
+	// Very short intervals are noisy and can make harmless GPS jitter look like
+	// a sprint. Treat them as a MinSpeedSampleSeconds window, but reject a jump
+	// whose total distance exceeds the maximum possible over that window.
+	if seconds < MinSpeedSampleSeconds {
+		seconds = MinSpeedSampleSeconds
 	}
 	speed := distanceM / seconds
 	return speed > MaxPlausibleSpeedMS, speed

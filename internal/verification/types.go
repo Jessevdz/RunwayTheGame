@@ -35,6 +35,7 @@ type VerificationJobPayload struct {
 	PreviousGPS  *GPSFix            `json:"previous_gps,omitempty"`
 	Exif         *ExifFix           `json:"exif,omitempty"`
 	SecondPass   string             `json:"second_pass,omitempty"`
+	RegradeKey   string             `json:"regrade_key,omitempty"`
 	// PriorVerdict and PriorConfidence store the previous evaluation result during a re-grade.
 	PriorVerdict    string  `json:"prior_verdict,omitempty"`
 	PriorConfidence float64 `json:"prior_confidence,omitempty"`

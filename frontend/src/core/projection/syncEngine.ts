@@ -103,7 +103,7 @@ class SyncEngine {
 
   /** Sends a single queued capture action to the backend API. */
   private async processAction(action: QueuedAction): Promise<void> {
-    const { gameId, waypointId, challengeId, photo, contentType, lat, lon, accuracyM, clientCapturedAt } =
+    const { gameId, waypointId, roadId, challengeId, photo, contentType, lat, lon, accuracyM, clientCapturedAt } =
       action.payload;
 
     const session = loadTeamSession(gameId);
@@ -123,7 +123,8 @@ class SyncEngine {
       await uploadToPresignedUrl(upload_url, photo, contentType);
       await submitChallengeEvidence(gameId, {
         team_token: teamToken,
-        road_id: waypointId,
+        waypoint_id: waypointId,
+        ...(roadId ? { road_id: roadId } : {}),
         challenge_id: challengeId,
         blob_ref,
         lat,

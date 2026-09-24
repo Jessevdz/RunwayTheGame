@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -33,8 +34,13 @@ type BoardSummary struct {
 
 // handleListBoards returns summary cards for listed public boards or specific IDs specified by query parameter.
 func (s *Server) handleListBoards(w http.ResponseWriter, r *http.Request) {
-	isAdmin := s.isAdminAuthorized(r)
+	isAdmin, _ := s.isAdminAuthorized(r)
 	showAll := isAdmin && (r.URL.Query().Get("all") == "true" || r.URL.Query().Get("include_unlisted") == "true")
+	limit, offset, err := parseListPagination(r, 100, 100)
+	if err != nil {
+		writeError(r.Context(), w, http.StatusBadRequest, "invalid pagination: "+err.Error())
+		return
+	}
 
 	var ids []string
 	if raw := r.URL.Query().Get("ids"); raw != "" {
@@ -66,7 +72,10 @@ func (s *Server) handleListBoards(w http.ResponseWriter, r *http.Request) {
 	} else if !showAll {
 		query += ` AND b.is_listed = TRUE`
 	}
-	query += ` ORDER BY b.updated_at DESC LIMIT 100`
+	limitArg := len(args) + 1
+	offsetArg := limitArg + 1
+	query += fmt.Sprintf(` ORDER BY b.updated_at DESC, b.id ASC LIMIT $%d OFFSET $%d`, limitArg, offsetArg)
+	args = append(args, limit+1, offset)
 
 	rows, err := s.DB.Pool.Query(r.Context(), query, args...)
 	if err != nil {
@@ -76,11 +85,22 @@ func (s *Server) handleListBoards(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	summaries := make([]BoardSummary, 0)
+	hasMore := false
 	for rows.Next() {
 		var summary BoardSummary
-		if err := rows.Scan(&summary.ID, &summary.Name, &summary.UpdatedAt, &summary.IsListed, &summary.WaypointCount); err == nil {
-			summaries = append(summaries, summary)
+		if err := rows.Scan(&summary.ID, &summary.Name, &summary.UpdatedAt, &summary.IsListed, &summary.WaypointCount); err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to read boards: "+err.Error())
+			return
 		}
+		if len(summaries) == limit {
+			hasMore = true
+			break
+		}
+		summaries = append(summaries, summary)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to read boards: "+err.Error())
+		return
 	}
 
 	previewIDs := make([]string, 0, len(summaries))
@@ -100,6 +120,7 @@ func (s *Server) handleListBoards(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	setNextOffset(w, hasMore, offset, limit)
 	writeJSON(r.Context(), w, http.StatusOK, summaries)
 }
 
@@ -209,7 +230,11 @@ func (s *Server) handleForkBoard(w http.ResponseWriter, r *http.Request) {
 	srcID := chi.URLParam(r, "id")
 	srcBoard, err := projections.LoadBoard(r.Context(), s.DB.Pool, srcID, 1)
 	if err != nil {
-		writeError(r.Context(), w, http.StatusNotFound, "source board not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(r.Context(), w, http.StatusNotFound, "source board not found")
+			return
+		}
+		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load source board: "+err.Error())
 		return
 	}
 
@@ -265,13 +290,22 @@ func (s *Server) handleForkBoard(w http.ResponseWriter, r *http.Request) {
 		newA, okA := wpMap[road.WaypointIDA]
 		newB, okB := wpMap[road.WaypointIDB]
 		if !okA || !okB {
+			if road.ChallengeID != "" {
+				writeError(r.Context(), w, http.StatusInternalServerError, fmt.Sprintf("road %s has a challenge but a missing endpoint", road.ID))
+				return
+			}
 			continue
+		}
+		newChallengeID, err := copyRoadChallenge(r.Context(), tx, srcBoard, road, newID)
+		if err != nil {
+			writeError(r.Context(), w, http.StatusInternalServerError, "failed to copy road challenge: "+err.Error())
+			return
 		}
 
 		_, err = tx.Exec(r.Context(), `
-			INSERT INTO board_roads (id, board_id, board_version, waypoint_id_a, waypoint_id_b, length_m)
-			VALUES ($1, $2, 1, $3, $4, $5)
-		`, newRoadID, newID, newA, newB, road.LengthM)
+			INSERT INTO board_roads (id, board_id, board_version, waypoint_id_a, waypoint_id_b, length_m, challenge_id)
+			VALUES ($1, $2, 1, $3, $4, $5, $6)
+		`, newRoadID, newID, newA, newB, road.LengthM, newChallengeID)
 		if err != nil {
 			writeError(r.Context(), w, http.StatusInternalServerError, "failed to copy road: "+err.Error())
 			return
@@ -348,4 +382,41 @@ func copyWaypointChallenge(ctx context.Context, tx pgx.Tx, srcBoard rules.Board,
 		return &chID, nil
 	}
 	return nil, nil
+}
+
+// copyRoadChallenge copies a road's gating challenge with a fresh ID and a NULL
+// waypoint target, then returns the ID to attach to the forked road.
+func copyRoadChallenge(ctx context.Context, tx pgx.Tx, srcBoard rules.Board, road rules.Road, newBoardID string) (*string, error) {
+	var matched *rules.Challenge
+	for i := range srcBoard.Challenges {
+		ch := &srcBoard.Challenges[i]
+		matchesExplicitLink := road.ChallengeID != "" && ch.ID == road.ChallengeID
+		matchesLegacyTarget := road.ChallengeID == "" && ch.WaypointID == road.ID
+		if matchesExplicitLink || matchesLegacyTarget {
+			if matched != nil {
+				return nil, fmt.Errorf("road %s has multiple matching challenges", road.ID)
+			}
+			matched = ch
+		}
+	}
+	if matched == nil {
+		if road.ChallengeID == "" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("road %s references missing challenge %s", road.ID, road.ChallengeID)
+	}
+
+	chID := uuid.New().String()
+	rubricJSON, err := json.Marshal(matched.Rubric)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO challenges (id, board_id, board_version, waypoint_id, prompt, rubric, coin_reward, veto_penalty_seconds)
+		VALUES ($1, $2, 1, NULL, $3, $4, $5, $6)
+	`, chID, newBoardID, matched.Prompt, rubricJSON, matched.CoinReward, matched.VetoPenaltySeconds)
+	if err != nil {
+		return nil, err
+	}
+	return &chID, nil
 }

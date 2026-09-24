@@ -33,9 +33,14 @@ var boardChildCopies = []struct {
 func snapshotBoardVersion(ctx context.Context, tx pgx.Tx, boardID string, srcVersion int) (int, error) {
 	// Two hosts opening a race on the same map at the same moment would otherwise
 	// both pick the same next version number and one would lose on the primary key.
-	var locked int
-	if err := tx.QueryRow(ctx, `SELECT 1 FROM boards WHERE id = $1 AND version = $2 FOR UPDATE`, boardID, srcVersion).Scan(&locked); err != nil {
+	var published bool
+	if err := tx.QueryRow(ctx, `
+		SELECT published_at IS NOT NULL FROM boards WHERE id = $1 AND version = $2 FOR UPDATE
+	`, boardID, srcVersion).Scan(&published); err != nil {
 		return 0, fmt.Errorf("failed to lock the board being raced: %w", err)
+	}
+	if !published {
+		return 0, errBoardNotPublished
 	}
 
 	var newVersion int
@@ -83,6 +88,27 @@ func (s *Server) requireEditableBoardVersion(ctx context.Context, boardID string
 	raced, err := s.boardVersionRaced(ctx, boardID, version)
 	if err != nil {
 		return fmt.Errorf("failed to read board state: %w", err)
+	}
+	if raced {
+		return errBoardVersionRaced
+	}
+	return nil
+}
+
+// lockEditableBoardVersion serializes every draft-child write with publish and
+// launch, then rechecks that no game has pinned the editable version.
+func lockEditableBoardVersion(ctx context.Context, tx pgx.Tx, boardID string, version int) error {
+	var locked int
+	if err := tx.QueryRow(ctx, `
+		SELECT 1 FROM boards WHERE id = $1 AND version = $2 FOR UPDATE
+	`, boardID, version).Scan(&locked); err != nil {
+		return fmt.Errorf("failed to lock board draft: %w", err)
+	}
+	var raced bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM games WHERE board_id = $1 AND board_version = $2)
+	`, boardID, version).Scan(&raced); err != nil {
+		return fmt.Errorf("failed to check board draft references: %w", err)
 	}
 	if raced {
 		return errBoardVersionRaced

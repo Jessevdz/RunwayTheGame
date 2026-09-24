@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS challenges (
     id UUID NOT NULL,
     board_id UUID NOT NULL,
     board_version INTEGER NOT NULL,
-    waypoint_id UUID NOT NULL,
+    waypoint_id UUID, -- NULL for road challenges, which are attached through board_roads.challenge_id
     prompt TEXT NOT NULL,
     rubric JSONB NOT NULL,     -- must_show[], fails_if[], acceptable_ambiguity
     coin_reward INTEGER NOT NULL DEFAULT 10,
@@ -173,6 +173,7 @@ CREATE INDEX IF NOT EXISTS idx_events_game_seq ON events(game_id, sequence ASC);
 -- 9. Job Queue (Postgres-backed queue)
 CREATE TABLE IF NOT EXISTS jobs (
     id UUID NOT NULL PRIMARY KEY,
+    game_id UUID,
     job_type VARCHAR(100) NOT NULL,
     payload JSONB NOT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'pending', -- pending, running, completed, failed
@@ -187,19 +188,40 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_poll ON jobs(status, run_at) WHERE status = 'pending';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS game_id UUID;
+CREATE INDEX IF NOT EXISTS idx_jobs_game_id ON jobs(game_id);
 
 -- 10. Idempotent Commands
--- The key is unique per game, not globally: a cached response belongs to the
--- game it was produced for. A global key let the same idempotency key sent
--- against a second game replay the first game's stored response — including the
--- join route's body, which carries a team's join_token.
+-- A cached result is scoped to its game, principal, command and key, and is only
+-- replayed when the caller repeats the same payload.
 CREATE TABLE IF NOT EXISTS idempotent_commands (
     key VARCHAR(255) NOT NULL,
     game_id UUID NOT NULL,
+    principal_id TEXT NOT NULL DEFAULT 'system',
+    command_type TEXT NOT NULL DEFAULT '',
+    payload_hash TEXT NOT NULL DEFAULT '',
     response_body JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (game_id, key)
+    PRIMARY KEY (game_id, principal_id, command_type, key)
 );
+
+-- Older caches could contain live join/host credentials in the serialized
+-- response. Keep the non-secret result fields so upgraded handlers can issue a
+-- replacement capability on replay, and erase the copied credentials.
+UPDATE idempotent_commands
+SET response_body = jsonb_set(
+    response_body,
+    '{response_body}',
+    COALESCE(response_body->'response_body', '{}'::jsonb) - 'join_token' - 'host_token' - 'join_code',
+    FALSE
+)
+WHERE COALESCE(response_body->'response_body'->>'join_token', '') <> ''
+   OR COALESCE(response_body->'response_body'->>'host_token', '') <> ''
+   OR COALESCE(response_body->'response_body'->>'join_code', '') <> '';
+
+ALTER TABLE idempotent_commands ADD COLUMN IF NOT EXISTS principal_id TEXT NOT NULL DEFAULT 'system';
+ALTER TABLE idempotent_commands ADD COLUMN IF NOT EXISTS command_type TEXT NOT NULL DEFAULT '';
+ALTER TABLE idempotent_commands ADD COLUMN IF NOT EXISTS payload_hash TEXT NOT NULL DEFAULT '';
 
 -- 11. Games (lifecycle: draft → live → ended)
 CREATE TABLE IF NOT EXISTS games (
@@ -221,6 +243,24 @@ CREATE TABLE IF NOT EXISTS games (
     ends_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
+
+-- Extra host capabilities issued when a tokenless idempotency-cache response is
+-- replayed. The original hash stays valid so concurrent retries cannot revoke
+-- a capability another retry has just returned.
+CREATE TABLE IF NOT EXISTS game_host_tokens (
+    token_hash TEXT NOT NULL PRIMARY KEY,
+    game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_game_host_tokens_game ON game_host_tokens(game_id);
+
+-- Backfill after games exists so this migration also works on a fresh database.
+UPDATE jobs j
+   SET game_id = g.id
+  FROM games g
+ WHERE j.game_id IS NULL
+   AND j.payload->>'game_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+   AND g.id::text = j.payload->>'game_id';
 
 -- 12. Game Teams (one row per team per game)
 CREATE TABLE IF NOT EXISTS game_teams (
@@ -333,6 +373,7 @@ CREATE TABLE IF NOT EXISTS challenge_submissions (
     game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     team_id UUID NOT NULL,
     road_id UUID NOT NULL,
+    waypoint_id UUID,
     challenge_id UUID NOT NULL,
     blob_ref TEXT NOT NULL,
     idempotency_key VARCHAR(255) NOT NULL UNIQUE,
@@ -385,7 +426,9 @@ CREATE TABLE IF NOT EXISTS roadmap_flags (
 ALTER TABLE boards ADD COLUMN IF NOT EXISTS is_listed BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE boards ALTER COLUMN is_listed SET DEFAULT FALSE;
 ALTER TABLE board_waypoints ADD COLUMN IF NOT EXISTS challenge_id UUID;
+ALTER TABLE board_roads ADD COLUMN IF NOT EXISTS challenge_id UUID;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS waypoint_id UUID;
+ALTER TABLE challenges ALTER COLUMN waypoint_id DROP NOT NULL;
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS kind VARCHAR(50) DEFAULT 'gating';
 ALTER TABLE challenges ALTER COLUMN kind SET DEFAULT 'gating';
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS veto_penalty_seconds INTEGER NOT NULL DEFAULT 3600;
@@ -394,6 +437,90 @@ ALTER TABLE challenges ADD COLUMN IF NOT EXISTS veto_penalty_seconds INTEGER NOT
 -- with; only the fallback for a challenge inserted without one moves.
 ALTER TABLE challenges ALTER COLUMN veto_penalty_seconds SET DEFAULT 900;
 ALTER TABLE challenges DROP COLUMN IF EXISTS difficulty;
+
+-- Older road challenges stored the road UUID in waypoint_id. Normalize rows
+-- reached through board_roads.challenge_id to NULL unless the same challenge
+-- is also attached to a waypoint; this keeps road targets out of the waypoint
+-- uniqueness key and avoids UUID collisions across the two target types.
+UPDATE challenges c
+SET waypoint_id = NULL
+FROM board_roads road
+WHERE road.board_id = c.board_id
+  AND road.board_version = c.board_version
+  AND road.challenge_id = c.id
+  AND c.waypoint_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM board_waypoints wp
+      WHERE wp.board_id = c.board_id
+        AND wp.board_version = c.board_version
+        AND wp.challenge_id = c.id
+  );
+
+-- Keep all historical challenge rows, but detach duplicate waypoint targets
+-- before enforcing one challenge per waypoint. Prefer the challenge already
+-- referenced by that waypoint (or road); ties are resolved by stable UUID order.
+DO $$
+BEGIN
+    CREATE TEMP TABLE challenge_target_dedup ON COMMIT DROP AS
+    SELECT board_id, board_version, waypoint_id, duplicate_id, canonical_id
+    FROM (
+        SELECT c.board_id, c.board_version, c.waypoint_id, c.id AS duplicate_id,
+               FIRST_VALUE(c.id) OVER target_order AS canonical_id,
+               ROW_NUMBER() OVER target_order AS duplicate_order
+        FROM challenges c
+        WHERE c.waypoint_id IS NOT NULL
+        WINDOW target_order AS (
+            PARTITION BY c.board_id, c.board_version, c.waypoint_id
+            ORDER BY
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM board_waypoints wp
+                    WHERE wp.board_id = c.board_id
+                      AND wp.board_version = c.board_version
+                      AND wp.id = c.waypoint_id
+                      AND wp.challenge_id = c.id
+                ) THEN 0 ELSE 1 END,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM board_roads road
+                    WHERE road.board_id = c.board_id
+                      AND road.board_version = c.board_version
+                      AND road.id = c.waypoint_id
+                      AND road.challenge_id = c.id
+                ) THEN 0 ELSE 1 END,
+                c.id
+        )
+    ) ranked
+    WHERE duplicate_order > 1;
+
+    -- Preserve active challenge references by pointing any duplicate links at
+    -- the selected canonical row before the duplicate target IDs are cleared.
+    UPDATE board_waypoints wp
+    SET challenge_id = duplicate.canonical_id
+    FROM challenge_target_dedup duplicate
+    WHERE wp.board_id = duplicate.board_id
+      AND wp.board_version = duplicate.board_version
+      AND wp.id = duplicate.waypoint_id
+      AND wp.challenge_id = duplicate.duplicate_id;
+
+    UPDATE board_roads road
+    SET challenge_id = duplicate.canonical_id
+    FROM challenge_target_dedup duplicate
+    WHERE road.board_id = duplicate.board_id
+      AND road.board_version = duplicate.board_version
+      AND road.id = duplicate.waypoint_id
+      AND road.challenge_id = duplicate.duplicate_id;
+
+    UPDATE challenges c
+    SET waypoint_id = NULL
+    FROM challenge_target_dedup duplicate
+    WHERE c.board_id = duplicate.board_id
+      AND c.board_version = duplicate.board_version
+      AND c.id = duplicate.duplicate_id;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_challenges_one_per_waypoint
+    ON challenges (board_id, board_version, waypoint_id)
+    WHERE waypoint_id IS NOT NULL;
+
 ALTER TABLE games ADD COLUMN IF NOT EXISTS ruleset JSONB NOT NULL DEFAULT '{}';
 ALTER TABLE games ADD COLUMN IF NOT EXISTS winner_team_id UUID;
 ALTER TABLE games ADD COLUMN IF NOT EXISTS host_token_hash TEXT;
@@ -409,11 +536,6 @@ CREATE INDEX IF NOT EXISTS idx_game_teams_join_code ON game_teams(game_id, join_
 -- NULL code, and NULLs must not collide with each other.
 ALTER TABLE games ADD COLUMN IF NOT EXISTS race_code VARCHAR(12);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_games_race_code ON games(race_code) WHERE race_code IS NOT NULL;
-
--- Roads can carry their own gating challenge. The column has always been
--- referenced by the challenge lookup fallbacks in internal/api; without it those
--- queries error instead of returning no rows.
-ALTER TABLE board_roads ADD COLUMN IF NOT EXISTS challenge_id UUID;
 
 -- How a game is played: 'team', 'solo_time_trial', or 'solo_casual' (see
 -- rules.ModeTeam and friends). Every game that predates the column is a team
@@ -440,18 +562,19 @@ CREATE TABLE IF NOT EXISTS solo_runs (
     runner_name          VARCHAR(64) NOT NULL,
     elapsed_seconds      INTEGER NOT NULL,
     veto_count           INTEGER NOT NULL DEFAULT 0,
+    skip_count           INTEGER NOT NULL DEFAULT 0,
     veto_penalty_seconds INTEGER NOT NULL DEFAULT 0,
     coins                INTEGER NOT NULL DEFAULT 0,
     finished_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    -- How the run's evidence was graded: 'llm', 'host' or 'trust'. Copied off
-    -- the game's ruleset at posting time rather than joined at read time,
-    -- because a leaderboard outlives the game row it came from.
+    -- How the run's evidence was graded and the effective ruleset at posting
+    -- time, copied rather than joined at read time.
     --
     -- It is recorded rather than used to filter. A trust-graded run is a real
     -- walk somebody took and belongs on the board; what would be dishonest is
     -- listing it next to a graded one with nothing to tell them apart, so every
     -- row carries how it was judged and the client says so.
-    verification         VARCHAR(16) NOT NULL DEFAULT 'llm'
+    verification         VARCHAR(16) NOT NULL DEFAULT 'llm',
+    ruleset              JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_solo_runs_board ON solo_runs(board_id, elapsed_seconds);
@@ -459,12 +582,74 @@ CREATE INDEX IF NOT EXISTS idx_solo_runs_board ON solo_runs(board_id, elapsed_se
 -- Existing leaderboards predate the choice, and every time on them was set under
 -- the model — which is exactly what the column default says.
 ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS verification VARCHAR(16) NOT NULL DEFAULT 'llm';
+ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS ruleset JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE solo_runs ADD COLUMN IF NOT EXISTS skip_count INTEGER NOT NULL DEFAULT 0;
+
+-- Separate purchased skips from actual vetoes in both existing and new rows.
+-- Older versions emitted an adjacent PowerupUsed + ChallengeVetoed pair for a
+-- purchased skip, so use that sequence and the pinned board effect to repair
+-- historical leaderboard counts.
+WITH legacy_skips AS (
+    SELECT veto.game_id, veto.sequence
+    FROM events veto
+    JOIN events used
+      ON used.game_id = veto.game_id
+     AND used.sequence = veto.sequence - 1
+     AND used.event_type = 'PowerupUsed'
+    JOIN games g ON g.id = veto.game_id
+    LEFT JOIN board_powerups pu
+      ON pu.board_id = g.board_id
+     AND pu.board_version = g.board_version
+     AND pu.id = used.payload->>'powerup'
+    WHERE veto.event_type = 'ChallengeVetoed'
+      AND COALESCE(NULLIF(pu.effect, ''), used.payload->>'powerup') = 'challenge_skip'
+), run_counts AS (
+    SELECT sr.game_id,
+           (SELECT COUNT(*) FROM events e
+            WHERE e.game_id = sr.game_id AND e.event_type = 'ChallengeSkipped')
+           + (SELECT COUNT(*) FROM legacy_skips s WHERE s.game_id = sr.game_id) AS skips,
+           (SELECT COUNT(*) FROM events e
+            WHERE e.game_id = sr.game_id AND e.event_type = 'ChallengeVetoed'
+              AND NOT EXISTS (
+                  SELECT 1 FROM legacy_skips s
+                  WHERE s.game_id = e.game_id AND s.sequence = e.sequence
+              )) AS vetoes
+    FROM solo_runs sr
+)
+UPDATE solo_runs sr
+SET skip_count = rc.skips,
+    veto_count = rc.vetoes
+FROM run_counts rc
+WHERE sr.game_id = rc.game_id;
+
+-- Preserve the effective rules that governed existing runs while their game
+-- rows are still present. Older stored rulesets are normalized when read.
+UPDATE solo_runs sr
+SET ruleset = g.ruleset
+FROM games g
+WHERE sr.game_id = g.id
+  AND sr.ruleset = '{}'::jsonb;
+
+-- The game row may already have expired for an older leaderboard entry; keep
+-- its preserved verification choice as the seed for the default ruleset.
+UPDATE solo_runs
+SET ruleset = jsonb_build_object('verification', verification)
+WHERE ruleset = '{}'::jsonb;
 
 -- Photo submissions now come in two kinds. 'challenge' is a waypoint challenge
 -- and settles road progress and coins; 'roadblock' is a team working off a
 -- roadblock card and settles nothing but that team's right to use the road.
 -- The verdict handler branches on this, so it must never be NULL.
 ALTER TABLE challenge_submissions ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'challenge';
+ALTER TABLE challenge_submissions ADD COLUMN IF NOT EXISTS waypoint_id UUID;
+UPDATE challenge_submissions s
+SET waypoint_id = NULLIF(e.payload->>'waypoint_id', '')::uuid
+FROM events e
+WHERE s.waypoint_id IS NULL
+  AND e.game_id = s.game_id
+  AND e.event_type = 'SubmissionCreated'
+  AND e.payload->>'submission_id' = s.id::text
+  AND e.payload->>'waypoint_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 
 -- Board elements (waypoints, roads, challenges, roadblock/curse cards) used to have
 -- global primary keys on (id). When importing a map or reusing IDs across boards/versions,
@@ -567,29 +752,32 @@ ALTER TABLE challenge_submissions ADD COLUMN IF NOT EXISTS accuracy_m DOUBLE PRE
 -- what stops anything ever presigning a URL for an object that is gone.
 ALTER TABLE challenge_submissions ADD COLUMN IF NOT EXISTS blob_deleted_at TIMESTAMP WITH TIME ZONE;
 
--- When a purge started on this race. It is set before the purge looks at what
--- photographs exist and it closes the race to new evidence, because a submission
+-- When a purge most recently started on this race. It is set before the purge
+-- looks at what photographs exist and it closes the race to new evidence,
 -- that lands between "here is the list of photos to destroy" and "here are the
 -- rows to delete" is a photograph nothing will ever come back for: the row that
 -- named it goes with the cascade and the object stays in the bucket forever.
 --
--- It is never cleared. A purge either finishes or is retried, and a race that
--- was being deleted is not a race anybody should be able to add evidence to.
+-- It is never cleared. Failed purges refresh it and record an attempt count so
+-- retention can back off before retrying. A race being deleted cannot accept
+-- new evidence.
 ALTER TABLE games ADD COLUMN IF NOT EXISTS purging_at TIMESTAMP WITH TIME ZONE;
+-- Failed retention purges are postponed with bounded backoff. The sweep keeps
+-- the error for diagnosis and prioritizes never-attempted games before retries.
+ALTER TABLE games ADD COLUMN IF NOT EXISTS purge_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE games ADD COLUMN IF NOT EXISTS purge_last_error TEXT;
 
--- Idempotency keys are scoped to their game. They used to be globally unique,
--- which meant a lookup by key alone could return a response produced for another
--- game entirely: replaying the join route that way handed back a foreign team's
--- join_token. The old single-column primary key is replaced rather than added to,
--- since it is what made the global namespace in the first place.
-ALTER TABLE idempotent_commands DROP CONSTRAINT IF EXISTS idempotent_commands_pkey;
+-- Migrate old command caches without rebuilding their primary key on every boot.
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
-        WHERE conrelid = 'idempotent_commands'::regclass AND contype = 'p'
+        WHERE conrelid = 'idempotent_commands'::regclass
+          AND contype = 'p'
+          AND pg_get_constraintdef(oid) = 'PRIMARY KEY (game_id, principal_id, command_type, key)'
     ) THEN
-        ALTER TABLE idempotent_commands ADD PRIMARY KEY (game_id, key);
+        ALTER TABLE idempotent_commands DROP CONSTRAINT IF EXISTS idempotent_commands_pkey;
+        ALTER TABLE idempotent_commands ADD PRIMARY KEY (game_id, principal_id, command_type, key);
     END IF;
 END $$;
 

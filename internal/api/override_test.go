@@ -202,7 +202,7 @@ func TestOverrideClearEffectHappyPath(t *testing.T) {
 	// full-race test's power-up flow.
 	r.advance(red, r.board.Mid1)
 	r.completeChallenge(red, r.board.Mid1, r.board.Mid1Challenge, "pass")
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf", "idempotency_key": uuid.NewString()}, red.Token)
 	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{
 		"powerup": "nerf", "target_team_id": blue.ID, "idempotency_key": uuid.New().String(),
 	}, red.Token)

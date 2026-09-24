@@ -40,7 +40,13 @@ func (p *GameStateProjection) roadLabel(roadID string) string {
 
 // placeParts resolves whether an identifier refers to a waypoint or road.
 func (p *GameStateProjection) placeParts(waypointID, roadID string) (kind, name string) {
-	for _, id := range []string{waypointID, roadID} {
+	ids := []string{waypointID, roadID}
+	if roadID != "" {
+		// A road challenge carries its active endpoint in waypointID; the road
+		// is the challenge target and should take precedence in player-facing text.
+		ids = []string{roadID, waypointID}
+	}
+	for _, id := range ids {
 		if id == "" {
 			continue
 		}

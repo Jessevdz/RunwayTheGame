@@ -7,11 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/Jessevdz/RunwayTheGame/internal/db"
 )
 
-// Power-up purchases are secret from rival teams: what a team buys is hidden until
-// it is used. Balances and power-up use stay public.
+// Power-up purchases and exact coin balances are private to a team and host;
+// power-up use stays public.
 
 // buyRace starts a race where Red has been funded and has bought a nerf.
 func buyRace(t *testing.T, ctx context.Context, database *db.DB) (*race, team, team) {
@@ -24,7 +26,7 @@ func buyRace(t *testing.T, ctx context.Context, database *db.DB) (*race, team, t
 	r.mustPost(http.StatusOK, "/override/coins", map[string]interface{}{
 		"team_id": red.ID, "delta": 50, "note": "test funding",
 	}, r.HostToken)
-	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf"}, red.Token)
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "nerf", "idempotency_key": uuid.NewString()}, red.Token)
 	return r, red, blue
 }
 
@@ -62,9 +64,11 @@ func TestRivalTeamCannotSeePowerupPurchase(t *testing.T) {
 	if _, ok := inventory[red.ID]; ok {
 		t.Errorf("a rival team can read Red's inventory over HTTP: %v", inventory)
 	}
-	// Balances stay public by design, so the standings still add up.
-	if coins[red.ID] != 40 {
-		t.Errorf("expected a rival to still read Red's balance of 40, got %d", coins[red.ID])
+	if _, ok := coins[red.ID]; ok {
+		t.Errorf("a rival can read Red's balance over HTTP: %v", coins)
+	}
+	if _, ok := coins[blue.ID]; !ok {
+		t.Errorf("Blue lost its own balance over HTTP: %v", coins)
 	}
 }
 
@@ -72,12 +76,15 @@ func TestBuyerAndHostSeeThePurchaseOverHTTP(t *testing.T) {
 	database, ctx := getTestDB(t)
 	r, red, _ := buyRace(t, ctx, database)
 
-	buyerLog, buyerInv, _ := gameLiveState(t, ctx, r, red.Token)
+	buyerLog, buyerInv, buyerCoins := gameLiveState(t, ctx, r, red.Token)
 	if !strings.Contains(strings.Join(buyerLog, "\n"), "purchased powerup") {
 		t.Errorf("the buyer lost its own purchase line:\n%s", strings.Join(buyerLog, "\n"))
 	}
 	if inv := buyerInv[red.ID]; len(inv) != 1 || inv[0] != "nerf" {
 		t.Errorf("the buyer lost its own inventory, got %v", buyerInv)
+	}
+	if buyerCoins[red.ID] != 40 {
+		t.Errorf("the buyer lost its own 40-coin balance, got %v", buyerCoins)
 	}
 
 	hostLog, hostInv, _ := gameLiveState(t, ctx, r, r.HostToken)
@@ -114,12 +121,25 @@ func TestRivalCannotSeePurchaseInRaceReport(t *testing.T) {
 		t.Fatalf("GET report: got %d — %s", w.Code, w.Body.String())
 	}
 	var report struct {
-		Timeline []string `json:"timeline"`
+		Timeline  []string `json:"timeline"`
+		Standings []struct {
+			TeamID       string `json:"team_id"`
+			CoinsVisible bool   `json:"coins_visible"`
+			Coins        int    `json:"coins"`
+		} `json:"standings"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
 		t.Fatalf("failed to decode the report: %v", err)
 	}
 	if joined := strings.Join(report.Timeline, "\n"); strings.Contains(joined, "purchased powerup") {
 		t.Errorf("the race report leaks a rival's purchase mid-race:\n%s", joined)
+	}
+	for _, row := range report.Standings {
+		if row.TeamID == blue.ID && !row.CoinsVisible {
+			t.Error("the race report hides the viewer's own coin balance")
+		}
+		if row.TeamID != blue.ID && row.CoinsVisible {
+			t.Errorf("the race report exposes rival %s's coin balance", row.TeamID)
+		}
 	}
 }

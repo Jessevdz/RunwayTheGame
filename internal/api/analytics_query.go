@@ -87,8 +87,8 @@ func analyticsWindow(raw string) int {
 // handleAnalyticsOverview returns aggregated usage for the requested window.
 func (s *Server) handleAnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.isAdminAuthorized(r) {
-		writeError(ctx, w, http.StatusUnauthorized, "unauthorized: invalid or missing admin credential")
+	if authorized, limited := s.isAdminAuthorized(r); !authorized {
+		writeAdminAuthFailure(w, r, limited, "unauthorized: invalid or missing admin credential")
 		return
 	}
 	if s.DB == nil || s.DB.Pool == nil {

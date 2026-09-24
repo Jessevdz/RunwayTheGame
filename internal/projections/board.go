@@ -46,6 +46,9 @@ func LoadBoard(ctx context.Context, conn eventstore.DBConnection, boardID string
 		}
 		b.Waypoints = append(b.Waypoints, wp)
 	}
+	if err := wpRows.Err(); err != nil {
+		return b, fmt.Errorf("failed to iterate waypoints: %w", err)
+	}
 
 	roadRows, err := conn.Query(ctx, `
 		SELECT id, waypoint_id_a, waypoint_id_b, length_m, challenge_id
@@ -70,6 +73,9 @@ func LoadBoard(ctx context.Context, conn eventstore.DBConnection, boardID string
 		}
 		b.Roads = append(b.Roads, road)
 	}
+	if err := roadRows.Err(); err != nil {
+		return b, fmt.Errorf("failed to iterate roads: %w", err)
+	}
 
 	rbRows, err := conn.Query(ctx, `
 		SELECT id, text
@@ -77,14 +83,19 @@ func LoadBoard(ctx context.Context, conn eventstore.DBConnection, boardID string
 		WHERE board_id = $1 AND board_version = $2
 		ORDER BY id
 	`, boardID, version)
-	if err == nil {
-		defer rbRows.Close()
-		for rbRows.Next() {
-			var card rules.Card
-			if err := rbRows.Scan(&card.ID, &card.Text); err == nil {
-				b.RoadblockDeck = append(b.RoadblockDeck, card)
-			}
+	if err != nil {
+		return b, fmt.Errorf("failed to load roadblock cards: %w", err)
+	}
+	defer rbRows.Close()
+	for rbRows.Next() {
+		var card rules.Card
+		if err := rbRows.Scan(&card.ID, &card.Text); err != nil {
+			return b, fmt.Errorf("failed to scan roadblock card: %w", err)
 		}
+		b.RoadblockDeck = append(b.RoadblockDeck, card)
+	}
+	if err := rbRows.Err(); err != nil {
+		return b, fmt.Errorf("failed to iterate roadblock cards: %w", err)
 	}
 
 	curseRows, err := conn.Query(ctx, `
@@ -93,14 +104,19 @@ func LoadBoard(ctx context.Context, conn eventstore.DBConnection, boardID string
 		WHERE board_id = $1 AND board_version = $2
 		ORDER BY id
 	`, boardID, version)
-	if err == nil {
-		defer curseRows.Close()
-		for curseRows.Next() {
-			var card rules.Card
-			if err := curseRows.Scan(&card.ID, &card.Text); err == nil {
-				b.CurseDeck = append(b.CurseDeck, card)
-			}
+	if err != nil {
+		return b, fmt.Errorf("failed to load curse cards: %w", err)
+	}
+	defer curseRows.Close()
+	for curseRows.Next() {
+		var card rules.Card
+		if err := curseRows.Scan(&card.ID, &card.Text); err != nil {
+			return b, fmt.Errorf("failed to scan curse card: %w", err)
 		}
+		b.CurseDeck = append(b.CurseDeck, card)
+	}
+	if err := curseRows.Err(); err != nil {
+		return b, fmt.Errorf("failed to iterate curse cards: %w", err)
 	}
 
 	costRows, err := conn.Query(ctx, `
@@ -109,15 +125,20 @@ func LoadBoard(ctx context.Context, conn eventstore.DBConnection, boardID string
 		WHERE board_id = $1 AND board_version = $2
 		ORDER BY powerup
 	`, boardID, version)
-	if err == nil {
-		defer costRows.Close()
-		for costRows.Next() {
-			var powerup string
-			var cost int
-			if err := costRows.Scan(&powerup, &cost); err == nil {
-				b.PowerupCosts[powerup] = cost
-			}
+	if err != nil {
+		return b, fmt.Errorf("failed to load power-up costs: %w", err)
+	}
+	defer costRows.Close()
+	for costRows.Next() {
+		var powerup string
+		var cost int
+		if err := costRows.Scan(&powerup, &cost); err != nil {
+			return b, fmt.Errorf("failed to scan power-up cost: %w", err)
 		}
+		b.PowerupCosts[powerup] = cost
+	}
+	if err := costRows.Err(); err != nil {
+		return b, fmt.Errorf("failed to iterate power-up costs: %w", err)
 	}
 
 	puRows, err := conn.Query(ctx, `
@@ -126,32 +147,44 @@ func LoadBoard(ctx context.Context, conn eventstore.DBConnection, boardID string
 		WHERE board_id = $1 AND board_version = $2
 		ORDER BY sort_order, id
 	`, boardID, version)
-	if err == nil {
-		defer puRows.Close()
-		for puRows.Next() {
-			var pu rules.Powerup
-			if err := puRows.Scan(&pu.ID, &pu.Icon, &pu.Name, &pu.Description, &pu.Cost, &pu.DurationS, &pu.Effect); err == nil {
-				b.Powerups = append(b.Powerups, pu)
-			}
+	if err != nil {
+		return b, fmt.Errorf("failed to load power-ups: %w", err)
+	}
+	defer puRows.Close()
+	for puRows.Next() {
+		var pu rules.Powerup
+		if err := puRows.Scan(&pu.ID, &pu.Icon, &pu.Name, &pu.Description, &pu.Cost, &pu.DurationS, &pu.Effect); err != nil {
+			return b, fmt.Errorf("failed to scan power-up: %w", err)
 		}
+		b.Powerups = append(b.Powerups, pu)
+	}
+	if err := puRows.Err(); err != nil {
+		return b, fmt.Errorf("failed to iterate power-ups: %w", err)
 	}
 
 	chRows, err := conn.Query(ctx, `
-		SELECT id, waypoint_id, prompt, rubric, coin_reward, veto_penalty_seconds
+		SELECT id, COALESCE(waypoint_id::text, ''), prompt, rubric, coin_reward, veto_penalty_seconds
 		FROM challenges
 		WHERE board_id = $1 AND board_version = $2
 		ORDER BY id
 	`, boardID, version)
-	if err == nil {
-		defer chRows.Close()
-		for chRows.Next() {
-			var ch rules.Challenge
-			var rubricBytes []byte
-			if err := chRows.Scan(&ch.ID, &ch.WaypointID, &ch.Prompt, &rubricBytes, &ch.CoinReward, &ch.VetoPenaltySeconds); err == nil {
-				_ = json.Unmarshal(rubricBytes, &ch.Rubric)
-				b.Challenges = append(b.Challenges, ch)
-			}
+	if err != nil {
+		return b, fmt.Errorf("failed to load challenges: %w", err)
+	}
+	defer chRows.Close()
+	for chRows.Next() {
+		var ch rules.Challenge
+		var rubricBytes []byte
+		if err := chRows.Scan(&ch.ID, &ch.WaypointID, &ch.Prompt, &rubricBytes, &ch.CoinReward, &ch.VetoPenaltySeconds); err != nil {
+			return b, fmt.Errorf("failed to scan challenge: %w", err)
 		}
+		if err := json.Unmarshal(rubricBytes, &ch.Rubric); err != nil {
+			return b, fmt.Errorf("failed to decode rubric for challenge %s: %w", ch.ID, err)
+		}
+		b.Challenges = append(b.Challenges, ch)
+	}
+	if err := chRows.Err(); err != nil {
+		return b, fmt.Errorf("failed to iterate challenges: %w", err)
 	}
 
 	if b.Waypoints == nil {

@@ -57,7 +57,10 @@ func (p *S3Presigner) PresignUpload(ctx context.Context, key string, contentType
 
 // PresignUploadWithHost returns a presigned PUT URL valid for ttl; the host is always taken from the configured endpoint.
 func (p *S3Presigner) PresignUploadWithHost(ctx context.Context, key string, contentType string, ttl time.Duration, reqHost string, reqScheme string) (string, error) {
-	return p.presign(ctx, http.MethodPut, key, ttl, reqHost, reqScheme)
+	if err := ValidateEvidenceContentType(contentType); err != nil {
+		return "", err
+	}
+	return p.presign(ctx, http.MethodPut, key, ttl, reqHost, reqScheme, contentType)
 }
 
 // PresignDownload returns a presigned GET URL valid for ttl.
@@ -67,7 +70,18 @@ func (p *S3Presigner) PresignDownload(ctx context.Context, key string, ttl time.
 
 // PresignDownloadWithHost returns a presigned GET URL valid for ttl; the host is only the configured endpoint.
 func (p *S3Presigner) PresignDownloadWithHost(ctx context.Context, key string, ttl time.Duration, reqHost string, reqScheme string) (string, error) {
-	return p.presign(ctx, http.MethodGet, key, ttl, reqHost, reqScheme)
+	return p.presign(ctx, http.MethodGet, key, ttl, reqHost, reqScheme, "")
+}
+
+// ValidateEvidenceContentType restricts uploads to formats the game treats as photos.
+// Exact canonical values keep the signed header identical to the browser's PUT header.
+func ValidateEvidenceContentType(contentType string) error {
+	switch contentType {
+	case "image/jpeg", "image/png", "image/webp":
+		return nil
+	default:
+		return fmt.Errorf("blobstore: unsupported evidence content type %q", contentType)
+	}
 }
 
 // deleteTTL defines the validity duration for signed DELETE requests.
@@ -89,7 +103,7 @@ func (p *S3Presigner) DeleteObject(ctx context.Context, key string) error {
 
 	internal := *p
 	internal.cfg.PublicEndpoint = ""
-	signed, err := internal.presign(ctx, http.MethodDelete, key, deleteTTL, "", "")
+	signed, err := internal.presign(ctx, http.MethodDelete, key, deleteTTL, "", "", "")
 	if err != nil {
 		return err
 	}
@@ -113,7 +127,7 @@ func (p *S3Presigner) DeleteObject(ctx context.Context, key string) error {
 }
 
 // presign generates a SigV4 presigned URL for the given HTTP method, key, and TTL.
-func (p *S3Presigner) presign(ctx context.Context, method string, key string, ttl time.Duration, reqHost string, reqScheme string) (string, error) {
+func (p *S3Presigner) presign(ctx context.Context, method string, key string, ttl time.Duration, reqHost string, reqScheme string, contentType string) (string, error) {
 	if p.cfg.Bucket == "" {
 		return "", fmt.Errorf("blobstore: bucket is not configured")
 	}
@@ -154,11 +168,14 @@ func (p *S3Presigner) presign(ctx context.Context, method string, key string, tt
 	query.Set("X-Amz-Credential", p.cfg.AccessKey+"/"+credentialScope)
 	query.Set("X-Amz-Date", amzDate)
 	query.Set("X-Amz-Expires", fmt.Sprintf("%d", int(ttl.Seconds())))
-	query.Set("X-Amz-SignedHeaders", "host")
-	canonicalQuery := query.Encode()
-
-	canonicalHeaders := "host:" + host + "\n"
 	signedHeaders := "host"
+	canonicalHeaders := "host:" + host + "\n"
+	if contentType != "" {
+		signedHeaders = "content-type;host"
+		canonicalHeaders = "content-type:" + contentType + "\n" + canonicalHeaders
+	}
+	query.Set("X-Amz-SignedHeaders", signedHeaders)
+	canonicalQuery := query.Encode()
 
 	canonicalRequest := strings.Join([]string{
 		method,

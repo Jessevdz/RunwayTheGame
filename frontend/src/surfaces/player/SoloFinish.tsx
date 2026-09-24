@@ -21,7 +21,7 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
   const [myRunId, setMyRunId] = useState<string | null>(null);
 
-  const { vetoCount, timePenaltySeconds } = gameState.clock;
+  const { vetoCount, skipCount, timePenaltySeconds } = gameState.clock;
   const walkingSeconds = Math.max(0, elapsedSeconds - timePenaltySeconds);
   const boardId = gameState.boardId;
 
@@ -75,8 +75,9 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
           </>
         )}
         {(!timeTrial || timePenaltySeconds === 0) && vetoCount > 0 && (
-          <Stat label="Skipped" value={vetoCount} hint={vetoCount === 1 ? 'challenge' : 'challenges'} />
+          <Stat label="Vetoes" value={vetoCount} hint={vetoCount === 1 ? 'challenge' : 'challenges'} />
         )}
+        {skipCount > 0 && <Stat label="Skipped" value={skipCount} hint={skipCount === 1 ? 'challenge' : 'challenges'} />}
       </div>
 
       {error && (
@@ -154,7 +155,8 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
                   </span>
                   <span className="player-standing__meta">
                     {formatClock(entry.elapsed_seconds)}
-                    {entry.veto_count > 0 && ` · ${entry.veto_count} skipped`}
+                    {entry.skip_count > 0 && ` · ${entry.skip_count} skipped`}
+                    {entry.veto_count > 0 && ` · ${entry.veto_count} vetoes`}
                   </span>
                 </li>
               ))}

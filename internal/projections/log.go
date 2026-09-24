@@ -53,5 +53,31 @@ func (p *GameStateProjection) RedactFor(viewerTeamID string, isHost bool) *GameS
 		view.Submissions = own
 	}
 
+	// A team's precise coin balance and disputes are private to that team and
+	// the host. Standings retain their ordering but omit rivals' balances.
+	if !isHost {
+		ownCoins := make(map[string]int, 1)
+		if value, ok := p.Coins[viewerTeamID]; ok && viewerTeamID != "" {
+			ownCoins[viewerTeamID] = value
+		}
+		view.Coins = ownCoins
+
+		view.StandingsList = append([]StandingRow(nil), p.StandingsList...)
+		for i := range view.StandingsList {
+			if view.StandingsList[i].TeamID != viewerTeamID || viewerTeamID == "" {
+				view.StandingsList[i].Coins = 0
+				view.StandingsList[i].CoinsVisible = false
+			}
+		}
+
+		ownDisputes := make(map[string]DisputeInfo, 1)
+		for id, dispute := range p.Disputes {
+			if dispute.ByTeamID == viewerTeamID && viewerTeamID != "" {
+				ownDisputes[id] = dispute
+			}
+		}
+		view.Disputes = ownDisputes
+	}
+
 	return &view
 }

@@ -20,6 +20,8 @@ import (
 	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
+var errGameNotLive = errors.New("game is not live")
+
 // ArriveRequest defines the payload for submitting a waypoint arrival.
 type ArriveRequest struct {
 	WaypointID     string  `json:"waypoint_id"`
@@ -99,7 +101,8 @@ func (s *Server) handleArrive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	effects := proj.Effects[team.ID]
-	if rules.IsFrozen(effects, time.Now().UTC()) {
+	now := time.Now().UTC()
+	if rules.IsFrozen(effects, now) {
 		writeError(r.Context(), w, http.StatusForbidden, "team is frozen")
 		return
 	}
@@ -109,21 +112,6 @@ func (s *Server) handleArrive(w http.ResponseWriter, r *http.Request) {
 	// Prevent coin rush teams that have reached the finish line from submitting further arrivals.
 	if reason, locked := coinRushLocksOut(game.Mode, prog); locked {
 		writeError(r.Context(), w, http.StatusForbidden, reason)
-		return
-	}
-
-	// A team cannot return to a waypoint they have already cleared.
-	targetCleared := rules.IsWaypointCleared(proj.WaypointStates[req.WaypointID], team.ID)
-	if !targetCleared {
-		for _, id := range prog.ClearedWaypoints {
-			if id == req.WaypointID {
-				targetCleared = true
-				break
-			}
-		}
-	}
-	if targetCleared {
-		writeError(r.Context(), w, http.StatusForbidden, "cannot return to an already cleared waypoint")
 		return
 	}
 
@@ -222,6 +210,13 @@ func (s *Server) handleArrive(w http.ResponseWriter, r *http.Request) {
 
 	handler := func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
 		txEvents := events
+		var status string
+		if err := tx.QueryRow(ctx, `SELECT status FROM games WHERE id = $1 FOR UPDATE`, gameID).Scan(&status); err != nil {
+			return nil, fmt.Errorf("checking race status: %w", err)
+		}
+		if status != "live" {
+			return nil, errGameNotLive
+		}
 
 		switch {
 		case !wpIsFinish:
@@ -229,8 +224,12 @@ func (s *Server) handleArrive(w http.ResponseWriter, r *http.Request) {
 
 		case !coinRush:
 			// Mark the game as ended and record the winning team.
-			if _, err := tx.Exec(ctx, `UPDATE games SET status = 'ended', winner_team_id = $1 WHERE id = $2`, team.ID, gameID); err != nil {
+			tag, err := tx.Exec(ctx, `UPDATE games SET status = 'ended', winner_team_id = $1 WHERE id = $2 AND status = 'live'`, team.ID, gameID)
+			if err != nil {
 				return nil, fmt.Errorf("closing the race: %w", err)
+			}
+			if tag.RowsAffected() != 1 {
+				return nil, errGameNotLive
 			}
 
 		default:
@@ -255,8 +254,15 @@ func (s *Server) handleArrive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retry concurrent arrival processing using the updated event sequence.
-	err = s.processArrivalWithRetry(r.Context(), gameID, idempotencyKey, arrivePayload, handler)
+	err = s.processArrival(r.Context(), gameID, idempotencyKey, proj.LastSequence+1, arrivePayload, handler)
 	if err != nil {
+		if errors.Is(err, errGameNotLive) {
+			writeError(r.Context(), w, http.StatusConflict, "game has already ended")
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to record arrival: "+err.Error())
 		return
 	}
@@ -265,7 +271,7 @@ func (s *Server) handleArrive(w http.ResponseWriter, r *http.Request) {
 }
 
 // requireChallengeAttempt verifies that a team has recorded a challenge attempt before submitting evidence.
-func (s *Server) requireChallengeAttempt(ctx context.Context, gameID, teamID, waypointID string) error {
+func (s *Server) requireChallengeAttempt(ctx context.Context, gameID, teamID, waypointID, roadID string) error {
 	var exists bool
 	err := s.DB.Pool.QueryRow(ctx, `
 		SELECT EXISTS (
@@ -273,9 +279,10 @@ func (s *Server) requireChallengeAttempt(ctx context.Context, gameID, teamID, wa
 			WHERE game_id = $1
 			  AND event_type = 'ChallengeAttemptStarted'
 			  AND payload->>'team_id' = $2
-			  AND COALESCE(NULLIF(payload->>'waypoint_id', ''), payload->>'road_id') = $3
+			  AND payload->>'waypoint_id' = $3
+			  AND COALESCE(payload->>'road_id', '') = $4
 		)
-	`, gameID, teamID, waypointID).Scan(&exists)
+	`, gameID, teamID, waypointID, roadID).Scan(&exists)
 	if err != nil {
 		return errors.New("failed to verify challenge attempt")
 	}
@@ -347,7 +354,7 @@ func validPositionFix(lat, lon, accuracyM float64) bool {
 
 // positionSitsOnUnreachedWaypoint reports whether a fix falls within the arrival
 // radius of a board waypoint the team has not yet reached.
-func (s *Server) positionSitsOnUnreachedWaypoint(ctx context.Context, gameID, boardID string, boardVersion int, teamID string, lat, lon float64) bool {
+func (s *Server) positionSitsOnUnreachedWaypoint(ctx context.Context, gameID, boardID string, boardVersion int, teamID string, lat, lon, accuracyM float64) bool {
 	reached := map[string]bool{}
 	rows, err := s.DB.Pool.Query(ctx, `
 		SELECT DISTINCT payload->>'waypoint_id' FROM events
@@ -391,7 +398,7 @@ func (s *Server) positionSitsOnUnreachedWaypoint(ctx context.Context, gameID, bo
 		if w.start || reached[w.id] {
 			continue
 		}
-		if geo.DistanceM(lat, lon, w.lat, w.lon) <= rules.ClampArrivalRadiusM(w.radiusM) {
+		if rules.CheckArrival(geo.DistanceM(lat, lon, w.lat, w.lon), w.radiusM, accuracyM).Allowed {
 			return true
 		}
 	}
@@ -425,7 +432,7 @@ func (s *Server) handlePosition(w http.ResponseWriter, r *http.Request) {
 
 	// Prevent a team from planting a fix on a waypoint it has not reached, which
 	// would zero the arrival-velocity gate for that waypoint.
-	if s.positionSitsOnUnreachedWaypoint(r.Context(), gameID, game.BoardID, game.BoardVersion, team.ID, req.Lat, req.Lon) {
+	if s.positionSitsOnUnreachedWaypoint(r.Context(), gameID, game.BoardID, game.BoardVersion, team.ID, req.Lat, req.Lon, req.AccuracyM) {
 		writeError(r.Context(), w, http.StatusBadRequest, "position cannot be at a waypoint the team has not reached")
 		return
 	}

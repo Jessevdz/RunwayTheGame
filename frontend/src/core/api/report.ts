@@ -11,6 +11,7 @@ export interface ReportEvidence {
   waypoint_id?: string;
   waypoint_name?: string;
   road_id?: string;
+  road_name?: string;
   challenge_id?: string;
   prompt?: string;
   status: 'pending' | 'pass' | 'fail';
@@ -38,6 +39,7 @@ export interface ReportStats {
   failed: number;
   pending: number;
   vetoes: number;
+  challenge_skips: number;
   waypoints_reached: number;
   disputes: number;
   disputes_upheld: number;
@@ -85,11 +87,12 @@ export interface RaceReport {
     waypoints_reached: number;
     distance_to_finish: number;
     coins: number;
+    coins_visible?: boolean;
     finished: boolean;
     finish_rank?: number;
     finish_bonus?: number;
   }>;
-  clock: { started_at?: string; finished_at?: string; time_penalty_seconds: number; veto_count: number };
+  clock: { started_at?: string; finished_at?: string; time_penalty_seconds: number; veto_count: number; skip_count: number };
   stats: ReportStats;
   evidence: ReportEvidence[];
   timeline: string[];

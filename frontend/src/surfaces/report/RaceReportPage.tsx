@@ -411,7 +411,8 @@ const StatGrid: React.FC<{ report: RaceReport }> = ({ report }) => {
       <Stat label="Rejected" value={s.failed} />
       {s.pending > 0 && <Stat label="Never graded" value={s.pending} hint="the race ended first" />}
       <Stat label="Waypoints" value={s.waypoints_reached} />
-      <Stat label="Skipped" value={s.vetoes} hint={solo && report.clock.time_penalty_seconds > 0 ? `+${formatDurationWords(report.clock.time_penalty_seconds)}` : undefined} />
+      <Stat label="Vetoes" value={s.vetoes} hint={solo && report.clock.time_penalty_seconds > 0 ? `+${formatDurationWords(report.clock.time_penalty_seconds)}` : undefined} />
+      <Stat label="Skipped" value={s.challenge_skips} />
       <Stat label="Coins earned" value={<><IconCoin /> {s.coins_earned}</>} />
       <Stat label="Coins spent" value={<><IconCoin /> {s.coins_spent}</>} />
       {s.finish_bonuses > 0 && <Stat label="Paid at the line" value={<><IconCoin /> {s.finish_bonuses}</>} />}
@@ -441,7 +442,8 @@ interface StandingRowView {
   teamId: string;
   teamName: string;
   waypoints: number;
-  coins: number;
+  coins: number | null;
+  coinsVisible: boolean;
   finishRank: number;
   finishBonus: number;
 }
@@ -468,7 +470,7 @@ const StandingsBoard: React.FC<{ report: RaceReport }> = ({ report }) => {
     // Coins lead in a coin rush, because that column is the result.
     ...(coinRush
       ? [
-        { key: 'coins', header: 'Coins', numeric: true, render: (row: StandingRowView) => <><IconCoin /> {row.coins}</> } as BoardColumn<StandingRowView>,
+        { key: 'coins', header: 'Coins', numeric: true, render: (row: StandingRowView) => row.coinsVisible ? <><IconCoin /> {row.coins}</> : <span aria-label="Coin balance hidden">Hidden</span> } as BoardColumn<StandingRowView>,
         {
           key: 'placed',
           header: 'Finish',
@@ -480,7 +482,7 @@ const StandingsBoard: React.FC<{ report: RaceReport }> = ({ report }) => {
     { key: 'waypoints', header: 'Waypoints', numeric: true, render: (row) => <>{row.waypoints}</> },
     ...(coinRush
       ? []
-      : [{ key: 'coins', header: 'Coins', numeric: true, render: (row: StandingRowView) => <><IconCoin /> {row.coins}</> } as BoardColumn<StandingRowView>]),
+      : [{ key: 'coins', header: 'Coins', numeric: true, render: (row: StandingRowView) => row.coinsVisible ? <><IconCoin /> {row.coins}</> : <span aria-label="Coin balance hidden">Hidden</span> } as BoardColumn<StandingRowView>]),
     {
       key: 'photos',
       header: 'Photos',
@@ -493,7 +495,8 @@ const StandingsBoard: React.FC<{ report: RaceReport }> = ({ report }) => {
     teamId: s.team_id,
     teamName: s.team_name,
     waypoints: s.waypoints_reached,
-    coins: s.coins,
+    coins: s.coins_visible === false ? null : s.coins,
+    coinsVisible: s.coins_visible !== false,
     finishRank: s.finish_rank ?? 0,
     finishBonus: s.finish_bonus ?? 0,
   }));
@@ -536,7 +539,9 @@ const EvidenceCard: React.FC<{
       </div>
 
       <p className="race-report__shot-where">
-        {item.kind === 'roadblock' ? 'Roadblock' : item.waypoint_name || 'Waypoint'}
+        {item.kind === 'roadblock'
+          ? 'Roadblock'
+          : item.road_name || item.waypoint_name || 'Waypoint'}
       </p>
 
       <div className="race-report__meta">
@@ -555,7 +560,11 @@ const Lightbox: React.FC<{ item: ReportEvidence; report: RaceReport | null; onCl
   const verdict = VERDICT[item.status] ?? VERDICT.pending;
 
   return (
-    <Dialog open title={item.waypoint_name || (item.kind === 'roadblock' ? 'Roadblock' : 'Waypoint')} onClose={onClose}>
+    <Dialog
+      open
+      title={item.kind === 'roadblock' ? 'Roadblock' : item.road_name || item.waypoint_name || 'Waypoint'}
+      onClose={onClose}
+    >
       <div className="race-report__lightbox">
         {item.photo_url && <img src={item.photo_url} alt={`Evidence from ${item.team_name}`} />}
         <dl>

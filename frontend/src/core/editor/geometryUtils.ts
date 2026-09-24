@@ -15,7 +15,9 @@ export interface RoadDraft {
   id: string;
   waypoint_id_a: string;
   waypoint_id_b: string;
+  challenge_id?: string | null;
   challenge?: {
+    id?: string;
     prompt: string;
     rubric: { must_show: string[]; fails_if: string[]; acceptable_ambiguity: string };
     coin_reward: number;

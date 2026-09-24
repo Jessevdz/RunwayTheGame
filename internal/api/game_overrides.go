@@ -13,6 +13,7 @@ import (
 	"github.com/Jessevdz/RunwayTheGame/internal/commands"
 	"github.com/Jessevdz/RunwayTheGame/internal/eventstore"
 	"github.com/Jessevdz/RunwayTheGame/internal/projections"
+	"github.com/Jessevdz/RunwayTheGame/internal/rules"
 )
 
 // OverrideCoinsRequest adjusts a team's coin balance by a signed delta.
@@ -24,11 +25,14 @@ type OverrideCoinsRequest struct {
 
 // OverrideClearChallengeRequest payload for manually completing a challenge for a team.
 type OverrideClearChallengeRequest struct {
-	TeamID     string `json:"team_id"`
-	WaypointID string `json:"waypoint_id"`
-	Note       string `json:"note"`
-	AwardCoins *bool  `json:"award_coins,omitempty"` // defaults to true when omitted
+	TeamID         string `json:"team_id"`
+	WaypointID     string `json:"waypoint_id"`
+	Note           string `json:"note"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	AwardCoins     *bool  `json:"award_coins,omitempty"` // defaults to true when omitted
 }
+
+var errChallengeAlreadyCleared = errors.New("challenge is already cleared")
 
 // OverrideClearEffectRequest payload for removing an active effect from a team.
 type OverrideClearEffectRequest struct {
@@ -62,16 +66,16 @@ func (s *Server) handleOverrideCoins(w http.ResponseWriter, r *http.Request) {
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load game state")
 		return
 	}
+	if rules.IsSoloMode(proj.Mode) {
+		writeError(r.Context(), w, http.StatusForbidden, "host overrides are disabled in solo runs")
+		return
+	}
 	if _, ok := proj.Teams[req.TeamID]; !ok {
 		writeError(r.Context(), w, http.StatusNotFound, "team not found in game")
 		return
 	}
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 
 	cmdReq := commands.CommandRequest{
 		GameID:      gameID,
@@ -85,6 +89,9 @@ func (s *Server) handleOverrideCoins(w http.ResponseWriter, r *http.Request) {
 	var appliedDelta, newBalance int
 
 	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		if err := guardLiveGameMutation(ctx, tx, gameID, proj); err != nil {
+			return nil, err
+		}
 		// Read current balance with row lock to avoid race conditions.
 		var prior int
 		switch err := tx.QueryRow(ctx, `
@@ -131,6 +138,12 @@ func (s *Server) handleOverrideCoins(w http.ResponseWriter, r *http.Request) {
 		}, nil
 	})
 	if err != nil {
+		if writeGameMutationGuardError(r.Context(), w, err) {
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to adjust coins: "+err.Error())
 		return
 	}
@@ -167,6 +180,10 @@ func (s *Server) handleOverrideClearChallenge(w http.ResponseWriter, r *http.Req
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load game state")
 		return
 	}
+	if rules.IsSoloMode(proj.Mode) {
+		writeError(r.Context(), w, http.StatusForbidden, "host overrides are disabled in solo runs")
+		return
+	}
 	if _, ok := proj.Teams[req.TeamID]; !ok {
 		writeError(r.Context(), w, http.StatusNotFound, "team not found in game")
 		return
@@ -194,41 +211,66 @@ func (s *Server) handleOverrideClearChallenge(w http.ResponseWriter, r *http.Req
 		coinReward = 0
 	}
 
-	completedPayload, _ := json.Marshal(eventstore.ChallengeCompletedPayload{
-		WaypointID:     req.WaypointID,
-		ChallengeID:    challengeID,
-		TeamID:         req.TeamID,
-		CoinReward:     coinReward,
-		FirstCompleter: true,
-		Source:         "gm",
-		Note:           req.Note,
-	})
-
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
+	expectedSeq := proj.LastSequence + 1
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = "override-clear-challenge:" + req.TeamID + ":" + req.WaypointID
+	} else {
+		idempotencyKey = "override-clear-challenge:" + req.TeamID + ":" + req.WaypointID + ":" + idempotencyKey
 	}
 
 	cmdReq := commands.CommandRequest{
-		GameID:      gameID,
-		CommandType: "ChallengeCompleted",
-		ExpectedSeq: expectedSeq,
-		Payload:     completedPayload,
+		GameID:             gameID,
+		CommandType:        "ChallengeCompleted",
+		PrincipalID:        "host",
+		IdempotencyPayload: idempotencyPayload(req),
+		ExpectedSeq:        expectedSeq,
+		IdempotencyKey:     idempotencyKey,
+		Payload:            []byte(`{}`),
 	}
 	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
-		events := []eventstore.Event{{Type: "ChallengeCompleted", Payload: string(cr.Payload)}}
+		if err := guardLiveGameMutation(ctx, tx, gameID, proj); err != nil {
+			return nil, err
+		}
+		var previousOwner string
+		err := tx.QueryRow(ctx, `
+			SELECT completed_by::text FROM road_progress
+			WHERE game_id = $1 AND road_id = $2 FOR UPDATE
+		`, gameID, req.WaypointID).Scan(&previousOwner)
+		firstCompleter := errors.Is(err, pgx.ErrNoRows)
+		if err != nil && !firstCompleter {
+			return nil, err
+		}
+		if !firstCompleter {
+			return nil, errChallengeAlreadyCleared
+		}
 
-		_, dbErr := tx.Exec(ctx, `
+		awardedCoins := 0
+		if awardCoins {
+			_, awardedCoins = rules.ChallengeOutcome(game.Ruleset, true, coinReward, firstCompleter)
+		}
+		completedBytes, err := json.Marshal(eventstore.ChallengeCompletedPayload{
+			WaypointID: req.WaypointID, ChallengeID: challengeID, TeamID: req.TeamID,
+			CoinReward: awardedCoins, FirstCompleter: firstCompleter, Source: "gm", Note: req.Note,
+		})
+		if err != nil {
+			return nil, err
+		}
+		events := []eventstore.Event{{Type: "ChallengeCompleted", Payload: string(completedBytes)}}
+
+		tag, dbErr := tx.Exec(ctx, `
 			INSERT INTO road_progress (game_id, road_id, completed_by, completed_at)
 			VALUES ($1, $2, $3, NOW())
-			ON CONFLICT (game_id, road_id) DO UPDATE SET completed_by = EXCLUDED.completed_by
+			ON CONFLICT (game_id, road_id) DO NOTHING
 		`, gameID, req.WaypointID, req.TeamID)
 		if dbErr != nil {
 			return nil, dbErr
 		}
+		if tag.RowsAffected() != 1 {
+			return nil, errChallengeAlreadyCleared
+		}
 
-		if coinReward > 0 {
+		if awardedCoins > 0 {
 			var newBalance int
 			dbErr = tx.QueryRow(ctx, `
 				INSERT INTO team_coins (game_id, team_id, balance)
@@ -236,13 +278,13 @@ func (s *Server) handleOverrideClearChallenge(w http.ResponseWriter, r *http.Req
 				ON CONFLICT (game_id, team_id)
 				DO UPDATE SET balance = team_coins.balance + EXCLUDED.balance
 				RETURNING balance
-			`, gameID, req.TeamID, coinReward).Scan(&newBalance)
+			`, gameID, req.TeamID, awardedCoins).Scan(&newBalance)
 			if dbErr != nil {
 				return nil, dbErr
 			}
 			coinsBytes, _ := json.Marshal(eventstore.CoinsChangedPayload{
 				TeamID:       req.TeamID,
-				Delta:        coinReward,
+				Delta:        awardedCoins,
 				BalanceAfter: newBalance,
 				Reason:       "gm_override",
 				Source:       "gm",
@@ -258,6 +300,16 @@ func (s *Server) handleOverrideClearChallenge(w http.ResponseWriter, r *http.Req
 		}, nil
 	})
 	if err != nil {
+		if errors.Is(err, errChallengeAlreadyCleared) {
+			writeError(r.Context(), w, http.StatusConflict, "this challenge is already cleared")
+			return
+		}
+		if writeGameMutationGuardError(r.Context(), w, err) {
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to clear challenge: "+err.Error())
 		return
 	}
@@ -285,6 +337,10 @@ func (s *Server) handleOverrideClearEffect(w http.ResponseWriter, r *http.Reques
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to load game state")
 		return
 	}
+	if rules.IsSoloMode(proj.Mode) {
+		writeError(r.Context(), w, http.StatusForbidden, "host overrides are disabled in solo runs")
+		return
+	}
 	if _, ok := proj.Teams[req.TeamID]; !ok {
 		writeError(r.Context(), w, http.StatusNotFound, "team not found in game")
 		return
@@ -309,11 +365,7 @@ func (s *Server) handleOverrideClearEffect(w http.ResponseWriter, r *http.Reques
 		Note:       req.Note,
 	})
 
-	expectedSeq, err := s.nextSequence(r.Context(), gameID)
-	if err != nil {
-		writeError(r.Context(), w, http.StatusInternalServerError, "failed to resolve sequence")
-		return
-	}
+	expectedSeq := proj.LastSequence + 1
 
 	cmdReq := commands.CommandRequest{
 		GameID:      gameID,
@@ -322,6 +374,9 @@ func (s *Server) handleOverrideClearEffect(w http.ResponseWriter, r *http.Reques
 		Payload:     payloadBytes,
 	}
 	_, err = s.CmdProcessor.Process(r.Context(), cmdReq, func(ctx context.Context, tx pgx.Tx, cr commands.CommandRequest) (*commands.CommandResult, error) {
+		if err := guardLiveGameMutation(ctx, tx, gameID, proj); err != nil {
+			return nil, err
+		}
 		_, dbErr := tx.Exec(ctx, `
 			DELETE FROM team_effects WHERE game_id = $1 AND team_id = $2 AND kind = $3
 		`, gameID, req.TeamID, req.EffectType)
@@ -337,6 +392,12 @@ func (s *Server) handleOverrideClearEffect(w http.ResponseWriter, r *http.Reques
 		}, nil
 	})
 	if err != nil {
+		if writeGameMutationGuardError(r.Context(), w, err) {
+			return
+		}
+		if writeConcurrencyConflict(r.Context(), w, err) {
+			return
+		}
 		writeError(r.Context(), w, http.StatusInternalServerError, "failed to clear effect: "+err.Error())
 		return
 	}

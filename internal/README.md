@@ -8,9 +8,9 @@ The `/internal` directory contains the core server-side packages that run Runway
 
 Runway utilizes an **Event Sourcing** architecture to implement a narrow write path and a wide, disposable read path. 
 
-1. **Commands (Writes)**: All mutating requests (e.g., waypoint capture, battle submission, scoring ticks) are formulated as commands and processed via a central transactional command pipeline (`internal/commands`). This pipeline performs idempotency checks, transaction management, and optimistic concurrency verification before committing state.
+1. **Commands (Writes)**: Mutating requests (e.g., waypoint captures, challenge submissions, and power-up purchases) are processed through the command pipeline (`internal/commands`). This pipeline performs idempotency checks, transaction management, and optimistic concurrency verification before committing state.
 2. **Events (State Changes)**: A successful command appends one or more events to the `internal/eventstore` database table within a serializable database transaction. The event log represents the single append-only source of truth.
-3. **Projections (Reads)**: Read models are generated dynamically via event folding (`internal/projections`). When the event stream changes, the projection engine rebuilds or incrementally updates the game state projection (ownership, standings, active battles) to broadcast to client PWAs over WebSockets (`internal/api`).
+3. **Projections (Reads)**: Read models are generated dynamically via event folding (`internal/projections`). When the event stream changes, the projection engine rebuilds or incrementally updates team progress, waypoint and road state, balances, standings, and active effects, then broadcasts updates to client PWAs over WebSockets (`internal/api`).
 4. **Asynchronous LLM Verification**: Photo verification is processed out-of-band by a pool of stateless workers (`internal/verification`). These workers poll a Postgres outbox queue (`internal/jobs`), download submissions directly from object storage (`internal/blobstore`), run GPS/velocity heuristics, invoke Scaleway Multimodal Generative LLM APIs for rubric evaluation, and submit verdict commands back into the REST API.
 5. **Closed-Vocabulary Telemetry**: Application usage and interaction events are validated and sanitized via a strict closed vocabulary (`internal/analytics`) before persistence, ensuring zero free-form strings or PII are stored.
 
@@ -29,12 +29,12 @@ The `/internal` directory contains the following packages:
 | **[`config`](config)** | Centralized environment variable resolution with typed fallbacks (`EnvOr`, `EnvIntOr`). | [`env.go`](config/env.go) |
 | **[`db`](db)** | Wraps the `pgxpool.Pool` connection pool and implements automated Postgres database schema migrations utilizing embedded SQL (`//go:embed`). | [`db.go`](db/db.go), [`schema.sql`](db/schema.sql) |
 | **[`eventstore`](eventstore)** | Provides sequential event insertion with optimistic concurrency checks (`sequence` mismatch protection) and event stream retrieval. | [`events.go`](eventstore/events.go), [`types.go`](eventstore/types.go) |
-| **[`geo`](geo)** | Houses graph-based geographic computation helpers including 3-cycle (triangle) enumeration, PostGIS area math, triangle adjacency, geodesic/haversine math, and board publishing validation. | [`geo.go`](geo/geo.go), [`publish.go`](geo/publish.go), [`validation.go`](geo/validation.go) |
+| **[`geo`](geo)** | Computes geodesic and haversine distances, publishes board snapshots, and validates board geometry and connectivity. | [`geo.go`](geo/geo.go), [`publish.go`](geo/publish.go), [`validation.go`](geo/validation.go) |
 | **[`jobs`](jobs)** | Defines Postgres-backed outbox queue entries and scheduler helpers for background tasks (e.g., photo verification jobs). | [`jobs.go`](jobs/jobs.go) |
 | **[`logger`](logger)** | Implements structured JSON logging with support for context-propagated trace IDs (`X-Trace-ID`). | [`logger.go`](logger/logger.go) |
 | **[`projections`](projections)** | Computes in-memory read models (`GameStateProjection`) by replaying the event stream for a specific game sequence, enforcing tracker-off position privacy filters. | [`rebuild.go`](projections/rebuild.go), [`derive.go`](projections/derive.go), [`state.go`](projections/state.go), [`board.go`](projections/board.go) + `fold_*.go` |
-| **[`rules`](rules)** | Implements pure domain logic for game mechanics (waypoint reachability BFS, majority-of-corners triangle ownership, score compilation, Coin Rush mechanics, GPS validation, and battle resolution). | [`engine.go`](rules/engine.go), [`types.go`](rules/types.go), [`gps.go`](rules/gps.go) |
-| **[`scheduler`](scheduler)** | Drives background timers (scoring tick intervals, battle timeout checks, Coin Rush intervals) by polling live games and injecting commands into the processor. | [`scheduler.go`](scheduler/scheduler.go) |
+| **[`rules`](rules)** | Provides pure domain helpers for road traversal and waypoint state, challenge outcomes and veto timing, shortest remaining route estimates, power-up and effect checks, ruleset normalization, Coin Rush rankings, and GPS arrival and speed validation. | [`engine.go`](rules/engine.go), [`types.go`](rules/types.go), [`gps.go`](rules/gps.go) |
+| **[`scheduler`](scheduler)** | Periodically broadcasts live game projections and ends games whose countdowns or deadlines have lapsed. | [`scheduler.go`](scheduler/scheduler.go) |
 | **[`testsupport`](testsupport)** | Provides isolated per-package test database provisioning (`runway_test_<pkg>`), fixture setup, and cleanup utilities for parallel integration testing. | [`testsupport.go`](testsupport/testsupport.go) |
 | **[`verification`](verification)** | Orchestrates asynchronous rubric validation, including EXIF and GPS-velocity heuristics, Scaleway/Gemini API calls, auto-escalation, and verdict submission. | [`worker.go`](verification/worker.go), [`scaleway.go`](verification/scaleway.go), [`heuristics.go`](verification/heuristics.go), [`types.go`](verification/types.go) |
 
@@ -59,7 +59,7 @@ flowchart TD
         rules["rules (Pure Domain Logic)"]
         proj["projections (Read-Model Builder)"]
         eventsvc["eventstore (Append-Only Log)"]
-        scheduler["scheduler (Scoring & Timeouts)"]
+        scheduler["scheduler (Broadcasts & Deadline Sweeps)"]
         geo["geo (Geographic & PostGIS Math)"]
         db["db (Postgres Pool & Migrator)"]
         blob["blobstore (Presigner & Fetcher)"]
@@ -90,7 +90,7 @@ flowchart TD
     scheduler -->|Periodic Command| cmd
     
     %% Command execution pipeline
-    cmd -->|2. Check Rules| rules
+    cmd -->|2. Use Domain Helpers| rules
     rules -->|3. Geo Math| geo
     cmd -->|4. Append Events| eventsvc
     cmd -->|5. Queue Worker Job| jobs
@@ -118,13 +118,11 @@ flowchart TD
 
 ## Design Principles & Patterns
 
-1. **State Machine Purity**:
-   The `rules` engine is a pure function of state, command, ruleset, and time:
-   `RulesEngine(currentProjection, command, ruleset, clock) -> (events, error)`
-   It performs no file I/O, database queries, clock reads, or random number generation. This ensures that the engine is highly testable and deterministic.
+1. **Pure Domain Helpers**:
+   Functions in `internal/rules` take explicit game values and return decisions or calculations. They do not perform file I/O, database queries, or read the clock; callers supply time-dependent inputs. The package provides reusable game-rule calculations rather than a single command-to-events state machine.
 
 2. **Command/Event Separation**:
-   Mutating actions must never be written directly to the database or intermediate projections. Mutating requests must undergo the full verification loop by submitting a command to the REST API, validating it in the rules engine, and appending it to the Event Store. The projection builder is the sole updater of read state.
+   Mutating actions are recorded as events through the command pipeline, and projections derive read state from those events. API handlers use the relevant domain helpers while validating and applying each action before appending its events.
 
 3. **Direct-to-Object-Storage Uploads**:
    Heavy assets (like photographic evidence) do not transit the game server. The client requests a presigned URL via the REST API (generated by `internal/blobstore`), uploads the image directly to MinIO/S3, and sends only the metadata and a `blob_ref` to the API.
@@ -151,6 +149,6 @@ Each package houses corresponding Go tests (e.g., `engine_test.go`, `projections
   go test -v ./internal/...
   ```
 - Automated database test isolation is managed via `internal/testsupport`, which provisions isolated test databases (`runway_test_<pkg>`) to ensure clean state and avoid lock contention during parallel package runs.
-- Because package logic in `internal/rules` is a pure function of state, complex game mechanics (such as GPS reachability, boundary severing, and score recalculations) are verified with zero external database dependencies.
+- Pure calculations in `internal/rules`, such as road gating, route estimates, Coin Rush ranking, and GPS arrival checks, can be verified without an external database. Integration behavior involving event folding or database persistence belongs in the corresponding projection or API tests.
 
 

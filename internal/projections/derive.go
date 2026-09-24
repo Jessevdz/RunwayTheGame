@@ -3,6 +3,7 @@ package projections
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
 
@@ -38,18 +39,22 @@ func hydratePositions(ctx context.Context, conn eventstore.DBConnection, gameID 
 }
 
 // hydrateRuleset populates the game's stored ruleset onto the projection.
-func hydrateRuleset(ctx context.Context, conn eventstore.DBConnection, gameID string, p *GameStateProjection) {
+func hydrateRuleset(ctx context.Context, conn eventstore.DBConnection, gameID string, p *GameStateProjection) error {
 	var rulesetBytes []byte
 	if err := conn.QueryRow(ctx, `SELECT ruleset FROM games WHERE id = $1`, gameID).Scan(&rulesetBytes); err != nil {
+		return fmt.Errorf("failed to load ruleset for game %s: %w", gameID, err)
+	}
+	if len(rulesetBytes) == 0 {
+		// Rows created before ruleset persistence may have no stored value.
 		p.Ruleset = rules.DefaultRuleset()
-		return
+		return nil
 	}
 	var rs rules.Ruleset
 	if err := json.Unmarshal(rulesetBytes, &rs); err != nil {
-		p.Ruleset = rules.DefaultRuleset()
-		return
+		return fmt.Errorf("failed to decode ruleset for game %s: %w", gameID, err)
 	}
 	p.Ruleset = rules.NormalizeRuleset(rs)
+	return nil
 }
 
 // applyCoinRushDeadline calculates the coin rush deadline based on the first finish timestamp and ruleset configuration.
@@ -92,6 +97,7 @@ func computeStandings(p *GameStateProjection) {
 			WaypointsReached: len(prog.ClearedWaypoints),
 			DistanceToFinish: distRemaining,
 			Coins:            coins,
+			CoinsVisible:     true,
 			Finished:         prog.ReachedFinish,
 		}
 		if fin, ok := finishers[teamID]; ok {

@@ -26,7 +26,9 @@ var payloadPrototypes = map[string]func() interface{}{
 	"SubmissionCreated":       func() interface{} { return new(SubmissionCreatedPayload) },
 	"VerdictReturned":         func() interface{} { return new(VerdictReturnedPayload) },
 	"ChallengeCompleted":      func() interface{} { return new(ChallengeCompletedPayload) },
+	"ChallengeRevoked":        func() interface{} { return new(ChallengeRevokedPayload) },
 	"ChallengeVetoed":         func() interface{} { return new(ChallengeVetoedPayload) },
+	"ChallengeSkipped":        func() interface{} { return new(ChallengeSkippedPayload) },
 	"ChallengeConflictNoted":  func() interface{} { return new(ChallengeConflictNotedPayload) },
 	"WaypointReached":         func() interface{} { return new(WaypointReachedPayload) },
 	"TeamFinished":            func() interface{} { return new(TeamFinishedPayload) },
@@ -36,6 +38,7 @@ var payloadPrototypes = map[string]func() interface{}{
 	"CardDrawn":               func() interface{} { return new(CardDrawnPayload) },
 	"RoadblockPlaced":         func() interface{} { return new(RoadblockPlacedPayload) },
 	"RoadblockCleared":        func() interface{} { return new(RoadblockClearedPayload) },
+	"RoadblockClearRevoked":   func() interface{} { return new(RoadblockClearRevokedPayload) },
 	"ArrivalFlagged":          func() interface{} { return new(ArrivalFlaggedPayload) },
 	"CurseApplied":            func() interface{} { return new(CurseAppliedPayload) },
 	"CurseCleared":            func() interface{} { return new(CurseClearedPayload) },
@@ -76,9 +79,10 @@ func ValidateEvent(e Event) error {
 
 // GameCreatedPayload represents a game creation event.
 type GameCreatedPayload struct {
-	BoardID  string    `json:"board_id"`
-	StartsAt time.Time `json:"starts_at"`
-	EndsAt   time.Time `json:"ends_at"`
+	BoardID      string    `json:"board_id"`
+	BoardVersion int       `json:"board_version,omitempty"`
+	StartsAt     time.Time `json:"starts_at"`
+	EndsAt       time.Time `json:"ends_at"`
 	// Mode identifies the game mode (e.g. team or solo) and determines replay rules.
 	Mode string `json:"mode,omitempty"`
 }
@@ -116,25 +120,39 @@ type SubmissionCreatedPayload struct {
 
 // VerdictReturnedPayload represents a verdict returned for a submission.
 type VerdictReturnedPayload struct {
-	SubmissionID string  `json:"submission_id"`
-	Verdict      string  `json:"verdict"` // "pass" | "fail"
-	Confidence   float64 `json:"confidence"`
-	Rationale    string  `json:"rationale"`
-	MetricValue  float64 `json:"metric_value,omitempty"`
+	SubmissionID string   `json:"submission_id"`
+	Verdict      string   `json:"verdict"` // "pass" | "fail"
+	Confidence   float64  `json:"confidence"`
+	Rationale    string   `json:"rationale"`
+	MetricValue  *float64 `json:"metric_value,omitempty"`
 	// Source specifies the grader identity (e.g. model, host, or trusted source).
 	Source string `json:"source,omitempty"`
 }
 
 // ChallengeCompletedPayload represents the completion of a challenge.
 type ChallengeCompletedPayload struct {
-	WaypointID     string `json:"waypoint_id"`
-	RoadID         string `json:"road_id,omitempty"`
-	ChallengeID    string `json:"challenge_id"`
-	TeamID         string `json:"team_id"`
-	CoinReward     int    `json:"coin_reward"`
-	FirstCompleter bool   `json:"first_completer"`
-	Source         string `json:"source,omitempty"` // "gm" for host overrides, empty for gameplay
-	Note           string `json:"note,omitempty"`   // host-supplied reason, shown in the public log
+	WaypointID     string   `json:"waypoint_id"`
+	RoadID         string   `json:"road_id,omitempty"`
+	ChallengeID    string   `json:"challenge_id"`
+	TeamID         string   `json:"team_id"`
+	CoinReward     int      `json:"coin_reward"`
+	FirstCompleter bool     `json:"first_completer"`
+	MetricValue    *float64 `json:"metric_value,omitempty"`
+	Source         string   `json:"source,omitempty"` // "gm" for host overrides, empty for gameplay
+	Note           string   `json:"note,omitempty"`   // host-supplied reason, shown in the public log
+}
+
+// ChallengeRevokedPayload records a correction when an accepted challenge is revoked.
+// It carries the state restoration decided by the command so replay is deterministic.
+type ChallengeRevokedPayload struct {
+	SubmissionID       string `json:"submission_id"`
+	TeamID             string `json:"team_id"`
+	WaypointID         string `json:"waypoint_id,omitempty"`
+	RoadID             string `json:"road_id,omitempty"`
+	ChallengeID        string `json:"challenge_id"`
+	CoinReward         int    `json:"coin_reward"`
+	RestoreCompletedBy string `json:"restore_completed_by,omitempty"`
+	RevokeClear        bool   `json:"revoke_clear"`
 }
 
 // ChallengeVetoedPayload represents a challenge veto event.
@@ -147,6 +165,14 @@ type ChallengeVetoedPayload struct {
 	PenaltyUntil time.Time `json:"penalty_until"`
 	// TimePenaltySeconds is the penalty added to time-trial runs, if applicable.
 	TimePenaltySeconds int `json:"time_penalty_seconds,omitempty"`
+}
+
+// ChallengeSkippedPayload records a challenge bypassed by a purchased skip.
+type ChallengeSkippedPayload struct {
+	TeamID      string `json:"team_id"`
+	WaypointID  string `json:"waypoint_id"`
+	RoadID      string `json:"road_id,omitempty"`
+	ChallengeID string `json:"challenge_id"`
 }
 
 // WaypointReachedPayload represents reaching a waypoint.
@@ -212,6 +238,14 @@ type RoadblockClearedPayload struct {
 	RoadID       string `json:"road_id"`
 	TeamID       string `json:"team_id"`
 	SubmissionID string `json:"submission_id,omitempty"`
+}
+
+// RoadblockClearRevokedPayload records a correction when accepted evidence for a roadblock clear is revoked.
+type RoadblockClearRevokedPayload struct {
+	RoadID       string `json:"road_id"`
+	TeamID       string `json:"team_id"`
+	SubmissionID string `json:"submission_id"`
+	RevokeClear  bool   `json:"revoke_clear"`
 }
 
 // CurseAppliedPayload represents applying a curse to a team.

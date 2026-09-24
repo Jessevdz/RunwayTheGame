@@ -31,7 +31,9 @@ export const RouteStrip: React.FC<RouteStripProps> = ({ routes, selectedWaypoint
               <span className="route-chip__dot" aria-hidden="true" />
               {route.blocked
                 ? 'Roadblock'
-                : route.distance === null
+                : route.road.challengeId && route.road.lockState === 'locked'
+                  ? 'Road challenge'
+                  : route.distance === null
                   ? 'No GPS'
                   : route.inRange
                     ? 'In range'

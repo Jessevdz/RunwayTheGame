@@ -331,6 +331,7 @@ func TestDuplicateElementIDsAcrossBoards(t *testing.T) {
 				"waypoint_id_a": sharedWaypointID,
 				"waypoint_id_b": waypoint2ID,
 				"length_m":      1000.0,
+				"challenge_id":  sharedChallengeID,
 			},
 		},
 		"challenges": []map[string]interface{}{
@@ -401,4 +402,3 @@ func TestRejectOrphanedChallengeWaypointID(t *testing.T) {
 		t.Fatalf("expected 400 Bad Request when challenge references unknown waypoint, got %d. Body: %s", w.Code, w.Body.String())
 	}
 }
-

@@ -93,10 +93,8 @@ func NewServer(database *db.DB) *Server {
 		adminSessions:       newAdminSessionStore(adminSessionTTL),
 		adminCookieSameSite: http.SameSiteStrictMode,
 		ipLimiter:           newRateLimiter(4, 60, 10*time.Minute),
-		// Five failed admin sign-ins, then one more per half hour. Only wrong
-		// keys are charged, and only after the key has been judged, so a
-		// correct key is never refused and a successful sign-in clears the
-		// address outright.
+		// Five admin credential attempts, then one more per half hour. A
+		// successful credential clears the address budget.
 		adminAuthLimiter:     newRateLimiter(1.0/1800.0, 5, 6*time.Hour),
 		positionLimiter:      newRateLimiter(0.2, 2, 30*time.Minute),
 		codeLookupLimiter:    newRateLimiter(0.1, 10, 30*time.Minute),
@@ -106,8 +104,8 @@ func NewServer(database *db.DB) *Server {
 		// A playtester who finds five things in a row should be able to file
 		// five reports; the point of the feature is that reporting is cheaper
 		// than remembering. One more every two minutes after that.
-		bugReportLimiter:     newRateLimiter(1.0/120.0, 5, 30*time.Minute),
-		analyticsLimiter:     newRateLimiter(1.0, 20, 10*time.Minute),
+		bugReportLimiter: newRateLimiter(1.0/120.0, 5, 30*time.Minute),
+		analyticsLimiter: newRateLimiter(1.0, 20, 10*time.Minute),
 	}
 	s.upgrader = s.newUpgrader()
 	s.CmdProcessor.OnCommit = s.broadcastProjection

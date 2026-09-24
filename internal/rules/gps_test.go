@@ -64,12 +64,12 @@ func TestCheckArrival(t *testing.T) {
 		wantReason string
 	}{
 		{"standing on it with a perfect fix", 0, radius, 5, true, ArrivalAllowed},
-		{"just inside the radius", 24, radius, 5, true, ArrivalAllowed},
+		{"inside the remaining radius after accuracy margin", 20, radius, 5, true, ArrivalAllowed},
 		{"exactly on the radius", 25, radius, 0, true, ArrivalAllowed},
 		{"just outside, no slack claimed", 26, radius, 0, false, ArrivalReasonOutOfRange},
-		{"outside but inside the accuracy slack", 40, radius, 20, true, ArrivalAllowed},
-		{"slack is capped at the radius", 51, radius, 100, false, ArrivalReasonOutOfRange},
-		{"slack cap boundary", 50, radius, 100, true, ArrivalAllowed},
+		{"accuracy margin does not extend the radius", 40, radius, 20, false, ArrivalReasonOutOfRange},
+		{"accuracy equal to the radius only permits its center", 0, radius, radius, true, ArrivalAllowed},
+		{"accuracy exceeding the radius rejects even at the old slack boundary", 50, radius, 100, false, ArrivalReasonOutOfRange},
 		{"accuracy beyond the ceiling", 0, radius, MaxPlausibleAccuracyM + 0.1, false, ArrivalReasonBadAccuracy},
 		{"negative accuracy", 0, radius, -1, false, ArrivalReasonBadAccuracy},
 		{"NaN accuracy", 0, radius, math.NaN(), false, ArrivalReasonBadAccuracy},

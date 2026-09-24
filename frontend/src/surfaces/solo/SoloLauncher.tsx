@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   createSoloRun,
@@ -17,6 +17,7 @@ import { saveTeamSession } from '../../core/game/teamSession';
 import { loadPlayerName, savePlayerName } from '../../core/game/playerIdentity';
 import { rememberRace } from '../../core/game/raceSession';
 import { getEditToken } from '../../core/game/mapSession';
+import { generateUUID } from '../../core/util/uuid';
 import { formatClock } from '../../core/format/clock';
 import { HostMapCard } from '../host/components/HostMapCard';
 import { BoardFilterBar } from '../shared/BoardFilterBar';
@@ -58,6 +59,7 @@ const GRADING: Array<{ id: SoloVerificationMode; title: string; blurb: string }>
 /** Solo run launcher surface component. */
 export const SoloLauncher: React.FC = () => {
   const navigate = useNavigate();
+  const soloCreateAttempt = useRef<{ signature: string; key: string } | null>(null);
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [records, setRecords] = useState<Record<string, { seconds: number; name: string }>>({});
   const [loading, setLoading] = useState(true);
@@ -109,12 +111,20 @@ export const SoloLauncher: React.FC = () => {
   };
 
   const startRun = async (board: BoardSummary) => {
-    const run = await createSoloRun({
+    const payload = {
       board_id: board.id,
       board_version: 1,
       mode,
       runner_name: runnerName.trim() || 'Runner',
       ruleset: { verification: mode === 'solo_casual' ? 'trust' : verification }
+    };
+    const signature = JSON.stringify(payload);
+    if (!soloCreateAttempt.current || soloCreateAttempt.current.signature !== signature) {
+      soloCreateAttempt.current = { signature, key: generateUUID() };
+    }
+    const run = await createSoloRun({
+      ...payload,
+      idempotency_key: soloCreateAttempt.current.key
     });
 
     saveHostSession({ gameId: run.game_id, hostToken: run.host_token });
@@ -135,6 +145,7 @@ export const SoloLauncher: React.FC = () => {
       mode: run.mode
     });
     analytics.track('board.race_launched', { mode: run.mode });
+    soloCreateAttempt.current = null;
     return run;
   };
 

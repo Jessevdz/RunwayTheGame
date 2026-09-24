@@ -35,7 +35,7 @@ interface PlayerConsoleProps {
   onLeave: () => void;
   /** Callback to end a solo run session; omitted in team races. */
   onEndRun?: () => Promise<void>;
-  onStartChallenge: (waypointId: string, prompt: string, rubric: any, challengeId?: string) => void;
+  onStartChallenge: (waypointId: string, prompt: string, rubric: any, challengeId?: string, roadId?: string) => void;
   /** Opens the capture flow for the roadblock card standing on a road. */
   onClearRoadblock: (roadId: string, cardText: string) => void;
 }
@@ -84,7 +84,7 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
     on: {
       startChallenge: actions.startChallenge,
       arrive: actions.arrive,
-      askVeto: (waypointId) => overlays.open({ kind: 'veto', waypointId })
+      askVeto: (waypointId, roadId) => overlays.open({ kind: 'veto', waypointId, roadId })
     }
   });
 
@@ -194,9 +194,9 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
           vetoCooldown={gameState.ruleset.vetoPenaltyMinSeconds}
           onCancel={overlays.close}
           onConfirm={() => {
-            const { waypointId } = overlay;
+            const { waypointId, roadId } = overlay;
             overlays.close();
-            void actions.veto(waypointId);
+            void actions.veto(waypointId, roadId);
           }}
         />
       )}
@@ -224,7 +224,11 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
           session={session}
           gameState={gameState}
           gatingWaypointId={
-            !route.isCurrentWaypointCleared ? route.currentWaypoint?.id : undefined
+            !route.isCurrentWaypointCleared
+              ? route.currentWaypoint?.id
+              : route.destination?.road.challengeId && route.destination.road.lockState === 'locked'
+                ? route.destination.road.id
+                : undefined
           }
           onClose={overlays.close}
         />

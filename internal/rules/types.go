@@ -1,7 +1,10 @@
 package rules
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -36,7 +39,9 @@ func (s *Road) UnmarshalJSON(data []byte) error {
 	}{
 		Alias: (*Alias)(s),
 	}
-	if err := json.Unmarshal(data, &aux); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&aux); err != nil {
 		return err
 	}
 	if s.WaypointIDA == "" && aux.WaypointA != "" {
@@ -65,6 +70,10 @@ type Powerup struct {
 	Effect      string `json:"effect"`
 }
 
+// MaxPowerupDurationSeconds bounds board-authored timers before they are used
+// to construct runtime timestamps.
+const MaxPowerupDurationSeconds = 365 * 24 * 60 * 60
+
 // Ruleset defines game timing, powerup costs, and operational configurations.
 type Ruleset struct {
 	CoinRewardMin             int            `json:"coin_reward_min"`
@@ -87,6 +96,70 @@ type Ruleset struct {
 	CoinRushCountdownSeconds int `json:"coin_rush_countdown_seconds"`
 	// Verification specifies the photo evidence grading mode.
 	Verification string `json:"verification"`
+
+	providedFields  map[string]struct{}
+	decodedFromJSON bool
+}
+
+// UnmarshalJSON records which ruleset fields were supplied so normalization
+// can distinguish an omitted value from an explicit false or zero.
+func (rs *Ruleset) UnmarshalJSON(data []byte) error {
+	type rulesetAlias Ruleset
+	var decoded rulesetAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for field, value := range fields {
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return fmt.Errorf("ruleset field %q cannot be null", field)
+		}
+	}
+	*rs = Ruleset(decoded)
+	rs.providedFields = make(map[string]struct{}, len(fields))
+	rs.decodedFromJSON = true
+	for field := range fields {
+		rs.providedFields[canonicalRulesetField(field)] = struct{}{}
+	}
+	return nil
+}
+
+func canonicalRulesetField(name string) string {
+	loweredName := strings.ToLower(name)
+	for _, tag := range []string{
+		"coin_reward_min", "coin_reward_max", "veto_penalty_min_seconds", "veto_penalty_max_seconds",
+		"powerup_costs", "reward_only_first_completer", "freeze_duration_seconds",
+		"tracker_off_duration_seconds", "curse_duration_seconds", "veto_time_penalty_seconds",
+		"coin_rush_finish_bonuses", "coin_rush_late_finish_bonus", "coin_rush_countdown_seconds", "verification",
+	} {
+		if loweredName == tag {
+			return tag
+		}
+	}
+	return loweredName
+}
+
+// HasNonVerificationSettings reports whether a JSON-decoded ruleset explicitly
+// supplies any value other than the selectable verification mode.
+func (rs Ruleset) HasNonVerificationSettings() bool {
+	if rs.decodedFromJSON {
+		for field := range rs.providedFields {
+			if field != "verification" {
+				return true
+			}
+		}
+		return false
+	}
+	return rs.CoinRewardMin != 0 || rs.CoinRewardMax != 0 ||
+		rs.VetoPenaltyMinSeconds != 0 || rs.VetoPenaltyMaxSeconds != 0 ||
+		len(rs.PowerupCosts) > 0 || rs.RewardOnlyFirstCompleter ||
+		rs.FreezeDurationSeconds != 0 || rs.TrackerOffDurationSeconds != 0 ||
+		rs.CurseDurationSeconds != 0 || rs.VetoTimePenaltySeconds != 0 ||
+		len(rs.CoinRushFinishBonuses) > 0 || rs.CoinRushLateFinishBonus != 0 ||
+		rs.CoinRushCountdownSeconds != 0
 }
 
 // Board represents a published, immutable map configuration.

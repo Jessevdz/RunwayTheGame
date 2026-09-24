@@ -13,6 +13,8 @@ interface CaptureFlowProps {
   mode?: 'challenge' | 'roadblock';
   /** Waypoint being cleared, or the blocked road in roadblock mode. */
   waypointId: string;
+  /** Road target for a road challenge; waypointId remains the active endpoint. */
+  roadId?: string;
   challengeId?: string;
   prompt: string;
   rubric: {
@@ -42,6 +44,7 @@ const TRUST_RATIONALE = 'Accepted on trust: this game grades no photos. Your evi
 export const CaptureFlow: React.FC<CaptureFlowProps> = ({
   mode = 'challenge',
   waypointId,
+  roadId,
   challengeId,
   prompt,
   rubric,
@@ -52,6 +55,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
   onClose
 }) => {
   const isRoadblock = mode === 'roadblock';
+  const isRoadChallenge = !isRoadblock && Boolean(roadId && roadId !== waypointId);
   const [stage, setStage] = useState<CaptureStage>('brief');
 
   const idempotencyKeyRef = useRef(generateIdempotencyKey());
@@ -186,7 +190,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
         })
         : await submitChallengeEvidence(session.gameId, {
           waypoint_id: waypointId,
-          road_id: waypointId,
+          ...(roadId ? { road_id: roadId } : {}),
           challenge_id: challengeId || waypointId,
           team_token: session.teamToken,
           blob_ref,
@@ -215,6 +219,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
           payload: {
             gameId: session.gameId,
             waypointId: waypointId,
+            ...(roadId ? { roadId } : {}),
             challengeId: challengeId || waypointId,
             photo: frame.blob,
             contentType: 'image/jpeg',
@@ -298,7 +303,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
   return (
     <Dialog
       open
-      title={isRoadblock ? 'ROADBLOCK CLEARANCE' : 'WAYPOINT VERIFICATION'}
+      title={isRoadblock ? 'ROADBLOCK CLEARANCE' : isRoadChallenge ? 'ROAD CHALLENGE' : 'WAYPOINT VERIFICATION'}
       onClose={handleDismiss}
       className={isSheet ? 'dialog--capture' : ''}
     >
