@@ -21,22 +21,25 @@ import { generateUUID } from '../../core/util/uuid';
 import { formatClock } from '../../core/format/clock';
 import { HostMapCard } from '../host/components/HostMapCard';
 import { BoardFilterBar } from '../shared/BoardFilterBar';
-import { useBoardFilters } from '../shared/boardFilters';
+import { useBoardFilters, boardTitle } from '../shared/boardFilters';
 import { PageShell } from '../shared/PageShell';
 import { PageFooter } from '../shared/PageFooter';
 import { ChoiceCards } from '../shared/ChoiceCards';
-import { Button, Empty, Input, BrandLines, ArcMark } from '@ds';
+import { useIsDesktop } from '../../core/ui/useIsDesktop';
+import { plainError } from '../../core/ui/plainError';
+import { Button, Empty, Input, Notice, PageHeader, Icon } from '@ds';
+import '../host/host-console.css';
 
 const MODES: Array<{ id: SoloMode; title: string; blurb: string }> = [
   {
     id: 'solo_time_trial',
     title: 'Time trial',
-    blurb: 'Your time is measured from the start line, veto’ing a challenge costs time, and a finished run can go on the board’s leaderboard.'
+    blurb: 'Timed from the start. Skipping a challenge adds time. Finished runs can join the leaderboard.'
   },
   {
     id: 'solo_casual',
     title: 'Casual',
-    blurb: 'Just enjoy the walk. Skip whatever you feel like skipping. Nothing is timed and nothing is ranked.'
+    blurb: 'Untimed and unranked. Skip anything you like.'
   }
 ];
 
@@ -45,14 +48,12 @@ const GRADING: Array<{ id: SoloVerificationMode; title: string; blurb: string }>
   {
     id: 'trust',
     title: 'Honour system',
-    blurb:
-      'Photos are accepted straight away and nothing grades them. They are still saved to look back at. A time set this way is marked as untested on the leaderboard.'
+    blurb: 'Photos are accepted instantly and saved. Leaderboard times are marked untested.'
   },
   {
     id: 'llm',
     title: 'AI referee',
-    blurb:
-      'Your photos are sent to a third-party AI service and graded against each challenge’s criteria. Nobody has to be waiting at home to referee.'
+    blurb: 'A third-party AI grades each photo, so photos leave this server.'
   }
 ];
 
@@ -63,8 +64,11 @@ export const SoloLauncher: React.FC = () => {
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [records, setRecords] = useState<Record<string, { seconds: number; name: string }>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const isDesktop = useIsDesktop();
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<{ boardId: string; message: string } | null>(null);
   const [startingId, setStartingId] = useState<string | null>(null);
+  const [optionsOpen, setOptionsOpen] = useState(isDesktop);
   const [mode, setMode] = useState<SoloMode>('solo_time_trial');
   // The honour system is the default here for the same reason as the hosted
   // launcher: nothing outside the run has to exist for it to work.
@@ -86,14 +90,14 @@ export const SoloLauncher: React.FC = () => {
 
   const fetchBoards = async () => {
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
-      // The gallery plus this device's own unpublished maps — see PlayLauncher.
+      // The list is the gallery plus this device's own unpublished maps.
       const list = await listRaceableBoards();
       setBoards(list);
       loadRecords(list);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load maps');
+    } catch (err) {
+      setLoadError(plainError(err, "The maps didn't load."));
     } finally {
       setLoading(false);
     }
@@ -153,7 +157,7 @@ export const SoloLauncher: React.FC = () => {
     const board = boards.find((b) => b.id === boardId);
     if (!board) return;
     setStartingId(boardId);
-    setError(null);
+    setStartError(null);
     try {
       let run;
       try {
@@ -163,16 +167,14 @@ export const SoloLauncher: React.FC = () => {
         if (err instanceof ApiError && err.status === 400 && /published/i.test(err.message)) {
           const editToken = getEditToken(boardId);
           if (!editToken) {
-            throw new Error("This map hasn't been published yet, and only the device that made it can publish it.");
+            throw new Error("This map isn't published, and only the device that made it can publish it.");
           }
           try {
             await publishBoard(boardId, editToken);
             analytics.track('board.published', { result: 'ok' });
-          } catch (pubErr: any) {
+          } catch (pubErr) {
             analytics.track('board.published', { result: 'rejected' });
-            throw new Error(
-              `This map can't be run yet — it failed to publish: ${pubErr.message || 'validation error'}`
-            );
+            throw new Error(`Publishing failed: ${plainError(pubErr, 'the map did not pass validation.')}`);
           }
           run = await startRun(board);
         } else {
@@ -183,8 +185,8 @@ export const SoloLauncher: React.FC = () => {
       // No lobby. The clock is already running, so the console is the next thing
       // this device should be looking at.
       navigate(`/race/${run.game_id}?view=play`);
-    } catch (err: any) {
-      setError(err.message || 'Failed to start a run on this map');
+    } catch (err) {
+      setStartError({ boardId, message: plainError(err, 'Something went wrong starting the run.') });
       setStartingId(null);
     }
   };
@@ -192,73 +194,101 @@ export const SoloLauncher: React.FC = () => {
   return (
     <PageShell
       navPlacement="topbar"
-      topBarProps={{
-        title: (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-            <BrandLines size={24} />
-            <span className="t-announce fs-7" style={{ letterSpacing: '0.04em', color: 'var(--ink-strong)' }}>
-              RUNWAY
-            </span>
-          </div>
-        ),
-      }}
+      topBarProps={{}}
       loading={loading}
-      error={error}
-      onRetry={fetchBoards}
     >
-      <section style={{ maxWidth: '62.5rem', margin: '0 auto var(--sp-7)' }}>
-        <div style={{ marginBottom: 'var(--sp-4)' }}>
-          <h1 className="t-announce fs-d-md" style={{ color: 'var(--ink-strong)' }}>
-            SOLO RACE
-          </h1>
-        </div>
-        {/* The mode decides what a veto costs, so it is chosen before a map and
-            not buried in a card. */}
-        <ChoiceCards legend="HOW YOU'RE RUNNING IT" options={MODES} value={mode} onChange={setMode} />
+      <section className="launcher-section">
+        <PageHeader title="SOLO RACE" />
 
-        {/* And who — or what — looks at the photos, which is the decision a
-            runner is entitled to make before the first waypoint rather than
-            discover at it. Casual runs have no referee, and a server with no AI
-            backend leaves only the honour system — a row of one card is not a
-            choice, so the notice below carries that on its own. */}
-        {mode !== 'solo_casual' && grading.length > 1 && (
-          <ChoiceCards legend="WHO CHECKS YOUR PHOTOS" options={grading} value={verification} onChange={setVerification} />
+        {loadError && (
+          <Notice kind="stop" title="Couldn't load the maps" className="launcher-error">
+            {loadError}
+            <div className="launcher-error__actions">
+              <Button variant="secondary" size="sm" onClick={fetchBoards}>
+                Try again
+              </Button>
+            </div>
+          </Notice>
         )}
 
-        <div style={{ maxWidth: 'var(--wrap-narrow)', marginBottom: 'var(--sp-5)' }}>
-          <Input
-            label="YOUR NAME"
-            placeholder="Runner"
-            value={runnerName}
-            onChange={(e) => setRunnerName(e.target.value)}
-          />
-        </div>
+        {startError && (
+          <Notice
+            kind="stop"
+            title={
+              boards.find((b) => b.id === startError.boardId)
+                ? `Couldn't start a run on ${boardTitle(boards.find((b) => b.id === startError.boardId)!)}`
+                : "Couldn't start the run"
+            }
+            className="launcher-error"
+          >
+            {startError.message}
+            <div className="launcher-error__actions">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={startingId !== null}
+                onClick={() => handleStart(startError.boardId)}
+              >
+                Try again
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setStartError(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </Notice>
+        )}
 
-        {/* Everything above is how the run is set up; everything below is which
-            run it is. The Sunset Arc is the design system's divider for exactly
-            that kind of section break, and on a phone — where the two halves
-            arrive one after the other with no side-by-side context — it is the
-            only thing saying the configuring is done. */}
-        <div className="section-break">
-          <ArcMark animate={false} />
-          <div className="section-break__head">
-            <h2 className="t-announce fs-6" style={{ color: 'var(--ink-strong)' }}>
-              CHOOSE A MAP
-            </h2>
+        {/* Mode, referee and name are one compact row so the maps start straight away. */}
+        <details
+          className="launcher-options"
+          open={optionsOpen}
+          onToggle={(e) => setOptionsOpen((e.currentTarget as HTMLDetailsElement).open)}
+        >
+          <summary>
+            <span className="fs-5">
+              <strong>Your run:</strong> {MODES.find((option) => option.id === mode)?.title}
+              {runnerName.trim() ? ` · ${runnerName.trim()}` : ''}
+            </span>
+            <span className="t-label fs-label">{optionsOpen ? 'HIDE' : 'CHANGE'}</span>
+          </summary>
+          <div className="launcher-options__body">
+            <ChoiceCards legend="HOW YOU'RE RUNNING IT" options={MODES} value={mode} onChange={setMode} />
+
+            {/* Casual runs have no referee, and a server with no AI backend leaves only the honour system. */}
+            {mode !== 'solo_casual' && grading.length > 1 && (
+              <ChoiceCards legend="WHO CHECKS YOUR PHOTOS" options={grading} value={verification} onChange={setVerification} />
+            )}
+
+            <div className="launcher-name">
+              <Input
+                label="YOUR NAME"
+                placeholder="Runner"
+                value={runnerName}
+                onChange={(e) => setRunnerName(e.target.value)}
+              />
+            </div>
           </div>
-        </div>
+        </details>
 
         {boards.length === 0 ? (
-          <Empty
-            icon="🥾"
-            title="No maps ready to run"
-            description="A run needs a published map. Design a route of your own, or fork one from the public gallery to get going."
-            action={
-              <Button variant="primary" icon="🗺️" onClick={() => navigate('/design')}>
-                Design a Map
-              </Button>
-            }
-          />
+          !loadError && (
+            <Empty
+              icon={<Icon name="route" />}
+              title="No maps ready to run"
+              description={isDesktop ? 'Design a map or fork one from the gallery.' : 'Pick a map from the gallery to run.'}
+              action={
+                isDesktop ? (
+                  <Button variant="primary" icon={<Icon name="map" />} onClick={() => navigate('/design')}>
+                    Design a Map
+                  </Button>
+                ) : (
+                  <Button variant="primary" icon={<Icon name="target" />} onClick={() => navigate('/gallery')}>
+                    Browse the Gallery
+                  </Button>
+                )
+              }
+            />
+          )
         ) : (
           <>
             <BoardFilterBar
@@ -272,9 +302,9 @@ export const SoloLauncher: React.FC = () => {
 
             {visible.length === 0 ? (
               <Empty
-                icon="🔍"
+                icon={<Icon name="search" />}
                 title="No maps match"
-                description="Nothing fits that search and length. Widen the band or clear the search to see every map you can run."
+                description="Try a different search or length."
                 action={
                   <Button variant="secondary" onClick={reset}>
                     Reset Filters
@@ -282,24 +312,24 @@ export const SoloLauncher: React.FC = () => {
                 }
               />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(18rem, 1fr))', gap: 'var(--sp-5)' }}>
+              <div className="launcher-grid">
                 {visible.map((board) => {
                   const record = records[board.id];
                   return (
                     <HostMapCard
                       key={board.id}
                       board={board}
-                      onView={(id) => navigate(`/design/${id}`)}
+                      onView={isDesktop ? (id) => navigate(`/design/${id}`) : undefined}
                       onHost={handleStart}
                       isHosting={startingId === board.id}
                       disabled={startingId !== null}
-                      actionLabel="Run it"
+                      actionLabel={isDesktop ? 'Run it' : 'Run this map'}
                       busyLabel="Starting…"
                       meta={
                         <span className="t-data fs-2" style={{ color: 'var(--ink-muted)' }}>
                           {record
                             ? `RECORD ${formatClock(record.seconds)} · ${record.name}`
-                            : 'NO RECORDED TIME YET'}
+                            : 'NO RECORD YET'}
                         </span>
                       }
                     />

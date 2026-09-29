@@ -1,5 +1,4 @@
-import type React from 'react';
-import { IconCurse, IconRoadblock } from './components/EditorIcons';
+import type { IconName } from '@ds';
 
 export interface CardDraft {
   id: string;
@@ -56,8 +55,8 @@ export const DEFAULT_CURSES: CardDraft[] = asCards([
 /** Deck metadata and associated icon components. */
 export const DECK_META: Record<
   DeckKind,
-  { Icon: React.FC; label: string; kindLabel: string }
+  { icon: IconName; label: string; kindLabel: string }
 > = {
-  roadblock: { Icon: IconRoadblock, label: 'Roadblocks', kindLabel: 'ROADBLOCK' },
-  curse: { Icon: IconCurse, label: 'Curses', kindLabel: 'CURSE' }
+  roadblock: { icon: 'roadblock', label: 'Roadblocks', kindLabel: 'ROADBLOCK' },
+  curse: { icon: 'skull', label: 'Curses', kindLabel: 'CURSE' }
 };

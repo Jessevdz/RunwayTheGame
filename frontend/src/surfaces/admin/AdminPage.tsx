@@ -5,7 +5,7 @@ import { PageFooter } from '../shared/PageFooter';
 import {
   Button,
   IconButton,
-  BrandLines,
+  BrandMark,
   Notice,
   Badge,
   Empty,
@@ -13,7 +13,7 @@ import {
   Dialog,
   Tabs,
   Card,
-  IconSignOut
+  Icon
 } from '@ds';
 import { RoadmapLane } from '../roadmap/components/RoadmapLane';
 import { CreateItemDialog } from '../roadmap/components/CreateItemDialog';
@@ -47,6 +47,8 @@ import type {
 import { getOrCreateVoterId } from '../../core/game/voterSession';
 import { formatReportContext } from '../../core/diagnostics/reportContext';
 import { UsagePanel } from './UsagePanel';
+import { plainError } from '../../core/ui/plainError';
+import './admin.css';
 
 /** User-facing notice outcome for administrative operations. */
 interface ActionNotice {
@@ -163,7 +165,7 @@ export const AdminPage: React.FC = () => {
       } catch (err: any) {
         if (!cancelled) {
           setIsKeyValid(false);
-          setAuthError(err?.message || 'Invalid or expired admin key.');
+          setAuthError(plainError(err, 'Invalid or expired admin key.'));
         }
       } finally {
         if (!cancelled) setIsVerifying(false);
@@ -184,7 +186,7 @@ export const AdminPage: React.FC = () => {
       const data = await listRoadmapItems(voterId, true);
       setRoadmapItems(data);
     } catch (err: any) {
-      setRoadmapError(err.message || 'Failed to load roadmap items');
+      setRoadmapError(plainError(err, 'Failed to load roadmap items'));
     } finally {
       setLoadingRoadmap(false);
     }
@@ -198,7 +200,7 @@ export const AdminPage: React.FC = () => {
       const list = await listBoardsAdmin();
       setBoards(list);
     } catch (err: any) {
-      setBoardsError(err.message || 'Failed to load gallery maps');
+      setBoardsError(plainError(err, 'Failed to load gallery maps'));
     } finally {
       setLoadingBoards(false);
     }
@@ -211,7 +213,7 @@ export const AdminPage: React.FC = () => {
     try {
       setBugReports(await listBugReports());
     } catch (err: any) {
-      setBugsError(err.message || 'Failed to load bug reports');
+      setBugsError(plainError(err, 'Failed to load bug reports'));
     } finally {
       setLoadingBugs(false);
     }
@@ -232,7 +234,7 @@ export const AdminPage: React.FC = () => {
       setBugReports((prev) => prev.map((b) => (b.id === id ? updated : b)));
       reportOk(`Report moved to ${status}.`);
     } catch (err: any) {
-      reportFail(err.message || 'Failed to update the report');
+      reportFail(plainError(err, 'Failed to update the report'));
     }
   };
 
@@ -243,7 +245,7 @@ export const AdminPage: React.FC = () => {
       setBugReports((prev) => prev.filter((b) => b.id !== id));
       reportOk('Report deleted.');
     } catch (err: any) {
-      reportFail(err.message || 'Failed to delete the report');
+      reportFail(plainError(err, 'Failed to delete the report'));
     }
   };
 
@@ -260,7 +262,7 @@ export const AdminPage: React.FC = () => {
       setEnteredKey('');
       setIsKeyValid(true);
     } catch (err: any) {
-      setAuthError(err?.message || 'Invalid admin key.');
+      setAuthError(plainError(err, 'Invalid admin key.'));
     } finally {
       setIsVerifying(false);
     }
@@ -295,7 +297,7 @@ export const AdminPage: React.FC = () => {
         await voteRoadmapItem(id, voterId);
       }
     } catch (err: any) {
-      reportFail(`Failed to update vote: ${err.message || 'Unknown error'}`);
+      reportFail(`Failed to update vote: ${plainError(err, 'Unknown error')}`);
       fetchRoadmap();
     }
   };
@@ -306,7 +308,7 @@ export const AdminPage: React.FC = () => {
       reportOk('Item reported.');
       fetchRoadmap();
     } catch (err: any) {
-      reportFail(`Failed to report item: ${err.message || 'Unknown error'}`);
+      reportFail(`Failed to report item: ${plainError(err, 'Unknown error')}`);
     }
   };
 
@@ -323,7 +325,7 @@ export const AdminPage: React.FC = () => {
       setRoadmapItems((prev) => prev.map((item) => (item.id === id ? updated : item)));
       reportOk(`Moved item to lane "${newStatus.replace('_', ' ')}"`);
     } catch (err: any) {
-      reportFail(`Failed to move feature: ${err.message || 'Unknown error'}`);
+      reportFail(`Failed to move feature: ${plainError(err, 'Unknown error')}`);
     }
   };
 
@@ -344,7 +346,7 @@ export const AdminPage: React.FC = () => {
       setRoadmapItems((prev) => prev.filter((item) => item.id !== id));
       reportOk('Roadmap item removed.');
     } catch (err: any) {
-      reportFail(`Failed to remove feature: ${err.message || 'Unknown error'}`);
+      reportFail(`Failed to remove feature: ${plainError(err, 'Unknown error')}`);
     }
   };
 
@@ -362,7 +364,7 @@ export const AdminPage: React.FC = () => {
         `Map "${boardTitle(board)}" is now ${newStatus ? 'published in the gallery' : 'unlisted'}.`
       );
     } catch (err: any) {
-      reportFail(`Failed to update map visibility: ${err.message || 'Unknown error'}`);
+      reportFail(`Failed to update map visibility: ${plainError(err, 'Unknown error')}`);
     } finally {
       setTogglingVisibilityId(null);
     }
@@ -375,7 +377,7 @@ export const AdminPage: React.FC = () => {
       setBoards((prev) => prev.filter((b) => b.id !== deletingBoard.id));
       reportOk(`Map "${boardTitle(deletingBoard)}" was permanently removed.`);
     } catch (err: any) {
-      reportFail(`Failed to delete map: ${err.message || 'Unknown error'}`);
+      reportFail(`Failed to delete map: ${plainError(err, 'Unknown error')}`);
     } finally {
       setDeletingBoard(null);
     }
@@ -393,10 +395,8 @@ export const AdminPage: React.FC = () => {
         topBarProps={{
           title: (
             <div className="admin-brand-header">
-              <BrandLines size={24} />
-              <span className="t-announce fs-7 admin-brand-title">
-                RUNWAY ADMIN
-              </span>
+              <BrandMark />
+              <span className="t-label fs-label">ADMIN</span>
             </div>
           )
         }}
@@ -460,11 +460,9 @@ export const AdminPage: React.FC = () => {
       topBarProps={{
         title: (
           <div className="admin-brand-header">
-            <BrandLines size={24} />
-            <span className="t-announce fs-7 admin-brand-title">
-              RUNWAY ADMIN PORTAL
-            </span>
-          </div>
+              <BrandMark />
+              <span className="t-label fs-label">ADMIN</span>
+            </div>
         )
       }}
       loading={loadingRoadmap || loadingBoards}
@@ -478,7 +476,7 @@ export const AdminPage: React.FC = () => {
         {/* Portal Header */}
         <div className="admin-header">
           <div className="admin-header__actions">
-            <Button variant="ghost" size="sm" icon={<IconSignOut />} onClick={handleSignOut}>
+            <Button variant="ghost" size="sm" icon={<Icon name="sign-out" />} onClick={handleSignOut}>
               Sign out
             </Button>
           </div>
@@ -496,7 +494,7 @@ export const AdminPage: React.FC = () => {
             >
               <span>{actionNotice.text}</span>
               <IconButton
-                icon="✕"
+                icon={<Icon name="x" />}
                 label="Dismiss notice"
                 size="sm"
                 className="admin-notice-dismiss"
@@ -510,10 +508,10 @@ export const AdminPage: React.FC = () => {
         <div className="admin-tabs-center">
           <Tabs
             items={[
-              { id: 'roadmap', label: 'Roadmap', icon: '📋', badge: roadmapItems.length },
-              { id: 'gallery', label: 'Gallery', icon: '🗺️', badge: boards.length },
-              { id: 'bugs', label: 'Bugs', icon: '🐞', badge: newBugCount },
-              { id: 'usage', label: 'Usage', icon: '📈' }
+              { id: 'roadmap', label: 'Roadmap', icon: <Icon name="clipboard" />, badge: roadmapItems.length },
+              { id: 'gallery', label: 'Gallery', icon: <Icon name="map" />, badge: boards.length },
+              { id: 'bugs', label: 'Bugs', icon: <Icon name="bug" />, badge: newBugCount },
+              { id: 'usage', label: 'Usage', icon: <Icon name="chart" /> }
             ]}
             active={activeTab}
             onChange={(id) => handleTabChange(id as AdminTab)}
@@ -529,7 +527,7 @@ export const AdminPage: React.FC = () => {
                   Feature Lanes &amp; Suggestions
                 </h2>
               </div>
-              <Button variant="primary" icon="➕" onClick={() => setCreateDialogOpen(true)}>
+              <Button variant="primary" icon={<Icon name="plus" />} onClick={() => setCreateDialogOpen(true)}>
                 Create Feature Idea
               </Button>
             </div>
@@ -624,7 +622,7 @@ export const AdminPage: React.FC = () => {
 
             {filteredBoards.length === 0 ? (
               <Empty
-                icon="🎯"
+                icon={<Icon name="target" />}
                 title="No maps found"
                 description="No maps matched your current filter or search criteria."
                 action={
@@ -722,7 +720,7 @@ export const AdminPage: React.FC = () => {
 
             {!loadingBugs && bugReports.length === 0 ? (
               <Empty
-                icon="🐞"
+                icon={<Icon name="bug" />}
                 title="No bug reports"
                 description="Reports filed by playtesters land here. Send a tester a link ending in ?playtest=1 to give them the report button."
               />

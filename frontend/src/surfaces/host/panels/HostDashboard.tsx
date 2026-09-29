@@ -4,7 +4,7 @@ import { watchPlayerLocation, type GPSPosition } from '../../../core/player/loca
 import { MapCore } from '../../../core/map/MapCore';
 import { endGame } from '../../../core/api/client';
 import { slotColor, getNeutralColor } from '../../../core/team/palette';
-import { Board, type BoardColumn, Card, Chip, Callout, Button, Dialog, Badge, IconCoin } from '@ds';
+import { Board, type BoardColumn, Card, Chip, Callout, Button, Dialog, Badge, Icon } from '@ds';
 import type { ToastMessage } from '../HostToolsPanel';
 
 interface HostDashboardProps {
@@ -118,11 +118,11 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
               <span>{row.teamName}</span>
             </span>
             <div className="host-dashboard__team-tags">
-              {isActive(effects.frozenUntil) && <Chip kind="curse">❄️ Frozen</Chip>}
-              {isActive(effects.vetoPenaltyUntil) && <Chip kind="veto">⏳ Veto</Chip>}
-              {isActive(effects.trackerOffUntil) && <Chip kind="power">👁️ Off-grid</Chip>}
-              {effects.curses.length > 0 && <Chip kind="curse">💀 Cursed</Chip>}
-              {row.finished && <Chip kind="power">🏁 {row.finishRank ? ordinal(row.finishRank) : 'Home'}</Chip>}
+              {isActive(effects.frozenUntil) && <Chip kind="curse"><Icon name="snowflake" /> Frozen</Chip>}
+              {isActive(effects.vetoPenaltyUntil) && <Chip kind="veto"><Icon name="hourglass" /> Veto</Chip>}
+              {isActive(effects.trackerOffUntil) && <Chip kind="power"><Icon name="eye-off" /> Off-grid</Chip>}
+              {effects.curses.length > 0 && <Chip kind="curse"><Icon name="skull" /> Cursed</Chip>}
+              {row.finished && <Chip kind="power"><Icon name="flag" /> {row.finishRank ? ordinal(row.finishRank) : 'Home'}</Chip>}
             </div>
           </button>
         );
@@ -138,7 +138,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
             render: (row: StandingRow) => (
               <>
                 <div className="fs-5" style={{ fontWeight: 600 }}>
-                  <IconCoin /> {row.coins}
+                  <Icon name="coin" /> {row.coins}
                 </div>
                 {!!row.finishBonus && (
                   <div className="fs-2" style={{ color: 'var(--ink-muted)' }}>
@@ -160,7 +160,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
             {row.waypointsReached} / {totalWaypoints}
           </div>
           <div className="fs-2" style={{ color: 'var(--ink-muted)' }}>
-            {coinRush ? '' : <><IconCoin /> {row.coins} · </>}
+            {coinRush ? '' : <><Icon name="coin" /> {row.coins} · </>}
             {(row.distanceToFinishM / 1000).toFixed(1)} km
           </div>
         </>
@@ -227,14 +227,14 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
             NEEDS YOU
           </h2>
           {nothingPending ? (
-            <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 0 }}>All clear — nothing needs attention.</p>
+            <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 0 }}>All clear.</p>
           ) : (
             <div className="host-dashboard__alerts-list">
               {pendingDisputes.length > 0 && (
                 <Callout kind="veto">
                   <div className="host-dashboard__alert">
-                    <span>{pendingDisputes.length} dispute{pendingDisputes.length === 1 ? '' : 's'} awaiting a ruling</span>
-                    <Button variant="secondary" size="sm" onClick={onOpenDisputes}>Rule on them</Button>
+                    <span>{pendingDisputes.length} dispute{pendingDisputes.length === 1 ? '' : 's'} pending</span>
+                    <Button variant="secondary" size="sm" onClick={onOpenDisputes}>Review</Button>
                   </div>
                 </Callout>
               )}
@@ -242,20 +242,20 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
                 <Callout kind="power">
                   <div className="host-dashboard__alert">
                     <span>
-                      {pendingSubmissions.length} photo{pendingSubmissions.length === 1 ? '' : 's'} awaiting a verdict
-                      {oldestPendingMs > 60000 && ` — oldest ${Math.round(oldestPendingMs / 60000)} min ago`}
+                      {pendingSubmissions.length} photo{pendingSubmissions.length === 1 ? '' : 's'} pending
+                      {oldestPendingMs > 60000 && ` · oldest ${Math.round(oldestPendingMs / 60000)} min`}
                     </span>
                     {/* Only a host who is the referee can act on this; under the
                         AI referee it is a progress report, not a queue. */}
                     {onOpenReview && (
-                      <Button variant="secondary" size="sm" onClick={onOpenReview}>Grade them</Button>
+                      <Button variant="secondary" size="sm" onClick={onOpenReview}>Grade</Button>
                     )}
                   </div>
                 </Callout>
               )}
               {stuckTeams.length > 0 && (
                 <Callout kind="curse">
-                  No position in the last 10 minutes from{' '}
+                  No position update for 10 min:{' '}
                   <strong>{stuckTeams.map(([, info]) => info.name).join(', ')}</strong>
                 </Callout>
               )}
@@ -275,8 +275,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
               only surface that can say when. */}
           {coinRush && countdownDeadline && gameState.state !== 'ended' && (
             <Callout kind="veto" style={{ marginBottom: 'var(--sp-3)' }}>
-              Countdown running — the race is called at{' '}
-              <strong>{new Date(countdownDeadline).toLocaleTimeString()}</strong>, and the most coins wins.
+              Race ends at <strong>{new Date(countdownDeadline).toLocaleTimeString()}</strong>. Most coins wins.
             </Callout>
           )}
           {rows.length > 0 ? (
@@ -285,11 +284,6 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
             </div>
           ) : (
             <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 0 }}>No standings yet.</p>
-          )}
-          {rows.length > 0 && (
-            <p className="fs-3" style={{ color: 'var(--ink-muted)', margin: 'var(--sp-3) 0 0' }}>
-              Tap a team for its coins, effects, inventory and last submissions.
-            </p>
           )}
         </Card>
       </section>
@@ -301,36 +295,36 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
       <section className="host-dashboard__control">
         <p className="fs-4">
           {gameState.state === 'ended'
-            ? 'This race is over — the Recap tab has the result.'
-            : 'Ending the race locks the standings for everyone and cannot be undone.'}
+            ? 'Race over. See the Recap tab.'
+            : 'Ending locks the standings. This cannot be undone.'}
         </p>
-        <Button variant="secondary" icon="🏁" onClick={() => setConfirmEnd(true)} disabled={gameState.state === 'ended'}>
+        <Button variant="secondary" icon={<Icon name="flag" />} onClick={() => setConfirmEnd(true)} disabled={gameState.state === 'ended'}>
           {gameState.state === 'ended' ? 'Race ended' : 'End the race'}
         </Button>
       </section>
 
-      <Dialog open={confirmEnd} title="End the race?" onClose={() => setConfirmEnd(false)}>
-        <p className="fs-5" style={{ color: 'var(--ink-muted)' }}>This cannot be undone. Standings will lock and the Recap tab will open.</p>
+      <Dialog open={confirmEnd} presentation="sheet" title="End the race?" onClose={() => setConfirmEnd(false)}>
+        <p className="fs-5" style={{ color: 'var(--ink-muted)' }}>Standings will lock. This cannot be undone.</p>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', justifyContent: 'flex-end', marginTop: 'var(--sp-4)' }}>
           <Button variant="secondary" onClick={() => setConfirmEnd(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleEndGame} disabled={ending}>{ending ? 'Ending…' : 'End Game'}</Button>
+          <Button variant="primary" onClick={handleEndGame} disabled={ending}>{ending ? 'Ending…' : 'End race'}</Button>
         </div>
       </Dialog>
 
-      <Dialog open={!!selectedTeamId} title={selectedTeam?.name || 'Team'} onClose={() => setSelectedTeamId(null)}>
+      <Dialog open={!!selectedTeamId} presentation="sheet" title={selectedTeam?.name || 'Team'} onClose={() => setSelectedTeamId(null)}>
         {selectedTeam && selectedInfo && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
             <div className="fs-5">
-              <IconCoin /> {selectedInfo.coins} coins · currently at{' '}
+              <Icon name="coin" /> {selectedInfo.coins} coins · currently at{' '}
               {selectedInfo.progress?.currentWaypointId ? waypointName(selectedInfo.progress.currentWaypointId) : 'unknown'}
             </div>
             <div>
               <div className="t-label fs-label" style={{ marginBottom: 'var(--sp-1)' }}>ACTIVE EFFECTS</div>
               <div style={{ display: 'flex', gap: 'var(--sp-1)', flexWrap: 'wrap' }}>
-                {isActive(selectedInfo.effects?.frozenUntil) && <Chip kind="curse">❄️ Frozen</Chip>}
-                {isActive(selectedInfo.effects?.vetoPenaltyUntil) && <Chip kind="veto">⏳ Veto</Chip>}
-                {isActive(selectedInfo.effects?.trackerOffUntil) && <Chip kind="power">👁️ Off-grid</Chip>}
-                {(selectedInfo.effects?.curses.length || 0) > 0 && <Chip kind="curse">💀 Cursed</Chip>}
+                {isActive(selectedInfo.effects?.frozenUntil) && <Chip kind="curse"><Icon name="snowflake" /> Frozen</Chip>}
+                {isActive(selectedInfo.effects?.vetoPenaltyUntil) && <Chip kind="veto"><Icon name="hourglass" /> Veto</Chip>}
+                {isActive(selectedInfo.effects?.trackerOffUntil) && <Chip kind="power"><Icon name="eye-off" /> Off-grid</Chip>}
+                {(selectedInfo.effects?.curses.length || 0) > 0 && <Chip kind="curse"><Icon name="skull" /> Cursed</Chip>}
                 {!isActive(selectedInfo.effects?.frozenUntil) &&
                   !isActive(selectedInfo.effects?.vetoPenaltyUntil) &&
                   !isActive(selectedInfo.effects?.trackerOffUntil) &&
@@ -357,7 +351,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ gameId, hostToken,
               )}
             </div>
             <p className="fs-3" style={{ color: 'var(--ink-muted)', margin: 0 }}>
-              To adjust coins, clear a challenge, or clear an effect for this team, use the Overrides tab.
+              Use the Overrides tab to adjust this team.
             </p>
           </div>
         )}

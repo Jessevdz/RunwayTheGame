@@ -3,7 +3,7 @@ import type { GameState } from '../../core/projection/projectionStore';
 import type { TeamSession } from '../../core/game/teamSession';
 import { postLeaderboardTime, getBoardLeaderboard, type LeaderboardEntry } from '../../core/api/client';
 import { formatClock } from '../../core/format/clock';
-import { Button, Notice, Stat, Badge } from '@ds';
+import { Button, Notice, Stat, Icon } from '@ds';
 
 interface SoloFinishProps {
   session: TeamSession;
@@ -89,12 +89,10 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
       {timeTrial && decision === 'undecided' && (
         <>
           <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: '0 0 var(--sp-3)' }}>
-            Put this on {gameState.boardName || 'the board'}'s leaderboard as{' '}
-            <b>{gameState.teams[session.teamId]?.name || session.teamName}</b>? It stays there after the run
-            is gone.
+            Post this time as <b>{gameState.teams[session.teamId]?.name || session.teamName}</b>?
           </p>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-            <Button variant="primary" size="sm" icon="🏆" disabled={busy} onClick={handlePost}>
+            <Button variant="primary" size="sm" icon={<Icon name="trophy" />} disabled={busy} onClick={handlePost}>
               {busy ? 'Posting…' : 'Post to the leaderboard'}
             </Button>
             <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDecision('declined')}>
@@ -112,14 +110,14 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
 
       {timeTrial && decision === 'declined' && (
         <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: '0 0 var(--sp-3)' }}>
-          Not posted. Here is how the board stands anyway.
+          Not posted.
         </p>
       )}
 
       {showBoard && (
         <div style={{ marginTop: 'var(--sp-4)' }}>
           <h4 className="t-label fs-label" style={{ marginBottom: 'var(--sp-2)' }}>
-            BOARD LEADERBOARD
+            LEADERBOARD
           </h4>
           {entries === null ? (
             <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 0 }}>
@@ -127,7 +125,7 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
             </p>
           ) : entries.length === 0 ? (
             <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 0 }}>
-              No times recorded on this board yet.
+              No times yet.
             </p>
           ) : (
             <ol className="player-standings">
@@ -147,7 +145,7 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
                       <span
                         className="t-data fs-2"
                         style={{ marginLeft: 'var(--sp-2)', color: 'var(--ink-muted)' }}
-                        title="Honour system — no photo on this run was checked."
+                        title="No photos on this run were checked."
                       >
                         UNTESTED
                       </span>
@@ -167,7 +165,7 @@ export const SoloFinish: React.FC<SoloFinishProps> = ({ session, gameState, elap
               under a time is worth saying out loud. */}
           {entries && entries.length > 0 && (
             <p className="fs-5" style={{ color: 'var(--ink-muted)', marginTop: 'var(--sp-2)' }}>
-              <Badge tone="gold">NOTE</Badge> Times are ranked across every version of this map.
+              Ranked across all versions of this map.
             </p>
           )}
         </div>

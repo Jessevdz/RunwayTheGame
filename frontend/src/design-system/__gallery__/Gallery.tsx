@@ -3,9 +3,7 @@ import { useTheme } from '../theme/useTheme';
 import { Button } from '../primitives/Button';
 import { Card } from '../primitives/Card';
 import { Badge } from '../primitives/Badge';
-import { Pin } from '../primitives/Pin';
 import { Plate } from '../primitives/Plate';
-import { Hex } from '../primitives/Hex';
 import { Sticker } from '../primitives/Sticker';
 import { Stat } from '../primitives/Stat';
 import { Chip } from '../primitives/Chip';
@@ -16,11 +14,10 @@ import { ArcMark } from '../primitives/ArcMark';
 import { RouteGlobe, type RouteGlobeVariant } from '../primitives/RouteGlobe';
 import { Notice } from '../primitives/Notice';
 import { Empty } from '../primitives/Empty';
-import { Infobox } from '../primitives/Infobox';
 import { Board } from '../primitives/Board';
-import { Pass } from '../primitives/Pass';
 import { LinkButton } from '../primitives/LinkButton';
-import { Grid } from '../layout/Grid';
+import { Icon } from '../primitives/Icon';
+import { ICON_NAMES } from '../primitives/iconShapes';
 import { Omnisearch } from '../forms/Omnisearch';
 import { Input } from '../forms/Input';
 import { Select } from '../forms/Select';
@@ -28,10 +25,11 @@ import { Checkbox } from '../forms/Checkbox';
 import { Radio } from '../forms/Radio';
 import { Switch } from '../forms/Switch';
 import { Tabs } from '../navigation/Tabs';
-import { CardRail } from '../layout/CardRail';
 import { Toast } from '../overlays/Toast';
 import { Tooltip } from '../overlays/Tooltip';
 import { Dialog } from '../overlays/Dialog';
+import { MobileBlocks } from './MobileBlocks';
+import './gallery.css';
 
 const TONES = ['gold', 'rust', 'moss', 'crimson', 'neutral'] as const;
 
@@ -114,8 +112,8 @@ export const Gallery: React.FC = () => {
         </div>
       </Section>
 
-      <Section title="Cards & card rail">
-        <CardRail>
+      <Section title="Cards">
+        <div className="gallery-grid-md">
           <Card className="card--pad">
             <h3 className="fs-7 gallery-mb-2">Standard Card</h3>
             <p className="fs-5 ink-muted">Surface container.</p>
@@ -130,7 +128,7 @@ export const Gallery: React.FC = () => {
           <Card className="card--pad">
             <Stat label="Total Points" value="1,420" hint="+15% this match" />
           </Card>
-        </CardRail>
+        </div>
       </Section>
 
       <Section title="Forms">
@@ -185,7 +183,7 @@ export const Gallery: React.FC = () => {
         </div>
         <div className="gallery-mt-4">
           <Empty
-            icon="🗺️"
+            icon={<Icon name="map" />}
             title="No local maps saved"
             description="Create a new map or edit a public one to keep it on this device."
             action={<Button variant="primary" size="sm">Create a map</Button>}
@@ -193,29 +191,27 @@ export const Gallery: React.FC = () => {
         </div>
       </Section>
 
-      <Section title="Boarding pass & grid">
-        <Grid cols={2}>
-          <Pass
-            title="Antwerp Dockside Sprint"
-            from="ANR"
-            to="FIN"
-            stubValue="6"
-            stubLabel="Waypoints"
-          />
-          <Pass
-            title="Ghent Canal Loop"
-            from="GNE"
-            to="GNE"
-            stubValue="12"
-            stubLabel="Waypoints"
-          />
-        </Grid>
+      <Section title="Icons">
+        <div className="icon-grid">
+          {ICON_NAMES.map((name) => (
+            <div key={name} className="icon-grid__cell">
+              <Icon name={name} size="lg" />
+              <span className="icon-grid__name">{name}</span>
+            </div>
+          ))}
+        </div>
+        <div className="gallery-row gallery-mt-4">
+          <Icon name="coin" size="sm" />
+          <Icon name="coin" size="md" />
+          <Icon name="coin" size="lg" />
+          <Icon name="coin" label="Coins" />
+        </div>
       </Section>
 
       <Section title="Standings board">
         <Board
           columns={[
-            { key: 'team', header: 'Team', who: true, render: (r) => <><Pin tone="gold">{r.pos}</Pin>{r.team}</> },
+            { key: 'team', header: 'Team', who: true, render: (r) => <>{r.pos}. {r.team}</> },
             { key: 'cp', header: 'Waypoints', numeric: true, render: (r) => r.cp },
             { key: 'pts', header: 'Points', numeric: true, render: (r) => r.pts },
           ]}
@@ -229,16 +225,8 @@ export const Gallery: React.FC = () => {
         />
       </Section>
 
-      <Section title="Infobox">
-        <div className="gallery-grid-lg">
-          <Infobox
-            title="Match Rules"
-            rows={[
-              { term: 'Tick', detail: 'Every 60 seconds' },
-              { term: 'Teams', detail: '2 – 6' },
-              { term: 'Verify', detail: 'Photo + GPS heuristics' },
-            ]}
-          />
+      <Section title="Search">
+        <div className="gallery-grid-md">
           <Omnisearch placeholder="Search maps…" shortcut="/" />
         </div>
       </Section>
@@ -270,10 +258,6 @@ export const Gallery: React.FC = () => {
       <Section title="Brand motifs">
         <Row>
           <Plate><span className="t-announce fs-7">Plate</span></Plate>
-          <Hex size="sm" num="3" />
-          <Hex num="12" kicker="LEAD" />
-          <Hex size="lg" variant="player" num="7" kicker="PLAYER" />
-          <Hex variant="seek" num="!" kicker="SEEK" />
           <Sticker><span className="fs-4">AMBER</span></Sticker>
           <Sticker tone="red"><span className="fs-4">RED</span></Sticker>
         </Row>
@@ -284,6 +268,8 @@ export const Gallery: React.FC = () => {
           </Hero>
         </div>
       </Section>
+
+      <MobileBlocks />
 
       <Section title="Type scale">
         <div className="gallery-grid-sm">

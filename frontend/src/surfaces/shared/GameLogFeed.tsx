@@ -5,7 +5,7 @@ interface GameLogFeedProps {
   emptyLabel?: string;
 }
 
-export const GameLogFeed: React.FC<GameLogFeedProps> = ({ logs, emptyLabel = 'Waiting for game events...' }) => {
+export const GameLogFeed: React.FC<GameLogFeedProps> = ({ logs, emptyLabel = 'No events yet.' }) => {
   return (
     <div
       style={{

@@ -8,14 +8,19 @@ import { BoardFilterBar } from '../shared/BoardFilterBar';
 import { useBoardFilters } from '../shared/boardFilters';
 import { PageShell } from '../shared/PageShell';
 import { PageFooter } from '../shared/PageFooter';
-import { Button, Empty, BrandLines } from '@ds';
+import { Button, Empty, PageHeader, showToast, Icon } from '@ds';
+import { useIsDesktop } from '../../core/ui/useIsDesktop';
+import { plainError } from '../../core/ui/plainError';
+import { hostBoardRace } from './hostBoard';
 
 export const GalleryPage: React.FC = () => {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [forkingId, setForkingId] = useState<string | null>(null);
+  const [hostingId, setHostingId] = useState<string | null>(null);
   const { filters, setFilters, reset, counts, visible, narrowed } = useBoardFilters(boards);
 
   useEffect(() => {
@@ -29,7 +34,7 @@ export const GalleryPage: React.FC = () => {
       const list = await listBoards();
       setBoards(list);
     } catch (err: any) {
-      setError(err.message || 'Failed to load public gallery maps');
+      setError(plainError(err, "We couldn't load the gallery. Try again in a moment."));
     } finally {
       setLoading(false);
     }
@@ -46,53 +51,41 @@ export const GalleryPage: React.FC = () => {
       saveMyMap({ mapId: res.id, editToken: res.edit_token, name: res.name });
       navigate(`/design/${res.id}`);
     } catch (err: any) {
-      alert(`Failed to fork map: ${err.message || 'Unknown error'}`);
+      showToast(plainError(err, "Couldn't copy that map. Try again."), { tone: 'crimson' });
     } finally {
       setForkingId(null);
+    }
+  };
+
+  const handleRace = async (id: string) => {
+    const board = boards.find((b) => b.id === id);
+    if (!board) return;
+    setHostingId(id);
+    try {
+      navigate(`/host/${await hostBoardRace(board)}`);
+    } catch (err) {
+      showToast(plainError(err, "Couldn't start a race on that map. Try again."), { tone: 'crimson' });
+      setHostingId(null);
     }
   };
 
   return (
     <PageShell
       navPlacement="topbar"
-      topBarProps={{
-        title: (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-            <BrandLines size={24} />
-            <span className="t-announce fs-7" style={{ letterSpacing: '0.04em', color: 'var(--ink-strong)' }}>
-              RUNWAY
-            </span>
-          </div>
-        ),
-      }}
       loading={loading}
       error={error}
       onRetry={fetchBoards}
     >
       <section style={{ maxWidth: '62.5rem', margin: '0 auto var(--sp-7)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
-          <div>
-            <p className="t-label fs-label" style={{ marginBottom: 'var(--sp-1)' }}>
-              PUBLIC MAPS
-            </p>
-            <h1 className="t-announce fs-d-md" style={{ color: 'var(--ink-strong)' }}>
-              GALLERY
-            </h1>
-          </div>
-          {boards.length > 0 && (
-            <span className="t-data fs-2" style={{ letterSpacing: '.12em', color: 'var(--ink-muted)' }}>
-              {boards.length} PUBLISHED
-            </span>
-          )}
-        </div>
+        <PageHeader title="GALLERY" />
 
         {boards.length === 0 ? (
           <Empty
-            icon="🎯"
+            icon={<Icon name="target" />}
             title="No public maps yet"
-            description="Nothing has been published to the gallery so far. Design a route race and share it to be the first."
+            description="Design a map and publish it to be the first."
             action={
-              <Button variant="primary" icon="🗺️" onClick={() => navigate('/design')}>
+              <Button variant="primary" icon={<Icon name="map" />} onClick={() => navigate('/design')}>
                 Design a Map
               </Button>
             }
@@ -110,9 +103,9 @@ export const GalleryPage: React.FC = () => {
 
             {visible.length === 0 ? (
               <Empty
-                icon="🔍"
+                icon={<Icon name="search" />}
                 title="No maps match"
-                description="Nothing in the gallery fits that search and length. Widen the band or clear the search to see the rest."
+                description="Try a different search or length."
                 action={
                   <Button variant="secondary" onClick={reset}>
                     Reset Filters
@@ -120,14 +113,17 @@ export const GalleryPage: React.FC = () => {
                 }
               />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(18rem, 1fr))', gap: 'var(--sp-5)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(18rem, 100%), 1fr))', gap: 'var(--sp-5)' }}>
                 {visible.map((board) => (
                   <GalleryCard
                     key={board.id}
                     board={board}
                     onView={handleView}
                     onFork={handleFork}
+                    onRace={handleRace}
+                    phone={!isDesktop}
                     isForking={forkingId === board.id}
+                    isHosting={hostingId === board.id}
                   />
                 ))}
               </div>

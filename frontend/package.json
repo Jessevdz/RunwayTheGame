@@ -8,18 +8,25 @@
     "dev:docs": "npm --prefix ../docs-site run dev",
     "build": "tsc -b && vite build",
     "build:docs": "npm --prefix ../docs-site run build",
-    "lint": "oxlint --deny-warnings && eslint --config eslint.adherence.config.js src --max-warnings 0 && stylelint \"src/**/*.css\" --max-warnings 0",
+    "lint": "npm run tokens:check && oxlint --deny-warnings && eslint --config eslint.adherence.config.js src --max-warnings 0 && stylelint \"src/**/*.css\" --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tokens": "node scripts/generate-tokens.mjs",
+    "tokens:check": "node scripts/generate-tokens.mjs --check"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/archivo-black": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/playfair-display": "^5.3.0",
     "@types/geojson": "^7946.0.16",
     "maplibre-gl": "^6.2.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "smp-noto-glyphs": "^2.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

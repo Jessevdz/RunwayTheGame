@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from '../primitives/Icon';
 
 export interface OmnisearchProps {
   value?: string;
@@ -22,7 +23,7 @@ export const Omnisearch: React.FC<OmnisearchProps> = ({
   placeholder = 'Search…',
   label = 'Search',
   shortcut = '/',
-  icon = '⌕',
+  icon = <Icon name="search" />,
   className = '',
   style,
 }) => {

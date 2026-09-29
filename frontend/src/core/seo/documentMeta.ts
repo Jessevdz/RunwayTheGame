@@ -10,7 +10,7 @@ const SUFFIX = 'Runway';
 
 /** Composes a tab title in the same shape the Starlight docs use. */
 const title = (page: string | null): string =>
-  page ? `${page} | ${SUFFIX}` : 'Runway — race the real world';
+  page ? `${page} | ${SUFFIX}` : 'Runway: race the real world';
 
 const LANDING: DocumentMeta = {
   title: title(null),

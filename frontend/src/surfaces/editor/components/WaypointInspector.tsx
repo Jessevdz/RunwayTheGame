@@ -1,7 +1,6 @@
 import React from 'react';
-import { Badge, IconButton } from '@ds';
+import { Badge, IconButton, Icon } from '@ds';
 import type { WaypointDraft } from '../../../core/editor/geometryUtils';
-import { IconFinish, IconLocate, IconRoad, IconStart, IconTrash } from './EditorIcons';
 
 export interface ConnectedRoadRef {
   roadId: string;
@@ -33,9 +32,9 @@ export const WaypointInspector: React.FC<WaypointInspectorProps> = ({
       <h3 className="inspector__title">{waypoint.name || 'Untitled waypoint'}</h3>
       {waypoint.isStart && <Badge tone="moss">Start</Badge>}
       {waypoint.isFinish && <Badge tone="gold">Finish</Badge>}
-      <IconButton icon={<IconLocate />} label="Centre map on this waypoint" variant="ghost" size="sm" onClick={onLocate} />
+      <IconButton icon={<Icon name="locate" />} label="Centre map on this waypoint" variant="ghost" size="sm" onClick={onLocate} />
       {editable && (
-        <IconButton icon={<IconTrash />} label="Delete waypoint" variant="ghost" size="sm" onClick={onDelete} />
+        <IconButton icon={<Icon name="trash" />} label="Delete waypoint" variant="ghost" size="sm" onClick={onDelete} />
       )}
     </header>
 
@@ -74,7 +73,7 @@ export const WaypointInspector: React.FC<WaypointInspectorProps> = ({
           />
           <span className="unit-input__unit">m</span>
         </div>
-        <span className="hint">How close a player must get before the waypoint counts as reached.</span>
+        <span className="hint">How close a player must get to arrive.</span>
       </div>
 
       {connectedRoads.length > 0 && (
@@ -92,16 +91,16 @@ export const WaypointInspector: React.FC<WaypointInspectorProps> = ({
                   background: 'var(--surface-2)',
                   border: '0.0625rem solid var(--line)',
                   borderRadius: 'var(--r-sm)',
-                  fontSize: '0.85rem'
+                  fontSize: 'var(--fs-3)'
                 }}
               >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--sp-h)' }}>
-                  <IconRoad />
+                  <Icon name="road" />
                   <span>Road to <strong>{item.targetName}</strong></span>
                 </span>
                 {editable && onDeleteRoad && (
                   <IconButton
-                    icon={<IconTrash />}
+                    icon={<Icon name="trash" />}
                     label={`Remove road to ${item.targetName}`}
                     variant="ghost"
                     size="sm"
@@ -125,7 +124,7 @@ export const WaypointInspector: React.FC<WaypointInspectorProps> = ({
               className="role-toggle role-toggle--start"
               onClick={() => onChange('isStart', !waypoint.isStart)}
             >
-              <IconStart />
+              <Icon name="start" />
               Start
             </button>
             <button
@@ -134,13 +133,12 @@ export const WaypointInspector: React.FC<WaypointInspectorProps> = ({
               className="role-toggle role-toggle--finish"
               onClick={() => onChange('isFinish', !waypoint.isFinish)}
             >
-              <IconFinish />
+              <Icon name="flag" />
               Finish
             </button>
           </div>
           <p className="role-toggles__hint">
-            Start and finish must be different waypoints. For a circular route, place a separate
-            finish waypoint next to the start.
+            Start and finish must differ. For a loop, add a separate finish next to the start.
           </p>
         </>
       )}

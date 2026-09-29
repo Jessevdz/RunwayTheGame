@@ -9,6 +9,7 @@ import {
   type BoardFilters,
   type SortId,
 } from './boardFilters';
+import './board-filters.css';
 
 interface BoardFilterBarProps {
   filters: BoardFilters;

@@ -1,216 +1,440 @@
-/* Race report page layout styles. */
+@layer surfaces {
+  /* Race report page layout styles, mobile first. */
+  /* Phones get the 16px page gutter instead of the shell's default. */
+  .page-shell__main:has(> .race-report) {
+    padding-inline: var(--page-pad);
+  }
 
-.race-report {
-  max-width: var(--wrap-content);
-  margin: 0 auto var(--sp-8);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-}
+  .race-report {
+    max-width: var(--wrap-content);
+    margin: 0 auto var(--sp-7);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+    min-width: 0;
+  }
 
-.race-report__head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-}
+  @media (min-width: 48rem) {
+    .race-report {
+      gap: var(--sp-6);
+      margin-bottom: var(--sp-8);
+    }
+  }
 
-.race-report__badges {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
+  .race-report__head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
 
-.race-report__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
+  @media (min-width: 40rem) {
+    .race-report__head {
+      flex-direction: row;
+      align-items: flex-end;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--sp-4);
+    }
+  }
 
-.race-report__section-title {
-  margin: 0;
-  color: var(--ink-strong);
-}
+  .race-report__head-lead {
+    min-width: 0;
+  }
 
-/* Statistics grid container. */
-.race-report__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-  gap: var(--sp-3);
-}
+  .race-report__title {
+    margin: 0;
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
 
-/* Evidence photo wall filter bar. */
-.race-report__filters {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
+  .race-report__when {
+    margin: var(--sp-1) 0 0;
+    color: var(--ink-muted);
+  }
 
-.race-report__filter-count {
-  font-family: var(--font-data);
-  font-size: var(--fs-2);
-  letter-spacing: 0.12em;
-  color: var(--ink-muted);
-  padding-bottom: var(--sp-2);
-}
+  .race-report__badges {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+  }
 
-.race-report__wall {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: var(--sp-4);
-}
+  /* The result hero: a Sunset bar on top, the winner large, runners-up beneath. */
+  .race-report__hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-5) var(--sp-4) var(--sp-4);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
 
-.race-report__shot {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
-  min-width: 0;
-}
+  .race-report__hero::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: var(--sp-1);
+    background: linear-gradient(90deg, var(--red), var(--orange), var(--amber));
+  }
 
-/* Photo thumbnail frame container. */
-.race-report__frame {
-  position: relative;
-  background: var(--surface-2);
-  border-radius: var(--r-sm);
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  width: 100%;
-  cursor: zoom-in;
-  transition: box-shadow 220ms var(--ease-premium);
-}
+  @media (min-width: 40rem) {
+    .race-report__hero {
+      padding: var(--sp-6) var(--sp-6) var(--sp-5);
+    }
+  }
 
-.race-report__frame:hover {
-  box-shadow: var(--shadow-hover);
-}
+  .race-report__hero-arc {
+    position: absolute;
+    top: var(--sp-3);
+    right: var(--sp-3);
+    width: 6rem;
+    height: auto;
+    opacity: 0.85;
+    pointer-events: none;
+  }
 
-.race-report__frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+  .race-report__hero-eyebrow {
+    color: var(--ink-muted);
+  }
 
-.race-report__frame--empty {
-  cursor: default;
-  padding: var(--sp-4);
-  text-align: center;
-  color: var(--ink-muted);
-  font-size: var(--fs-3);
-}
+  .race-report__hero-title {
+    margin: 0;
+    color: var(--ink-strong);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-4);
+    overflow-wrap: anywhere;
+    line-height: 1.05;
+  }
 
-.race-report__shot-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-  min-width: 0;
-}
+  .race-report__hero-team {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-3);
+    min-width: 0;
+  }
 
-.race-report__dot {
-  width: var(--sp-2);
-  height: var(--sp-2);
-  border-radius: var(--r-pill);
-  flex: none;
-}
+  .race-report__hero-time {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-d-lg);
+  }
 
-.race-report__shot-where {
-  font-size: var(--fs-4);
-  color: var(--ink-strong);
-  margin: 0;
-}
+  .race-report__hero-detail {
+    margin: 0;
+    color: var(--ink-muted);
+  }
 
-.race-report__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-  font-family: var(--font-data);
-  font-size: var(--fs-2);
-  color: var(--ink-muted);
-}
+  .race-report__podium {
+    list-style: none;
+    margin: var(--sp-3) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
 
-/* Photo lightbox modal container. */
-.race-report__lightbox {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
+  .race-report__podium-row {
+    display: grid;
+    grid-template-columns: 2.5rem auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--sp-2);
+    padding: var(--sp-2) 0;
+    border-top: 1px solid var(--line);
+    min-height: var(--min-tap-target);
+  }
 
-.race-report__lightbox img {
-  width: 100%;
-  max-height: 60vh;
-  object-fit: contain;
-  background: var(--surface-2);
-  border-radius: var(--r-sm);
-}
+  .race-report__podium-place {
+    color: var(--ink-strong);
+  }
 
-.race-report__lightbox dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sp-2) var(--sp-4);
-  margin: 0;
-  font-size: var(--fs-4);
-}
+  .race-report__podium-name {
+    font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
 
-.race-report__lightbox dt {
-  font-family: var(--font-data);
-  font-size: var(--fs-2);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
+  .race-report__podium-metric {
+    grid-column: 2 / -1;
+    color: var(--ink-muted);
+  }
 
-.race-report__lightbox dd {
-  margin: 0;
-  color: var(--ink);
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
+  @media (min-width: 40rem) {
+    .race-report__podium-row {
+      grid-template-columns: 3rem auto minmax(0, 1fr) auto;
+    }
 
-.race-report__board {
-  overflow-x: auto;
-}
+    .race-report__podium-metric {
+      grid-column: auto;
+      text-align: right;
+    }
+  }
 
-/* The board sets no horizontal cell padding, which reads fine at the widths a
+  .race-report__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .race-report__section-title {
+    margin: 0;
+    color: var(--ink-strong);
+  }
+
+  /* Statistics grid container. */
+  .race-report__stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr));
+    gap: var(--sp-3);
+  }
+
+  /* Native expander for the stats that rarely matter. */
+  .race-report__more {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .race-report__more-toggle {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    min-height: var(--min-tap-target);
+    padding: 0 var(--sp-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    font-family: var(--font-data);
+    font-size: var(--fs-4);
+    color: var(--ink-strong);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .race-report__more-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .race-report__more-close,
+    .race-report__more[open] .race-report__more-open {
+    display: none;
+  }
+
+  .race-report__more[open] .race-report__more-close {
+    display: inline;
+  }
+
+  .race-report__more-toggle:active {
+    background: var(--accent-wash);
+  }
+
+  /* Evidence photo wall filter bar. */
+  .race-report__filters {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
+  .race-report__filter-count {
+    font-family: var(--font-data);
+    font-size: var(--fs-2);
+    letter-spacing: 0.12em;
+    color: var(--ink-muted);
+    padding-bottom: var(--sp-2);
+  }
+
+  .race-report__wall {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+    gap: var(--sp-4);
+  }
+
+  .race-report__shot {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    min-width: 0;
+  }
+
+  /* Photo thumbnail frame container. */
+  .race-report__frame {
+    position: relative;
+    background: var(--surface-2);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    width: 100%;
+    cursor: zoom-in;
+    transition: box-shadow 220ms var(--ease-premium);
+  }
+
+  @media (hover: hover) {
+    .race-report__frame:hover {
+      box-shadow: var(--shadow-hover);
+    }
+  }
+
+  .race-report__frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .race-report__frame--empty {
+    cursor: default;
+    padding: var(--sp-4);
+    text-align: center;
+    color: var(--ink-muted);
+    font-size: var(--fs-3);
+  }
+
+  .race-report__shot-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .race-report__dot {
+    width: var(--sp-2);
+    height: var(--sp-2);
+    border-radius: var(--r-pill);
+    flex: none;
+  }
+
+  .race-report__dot--lg {
+    width: var(--sp-4);
+    height: var(--sp-4);
+  }
+
+  .race-report__shot-where {
+    font-size: var(--fs-4);
+    color: var(--ink-strong);
+    margin: 0;
+  }
+
+  .race-report__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    font-family: var(--font-data);
+    font-size: var(--fs-2);
+    color: var(--ink-muted);
+  }
+
+  /* Photo lightbox modal container. */
+  .race-report__lightbox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .race-report__lightbox img {
+    width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+    background: var(--surface-2);
+    border-radius: var(--r-sm);
+  }
+
+  .race-report__lightbox dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--sp-2) var(--sp-4);
+    margin: 0;
+    font-size: var(--fs-4);
+  }
+
+  .race-report__lightbox dt {
+    font-family: var(--font-data);
+    font-size: var(--fs-2);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  .race-report__lightbox dd {
+    margin: 0;
+    color: var(--ink);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Standings scroll sideways on phones while the team column stays pinned. */
+  .race-report__board {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .race-report__board .board {
+    min-width: 28rem;
+  }
+
+  .race-report__board .board th:first-child,
+    .race-report__board .board td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    max-width: 11rem;
+    padding-right: var(--sp-3);
+  }
+
+  .race-report__place {
+    min-width: 2.5rem;
+    color: var(--ink-muted);
+  }
+
+  .race-report__team-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The board sets no horizontal cell padding, which reads fine at the widths a
    desktop gives it and runs the team name into the first number at these. */
-.race-report__board .board td,
-.race-report__board .board th {
-  padding-right: var(--sp-3);
-}
+  .race-report__board .board td,
+    .race-report__board .board th {
+    padding-right: var(--sp-3);
+  }
 
-.race-report__board .board td:last-child,
-.race-report__board .board th:last-child {
-  padding-right: 0;
-}
+  .race-report__board .board td:last-child,
+    .race-report__board .board th:last-child {
+    padding-right: 0;
+  }
 
-.race-report__timeline {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  max-height: 24rem;
-  overflow-y: auto;
-  color: var(--ink-muted);
-}
+  .race-report__timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    max-height: 24rem;
+    overflow-y: auto;
+    color: var(--ink-muted);
+  }
 
-/* Report data erasure actions. */
-.race-report__erase {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
+  /* Report data erasure actions. */
+  .race-report__erase {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
 
-.race-report__erase-actions {
-  display: flex;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
+  .race-report__erase-actions {
+    display: flex;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+  }
 }

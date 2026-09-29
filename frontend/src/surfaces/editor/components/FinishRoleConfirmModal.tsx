@@ -21,15 +21,14 @@ export const FinishRoleConfirmModal: React.FC<FinishRoleConfirmModalProps> = ({
   onConfirm,
   onCancel
 }) => (
-  <Dialog open title="🏁 MAKE THIS THE FINISH" onClose={onCancel}>
+  <Dialog open title="MAKE THIS THE FINISH" onClose={onCancel}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
       <div>
-        <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: '1rem', fontWeight: 600 }}>
+        <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: 'var(--fs-6)', fontWeight: 600 }}>
           <strong>{target.name || 'This waypoint'}</strong> has a challenge on it.
         </p>
-        <p style={{ margin: '0 0 var(--sp-2) 0', color: 'var(--ink-muted)', fontSize: '0.9rem' }}>
-          The finish line has no challenge — arriving there is the objective, and the arrival is all
-          that gets logged. Making this the finish deletes its challenge.
+        <p style={{ margin: '0 0 var(--sp-2) 0', color: 'var(--ink-muted)', fontSize: 'var(--fs-4)' }}>
+          The finish line has no challenge. Making this the finish deletes it.
         </p>
         {target.prompt.trim() && (
           <p
@@ -40,7 +39,7 @@ export const FinishRoleConfirmModal: React.FC<FinishRoleConfirmModalProps> = ({
               border: '0.0625rem solid var(--line)',
               borderRadius: 'var(--r-sm)',
               color: 'var(--ink-muted)',
-              fontSize: '0.9rem'
+              fontSize: 'var(--fs-4)'
             }}
           >
             “{target.prompt.trim()}”

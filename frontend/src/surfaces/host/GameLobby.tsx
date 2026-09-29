@@ -13,10 +13,12 @@ import { useJoinTeam } from '../../core/game/useJoinTeam';
 import { useLobbyMembership } from '../../core/game/useLobbyMembership';
 import { slotColor, getTeamPalette } from '../../core/team/palette';
 import { TeamPicker } from '../shared/TeamPicker';
+import { GetReadyCard } from './GetReadyCard';
 import { PageShell } from '../shared/PageShell';
 import { PageFooter } from '../shared/PageFooter';
 import { AlphaNotice } from '../shared/AlphaNotice';
-import { Button, Card, Chip, Dialog, Empty, Notice, Input, Sticker, Flap, BrandLines } from '@ds';
+import { plainError } from '../../core/ui/plainError';
+import { Button, Card, Chip, Dialog, Empty, Notice, Input, Sticker, Flap, Icon } from '@ds';
 import './host-console.css';
 
 /** Poll interval for refreshing lobby state (ms). */
@@ -170,6 +172,8 @@ export const GameLobby: React.FC = () => {
   const isJoined = !!teamSession;
   const named = playerName.trim().length > 0;
   const busy = joinBusy || editBusy;
+  // Only someone who will be walking needs the permissions, so a host who is just refereeing skips the step.
+  const showGetReady = isJoined && !alreadyLive;
 
   const copyWithFlash = useCallback(async (text: string) => {
     const ok = await copyCode(text);
@@ -199,7 +203,7 @@ export const GameLobby: React.FC = () => {
     if (!gameId) return;
     if (!hostSession) {
       setError(
-        'This browser is not the host of this race. Only the device that created it can start it — open the lobby there, or host a new race.'
+        'Only the device that created this race can start it.'
       );
       return;
     }
@@ -213,12 +217,12 @@ export const GameLobby: React.FC = () => {
     } catch (err: any) {
       if (err?.status === 403) {
         setError(
-          'This browser is no longer the host of this race. Only the device that created it can start it.'
+          'Only the device that created this race can start it.'
         );
         setStarting(false);
         return;
       }
-      setError(err.message || 'Failed to start the race');
+      setError(plainError(err, "The race didn't start. Try again."));
       setStarting(false);
     }
   };
@@ -282,23 +286,16 @@ export const GameLobby: React.FC = () => {
     rememberRace({ gameId, gmOnly: next });
   };
 
-  const brand = (
-    <div className="lobby-row">
-      <BrandLines size={24} />
-      <span className="t-announce fs-7 lobby-brand">RUNWAY</span>
-    </div>
-  );
-
   if (!gameId) {
     return (
-      <PageShell navPlacement="topbar" topBarProps={{ title: brand }}>
+      <PageShell navPlacement="topbar" topBarProps={{}}>
         <section className="lobby-container">
           <Empty
-            icon="🧭"
+            icon={<Icon name="compass" />}
             title="No race to show"
-            description="This lobby link is missing its race id. Pick a map to host a new race instead."
+            description="This link is incomplete. Host a new race instead."
             action={
-              <Button variant="primary" icon="🏁" onClick={() => navigate('/host')}>
+              <Button variant="primary" icon={<Icon name="flag" />} onClick={() => navigate('/host')}>
                 Host a Race
               </Button>
             }
@@ -313,12 +310,12 @@ export const GameLobby: React.FC = () => {
   // The effect above owns the hand-off; this is the second it happens in.
   if (launching && teamSession) {
     return (
-      <PageShell navPlacement="topbar" topBarProps={{ title: brand }}>
+      <PageShell navPlacement="topbar" topBarProps={{}}>
         <section className="lobby-container">
           <Empty
-            icon="🏁"
+            icon={<Icon name="flag" />}
             title="Race starting…"
-            description={`${teamSession.teamName} is on the board. Taking you to ${boardName || 'the map'}.`}
+            description={`Taking ${teamSession.teamName} to ${boardName || 'the map'}.`}
           />
         </section>
       </PageShell>
@@ -336,6 +333,8 @@ export const GameLobby: React.FC = () => {
     // server refuses with a 409 if a nameless device is still holding it, which
     // is a better answer than one this page tries to work out for itself.
     const canDisband = !alreadyLive && team.players.length === 0 && (isHost || isJoined);
+    // A live race only lets a player onto an existing squad through that squad's invite link.
+    const rejoinable = status === 'live' && !isJoined && invited?.teamId === team.team_id && !!invited.code;
 
     return (
       <div
@@ -362,7 +361,7 @@ export const GameLobby: React.FC = () => {
             ))}
           </div>
         ) : (
-          <p className="fs-5 lobby-squad__nobody">Nobody on this squad yet.</p>
+          <p className="fs-5 lobby-squad__nobody">No players yet.</p>
         )}
 
         {editingThis && editing.kind === 'name' && (
@@ -442,7 +441,7 @@ export const GameLobby: React.FC = () => {
           </div>
         )}
 
-        {!editingThis && !alreadyLive && (
+        {!editingThis && (!alreadyLive || rejoinable) && (
           <div className="lobby-squad__actions">
             {/* Not in yet, or in and looking at somebody else's squad: one tap
                 either way, and the same one. */}
@@ -456,7 +455,7 @@ export const GameLobby: React.FC = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon="✏️"
+                  icon={<Icon name="edit" />}
                   onClick={() => {
                     setEditError(null);
                     setSquadNameDraft(team.team_name);
@@ -468,7 +467,7 @@ export const GameLobby: React.FC = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon="🎨"
+                  icon={<Icon name="palette" />}
                   onClick={() => {
                     setEditError(null);
                     setEditing({ teamId: team.team_id, kind: 'colour' });
@@ -479,7 +478,7 @@ export const GameLobby: React.FC = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon="🙋"
+                  icon={<Icon name="user" />}
                   onClick={() => {
                     setEditError(null);
                     setMyNameDraft(teamSession?.displayName || playerName);
@@ -491,7 +490,7 @@ export const GameLobby: React.FC = () => {
               </>
             )}
             {canDisband && (
-              <Button variant="ghost" size="sm" icon="🗑️" disabled={busy} onClick={() => handleDisband(team)}>
+              <Button variant="ghost" size="sm" icon={<Icon name="trash" />} disabled={busy} onClick={() => handleDisband(team)}>
                 Remove squad
               </Button>
             )}
@@ -513,7 +512,6 @@ export const GameLobby: React.FC = () => {
 
       <Input
         label="YOUR NAME"
-        hint="So your friends can see which squad you are on."
         value={playerName}
         onChange={(e) => setPlayerName(e.target.value)}
         placeholder="e.g. Sam"
@@ -522,7 +520,7 @@ export const GameLobby: React.FC = () => {
         enterKeyHint="done"
       />
 
-      {!rosterLoaded && <p className="fs-5 lobby-note">Checking who's already here…</p>}
+      {!rosterLoaded && <p className="fs-5 lobby-note">Loading squads…</p>}
 
       {rosterLoaded && roster.length > 0 && (
         <div className="lobby-group">
@@ -530,11 +528,11 @@ export const GameLobby: React.FC = () => {
             <h3 className="t-announce fs-6" style={{ margin: 0, color: 'var(--ink-strong)' }}>
               JOIN A SQUAD
             </h3>
-            <p className="fs-5 lobby-note" style={{ marginTop: 'var(--sp-1)' }}>
-              {named
-                ? 'Tap the squad your friends are on. No code needed.'
-                : 'Enter your name above, then tap the squad your friends are on.'}
-            </p>
+            {!named && (
+              <p className="fs-5 lobby-note" style={{ marginTop: 'var(--sp-1)' }}>
+                Enter your name first.
+              </p>
+            )}
           </div>
           <div className="lobby-group" style={{ gap: 'var(--sp-2)' }}>{roster.map(squadCard)}</div>
         </div>
@@ -545,9 +543,6 @@ export const GameLobby: React.FC = () => {
           <h3 className="t-announce fs-6" style={{ margin: 0, color: 'var(--ink-strong)' }}>
             START A NEW SQUAD
           </h3>
-          <p className="fs-5 lobby-note" style={{ marginTop: 'var(--sp-1)' }}>
-            Name it, pick a colour, and your friends can tap straight onto it.
-          </p>
         </div>
         <TeamPicker
           gameId={gameId}
@@ -573,14 +568,14 @@ export const GameLobby: React.FC = () => {
       {joinError && <Notice kind="stop" title="Couldn't join">{joinError}</Notice>}
 
       {!rosterLoaded ? (
-        <Empty icon="📡" title="Reading the roster" description="Fetching the squads already in this lobby…" />
+        <Empty icon={<Icon name="signal" />} title="Loading squads" />
       ) : roster.length === 0 ? (
         <Empty
-          icon="⏳"
+          icon={<Icon name="hourglass" />}
           title="Waiting for squads"
-          description="Squads appear here the moment somebody creates one or joins with the race code."
+          description="Squads appear here as players join."
           action={
-            <Button variant="secondary" size="sm" icon="🔗" onClick={() => setInviteOpen(true)}>
+            <Button variant="secondary" size="sm" icon={<Icon name="link" />} onClick={() => setInviteOpen(true)}>
               Invite
             </Button>
           }
@@ -593,7 +588,7 @@ export const GameLobby: React.FC = () => {
           instead — handing the race out is their job, not a player's. */}
       {isJoined && !isHost && roster.length > 0 && (
         <div className="lobby-actions">
-          <Button variant="secondary" size="sm" icon="🔗" onClick={() => setInviteOpen(true)}>
+          <Button variant="secondary" size="sm" icon={<Icon name="link" />} onClick={() => setInviteOpen(true)}>
             Invite someone
           </Button>
         </div>
@@ -625,25 +620,23 @@ export const GameLobby: React.FC = () => {
             onJoined={handleCreateSquad}
           />
           <Button variant="ghost" size="sm" onClick={() => handleGmOnly(true)}>
-            No — I'm just running it
+            Just hosting
           </Button>
         </div>
       )}
 
       {isHost && !isJoined && gmOnly && (
         <div className="lobby-row">
-          <span className="fs-5" style={{ flex: 1, color: 'var(--ink-muted)' }}>Running this race as GM.</span>
+          <span className="fs-5" style={{ flex: 1, color: 'var(--ink-muted)' }}>Hosting only.</span>
           <Button variant="ghost" size="sm" onClick={() => handleGmOnly(false)}>
             Change
           </Button>
         </div>
       )}
 
-      {!isHost && (
+      {!isHost && !alreadyLive && (
         <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 0, textAlign: 'center' }}>
-          {alreadyLive
-            ? 'The race is currently live.'
-            : 'The host will start the race once everyone is ready.'}
+          Waiting for the host to start.
         </p>
       )}
 
@@ -669,17 +662,16 @@ export const GameLobby: React.FC = () => {
       )}
 
       <p className="fs-5 lobby-note">
-        Read the code out and players enter it on the home screen, or send them the link — either way
-        they land here and tap straight onto a squad.
+        Players enter the code on the home screen or open the link.
       </p>
 
       <div className="lobby-actions">
         {raceCode && (
-          <Button variant="primary" size="sm" icon={copiedCode ? '✅' : '📋'} onClick={() => copyWithFlash(raceCode)}>
+          <Button variant="primary" size="sm" icon={<Icon name={copiedCode ? 'check-circle' : 'copy'} />} onClick={() => copyWithFlash(raceCode)}>
             {copiedCode ? 'Code copied' : 'Copy code'}
           </Button>
         )}
-        <Button variant="secondary" size="sm" icon={copiedLink ? '✅' : '🔗'} onClick={() => shareWithFlash(inviteUrl)}>
+        <Button variant="secondary" size="sm" icon={<Icon name={copiedLink ? 'check-circle' : 'link'} />} onClick={() => shareWithFlash(inviteUrl)}>
           {copiedLink ? 'Link copied' : `${sendVerb} link`}
         </Button>
       </div>
@@ -700,7 +692,7 @@ export const GameLobby: React.FC = () => {
   );
 
   return (
-    <PageShell navPlacement="topbar" topBarProps={{ title: brand }}>
+    <PageShell navPlacement="topbar" topBarProps={{}}>
       <section className="lobby-container">
         <div className="lobby-header">
           <div>
@@ -712,9 +704,8 @@ export const GameLobby: React.FC = () => {
                 needs no label — it is the shape everyone already expects. */}
             {isCoinRush(mode) && (
               <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 'var(--sp-2) 0 0', maxWidth: 'var(--measure)' }}>
-                <strong style={{ color: 'var(--ink-strong)' }}>Coin rush.</strong> The richest team wins, not
-                the fastest. Crossing the line pays a placement bonus and starts a countdown for everyone
-                still out there.
+                <strong style={{ color: 'var(--ink-strong)' }}>Coin rush.</strong> Richest team wins. Finishing
+                pays a bonus and starts a countdown for everyone else.
               </p>
             )}
           </div>
@@ -731,13 +722,13 @@ export const GameLobby: React.FC = () => {
 
         {copyFailed && (
           <Notice kind="warn" title="Couldn't reach the clipboard" style={{ marginBottom: 'var(--sp-4)' }}>
-            This browser blocked the copy. Select the code or link on this page and copy it by hand.
+            Copy it by hand instead.
           </Notice>
         )}
 
         {alreadyLive && (
-          <Notice kind="warn" title={status === 'ended' ? 'This race is over' : 'This race is already live'} style={{ marginBottom: 'var(--sp-4)' }}>
-            {status === 'ended' ? 'It can no longer be joined.' : 'New squads can still join a live race.'}
+          <Notice kind="warn" title={status === 'ended' ? 'Race over' : 'Race live'} style={{ marginBottom: 'var(--sp-4)' }}>
+            {status === 'ended' ? 'It can no longer be joined.' : 'New squads can still join.'}
           </Notice>
         )}
 
@@ -750,10 +741,16 @@ export const GameLobby: React.FC = () => {
           {isHost ? (
             <>
               {InviteCard}
-              {SquadsCard}
+              <div className="lobby-stack">
+                {SquadsCard}
+                {showGetReady && <GetReadyCard />}
+              </div>
             </>
           ) : isJoined ? (
-            SquadsCard
+            <div className="lobby-stack">
+              {showGetReady && <GetReadyCard />}
+              {SquadsCard}
+            </div>
           ) : (
             JoinCard
           )}
@@ -765,13 +762,13 @@ export const GameLobby: React.FC = () => {
             {alreadyLive ? (
               <Button
                 variant="primary"
-                icon="🏁"
+                icon={<Icon name="flag" />}
                 onClick={() => navigate(`/race/${gameId}?view=${teamSession ? 'play' : 'host'}`)}
               >
                 {status === 'ended' ? 'Open recap' : 'Open live race'}
               </Button>
             ) : (
-              <Button variant="primary" icon="🏁" disabled={starting || roster.length === 0} onClick={handleStart}>
+              <Button variant="primary" icon={<Icon name="flag" />} disabled={starting || roster.length === 0} onClick={handleStart}>
                 {starting ? 'Starting…' : roster.length === 0 ? 'Waiting for squads…' : `Start race · ${roster.length} squad${roster.length === 1 ? '' : 's'}`}
               </Button>
             )}

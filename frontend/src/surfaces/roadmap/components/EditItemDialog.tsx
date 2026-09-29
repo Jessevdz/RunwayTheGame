@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, Input, Textarea, Select, Button, Notice } from '@ds';
 import type { ApiRoadmapItem } from '../../../core/api/client';
+import { plainError } from '../../../core/ui/plainError';
 
 export interface EditItemDialogProps {
   open: boolean;
@@ -47,7 +48,7 @@ export const EditItemDialog: React.FC<EditItemDialogProps> = ({
       });
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to update roadmap item');
+      setError(plainError(err, 'Failed to update roadmap item'));
     } finally {
       setSubmitting(false);
     }

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import type { BoardPreview } from '../api/client';
+import './route-preview.css';
 
 export interface RoutePreviewProps {
   preview?: BoardPreview;

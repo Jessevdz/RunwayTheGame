@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { PageShell } from '../shared/PageShell';
 import { PageFooter } from '../shared/PageFooter';
-import { Button, BrandLines, Notice } from '@ds';
+import { Button, Notice, Icon } from '@ds';
+import { plainError } from '../../core/ui/plainError';
 import { RoadmapLane } from './components/RoadmapLane';
 import { CreateItemDialog } from './components/CreateItemDialog';
 import { EditItemDialog } from './components/EditItemDialog';
@@ -39,7 +40,7 @@ export const RoadmapPage: React.FC = () => {
       const data = await listRoadmapItems(voterId, isAdmin);
       setItems(data);
     } catch (err: any) {
-      setError(err.message || 'Failed to load roadmap items');
+      setError(plainError(err, "We couldn't load the roadmap. Try again in a moment."));
     } finally {
       setLoading(false);
     }
@@ -108,7 +109,7 @@ export const RoadmapPage: React.FC = () => {
   const handleFlag = async (id: string) => {
     try {
       await flagRoadmapItem(id, voterId);
-      setActionNotice('Item reported. Thank you for keeping the roadmap community-friendly.');
+      setActionNotice('Reported. Thanks.');
       fetchRoadmap();
     } catch (err: any) {
       setActionNotice(`Failed to report item: ${err.message || 'Unknown error'}`);
@@ -118,7 +119,7 @@ export const RoadmapPage: React.FC = () => {
   const handleCreateSubmit = async (data: { title: string; description: string }) => {
     const newItem = await createRoadmapItem(data);
     setItems((prev) => [newItem, ...prev]);
-    setActionNotice('Idea submitted successfully!');
+    setActionNotice('Idea submitted.');
   };
 
   const handleMoveStatus = async (id: string, newStatus: ApiRoadmapItem['status']) => {
@@ -139,7 +140,7 @@ export const RoadmapPage: React.FC = () => {
     if (!isAdmin) return;
     const updated = await updateRoadmapItem(id, data);
     setItems((prev) => prev.map((item) => (item.id === id ? updated : item)));
-    setActionNotice('Roadmap item updated successfully.');
+    setActionNotice('Item updated.');
   };
 
   const handleDelete = async (id: string) => {
@@ -147,7 +148,7 @@ export const RoadmapPage: React.FC = () => {
     try {
       await deleteRoadmapItem(id);
       setItems((prev) => prev.filter((item) => item.id !== id));
-      setActionNotice('Roadmap item removed.');
+      setActionNotice('Item removed.');
     } catch (err: any) {
       setActionNotice(`Failed to remove feature: ${err.message || 'Unknown error'}`);
     }
@@ -161,21 +162,11 @@ export const RoadmapPage: React.FC = () => {
   return (
     <PageShell
       navPlacement="topbar"
-      topBarProps={{
-        title: (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-            <BrandLines size={24} />
-            <span className="t-announce fs-7" style={{ letterSpacing: '0.04em', color: 'var(--ink-strong)' }}>
-              RUNWAY
-            </span>
-          </div>
-        )
-      }}
       loading={loading}
       error={error}
       onRetry={fetchRoadmap}
     >
-      <section style={{ maxWidth: 'var(--wrap)', margin: '0 auto var(--sp-7)', padding: '0 var(--sp-4)' }}>
+      <section style={{ maxWidth: 'var(--wrap)', margin: '0 auto var(--sp-7)' }}>
         <div style={{ marginBottom: 'var(--sp-6)', textAlign: 'center' }}>
           <h1 className="t-announce fs-9" style={{ color: 'var(--ink-strong)', marginTop: 'var(--sp-1)' }}>
             {isAdmin ? 'Roadmap Admin Console' : 'Community Roadmap'}
@@ -194,7 +185,7 @@ export const RoadmapPage: React.FC = () => {
         {isAdmin && (
           <div style={{ marginBottom: 'var(--sp-4)' }}>
             <Notice kind="info">
-              ⚙️ <strong>Roadmap Admin Mode Active</strong> — Move items across lanes, edit feature details, or remove features from the public roadmap.
+              <Icon name="sliders" /> <strong>Admin mode</strong>
             </Notice>
           </div>
         )}
@@ -209,7 +200,7 @@ export const RoadmapPage: React.FC = () => {
                 style={{ marginLeft: 'var(--sp-2)' }}
                 onClick={() => setActionNotice(null)}
               >
-                ✕
+                <Icon name="x" />
               </button>
             </Notice>
           </div>
@@ -218,7 +209,7 @@ export const RoadmapPage: React.FC = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(16rem, 100%), 1fr))',
             gap: 'var(--sp-4)',
             alignItems: 'start'
           }}

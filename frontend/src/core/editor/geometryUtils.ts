@@ -225,7 +225,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
     if (w.isStart && w.isFinish) {
       errors.push({
         id: `err-start-is-finish-${w.id}`,
-        message: `Waypoint "${w.name}" cannot be both the start and the finish. For a circular route, place a separate finish waypoint next to the start.`,
+        message: `"${w.name}" cannot be both start and finish. For a loop, add a separate finish next to the start.`,
         type: 'error',
         waypointIds: [w.id]
       });
@@ -286,7 +286,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
     if (deg === 0) {
       errors.push({
         id: `err-isolated-${w.id}`,
-        message: `Waypoint "${w.name}" is completely isolated. All waypoints must connect to at least one road.`,
+        message: `"${w.name}" is not connected to any road.`,
         type: 'error',
         waypointIds: [w.id]
       });
@@ -303,7 +303,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
     if (routeOrder.tierByWaypoint[finishWp.id] === undefined) {
       errors.push({
         id: 'err-finish-unreachable',
-        message: `Invalid route layout: The finish line "${finishWp.name}" is not reachable from the start "${startWp.name}".`,
+        message: `Finish "${finishWp.name}" is not reachable from start "${startWp.name}".`,
         type: 'error',
         waypointIds: [startWp.id, finishWp.id]
       });
@@ -313,7 +313,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
   routeOrder.unreachable.forEach((w) => {
     errors.push({
       id: `err-unreachable-${w.id}`,
-      message: `Waypoint "${w.name}" is not reachable from the start along any road.`,
+      message: `"${w.name}" is not reachable from the start.`,
       type: 'error',
       waypointIds: [w.id]
     });
@@ -325,7 +325,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
     if (w.isFinish && ((board.challenges && board.challenges[w.id]) || w.challenge)) {
       errors.push({
         id: `err-finish-has-challenge-${w.id}`,
-        message: `The finish line "${w.name}" cannot carry a challenge. Reaching it is the objective — remove the challenge, or move the finish to another waypoint.`,
+        message: `Finish "${w.name}" cannot have a challenge. Remove it or move the finish.`,
         type: 'error',
         waypointIds: [w.id]
       });
@@ -336,7 +336,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
     if (!ch) {
       errors.push({
         id: `warn-waypoint-challenge-missing-${w.id}`,
-        message: `Waypoint "${w.name}" has no gating challenge configured.`,
+        message: `"${w.name}" has no challenge.`,
         type: 'warning',
         waypointIds: [w.id]
       });
@@ -347,7 +347,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
     if (!prompt || !prompt.trim()) {
       errors.push({
         id: `err-waypoint-challenge-prompt-${w.id}`,
-        message: `Challenge on waypoint "${w.name}" cannot have an empty prompt.`,
+        message: `"${w.name}" has an empty challenge prompt.`,
         type: 'error',
         waypointIds: [w.id]
       });

@@ -20,7 +20,7 @@ export const TabStrip: React.FC<TabStripProps> = ({ active, errorCount, onChange
           type="button"
           role="tab"
           aria-selected={isActive}
-          title={badge > 0 ? `${tab.title} — ${badge} error${badge === 1 ? '' : 's'}` : tab.title}
+          title={badge > 0 ? `${tab.title}: ${badge} error${badge === 1 ? '' : 's'}` : tab.title}
           className="pane-tab"
           onClick={() => onChange(tab.id)}
         >

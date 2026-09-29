@@ -1,7 +1,8 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TopBar, type TopBarProps } from './TopBar';
-import { Rail, BottomNav, Button, type RailItem, type BottomNavSlot } from '@ds';
+import { Rail, BottomNav, Button, Notice, Skeleton, type RailItem, type BottomNavSlot, Icon, type IconName } from '@ds';
+import { isImmersiveRoute } from '../../core/ui/immersiveRoutes';
 
 export interface PageShellProps {
   topBarProps?: TopBarProps;
@@ -30,17 +31,32 @@ export interface PageShellProps {
 interface NavDestination {
   id: string;
   label: string;
-  icon: string;
+  icon: IconName;
   path: string;
 }
 
 /** Top-level navigation destinations for primary application routes. */
 const DESTINATIONS: NavDestination[] = [
-  { id: 'home', label: 'Home', icon: '🏠', path: '/' },
-  { id: 'design', label: 'Design', icon: '🗺️', path: '/design' },
-  { id: 'races', label: 'Races', icon: '🏁', path: '/races' },
-  { id: 'gallery', label: 'Gallery', icon: '🎯', path: '/gallery' },
-  { id: 'roadmap', label: 'Roadmap', icon: '🧭', path: '/roadmap' },
+  { id: 'home', label: 'Home', icon: 'home', path: '/' },
+  { id: 'design', label: 'Design', icon: 'map', path: '/design' },
+  { id: 'races', label: 'Races', icon: 'flag', path: '/races' },
+  { id: 'gallery', label: 'Gallery', icon: 'target', path: '/gallery' },
+  { id: 'roadmap', label: 'Roadmap', icon: 'compass', path: '/roadmap' },
+];
+
+/** Phone bottom navigation; the other destinations live in the header menu. */
+const BOTTOM_DESTINATIONS: NavDestination[] = [
+  { id: 'home', label: 'Home', icon: 'home', path: '/' },
+  { id: 'join', label: 'Join', icon: 'ticket', path: '/#join' },
+  { id: 'races', label: 'Races', icon: 'flag', path: '/races' },
+  { id: 'host', label: 'Host', icon: 'pin', path: '/host' },
+];
+
+/** Destinations reachable from the phone header menu. */
+const MENU_DESTINATIONS: NavDestination[] = [
+  { id: 'gallery', label: 'Gallery', icon: 'target', path: '/gallery' },
+  { id: 'design', label: 'Design a map (desktop)', icon: 'map', path: '/design' },
+  { id: 'roadmap', label: 'Roadmap', icon: 'compass', path: '/roadmap' },
 ];
 
 function isActive(pathname: string, path: string): boolean {
@@ -67,13 +83,39 @@ export const PageShell: React.FC<PageShellProps> = ({
   style,
 }) => {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
+  const immersive = isImmersiveRoute(pathname);
 
   const destinations = nav
     ? DESTINATIONS.map((d) => ({
       id: d.id,
       label: d.label,
-      icon: d.icon,
+      icon: <Icon name={d.icon} />,
+      active: isActive(pathname, d.path),
+      onClick: () => navigate(d.path),
+    }))
+    : undefined;
+
+  const bottomDestinations = nav
+    ? BOTTOM_DESTINATIONS.map((d) => ({
+      id: d.id,
+      label: d.label,
+      icon: <Icon name={d.icon} />,
+      active:
+        d.id === 'join'
+          ? pathname === '/' && hash === '#join'
+          : d.id === 'home'
+            ? pathname === '/' && hash !== '#join'
+            : isActive(pathname, d.path),
+      onClick: () => navigate(d.path),
+    }))
+    : undefined;
+
+  const menuItems = nav
+    ? MENU_DESTINATIONS.map((d) => ({
+      id: d.id,
+      label: d.label,
+      icon: <Icon name={d.icon} />,
       active: isActive(pathname, d.path),
       onClick: () => navigate(d.path),
     }))
@@ -82,7 +124,7 @@ export const PageShell: React.FC<PageShellProps> = ({
   const inTopBar = navPlacement === 'topbar';
   const resolvedRailItems = inTopBar ? undefined : railItems ?? destinations;
   const resolvedTopBarNav = inTopBar ? destinations : undefined;
-  const resolvedNavSlots = bottomNavSlots ?? destinations;
+  const resolvedNavSlots = immersive ? undefined : bottomNavSlots ?? bottomDestinations;
 
   const handleRailCta = onRailCtaClick ?? (() => navigate('/host'));
 
@@ -106,23 +148,24 @@ export const PageShell: React.FC<PageShellProps> = ({
       <div className={shellClass} style={style}>
         {heroBackdrop && <div className="page-shell__mesh" aria-hidden="true" />}
 
-        {topBarProps && <TopBar navItems={resolvedTopBarNav} {...topBarProps} />}
+        {topBarProps && <TopBar navItems={resolvedTopBarNav} menuItems={immersive ? undefined : menuItems} {...topBarProps} />}
 
         <main className="page-shell__main">
           {loading ? (
-            <div className="page-shell__state">
-              <span className="t-data fs-5" style={{ color: 'var(--ink-muted)' }}>Loading…</span>
+            <div className="page-shell__loading" role="status" aria-label="Loading">
+              <Skeleton variant="block" height="var(--sp-8)" />
+              <Skeleton variant="text" lines={3} />
+              <Skeleton variant="block" height="var(--sp-8)" />
             </div>
           ) : error ? (
-            <div className="alert-critical" style={{ margin: 'var(--sp-7) auto', maxWidth: '37.5rem' }}>
-              <h3 className="alert-critical-title">Error Encountered</h3>
+            <Notice kind="stop" title="That didn't load" className="page-shell__error">
               <p className="fs-5">{error}</p>
               {onRetry && (
                 <Button variant="secondary" size="sm" onClick={onRetry}>
-                  Retry
+                  Try again
                 </Button>
               )}
-            </div>
+            </Notice>
           ) : empty ? (
             <div className="page-shell__state" style={{ flexDirection: 'column', gap: 'var(--sp-4)' }}>
               <p className="fs-6" style={{ color: 'var(--ink-muted)' }}>{emptyMessage}</p>

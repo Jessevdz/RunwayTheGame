@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 
-/** Desktop screen width breakpoint (768px). */
-export const DESKTOP_BREAKPOINT = 768;
-export const DESKTOP_QUERY = `(min-width: ${DESKTOP_BREAKPOINT}px)`;
+/** Desktop breakpoint: 48rem, the same value every stylesheet uses. */
+export const DESKTOP_BREAKPOINT_REM = 48;
+export const DESKTOP_QUERY = `(min-width: ${DESKTOP_BREAKPOINT_REM}rem)`;
+
+/** Exact complement of the desktop query, so exactly one of the two matches at any width. */
+export const MOBILE_QUERY = `(width < ${DESKTOP_BREAKPOINT_REM}rem)`;
 
 /** Returns true when the current viewport matches the desktop breakpoint. */
 export function useIsDesktop(): boolean {

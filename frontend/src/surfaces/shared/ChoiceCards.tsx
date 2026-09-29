@@ -21,7 +21,7 @@ export function ChoiceCards<T extends string>({ legend, options, value, onChange
         padding: 0,
         margin: '0 0 var(--sp-5)',
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(16rem, 100%), 1fr))',
         gap: 'var(--sp-3)'
       }}
     >

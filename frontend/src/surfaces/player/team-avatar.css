@@ -1,0 +1,80 @@
+@layer surfaces {
+  /* Team avatar chip: a round badge in the team colour with the team's initials. */
+  .team-avatar {
+    --avatar-size: var(--sp-6);
+
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    border-radius: var(--r-pill);
+    background: var(--team-0);
+    color: var(--signal);
+    font-family: var(--font-data);
+    font-size: var(--fs-3);
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .team-avatar--sm {
+    --avatar-size: var(--sp-5);
+
+    font-size: var(--fs-2);
+  }
+
+  .team-avatar[data-slot="0"] { background: var(--team-0); }
+  .team-avatar[data-slot="1"] { background: var(--team-1); color: var(--navy-900); }
+  .team-avatar[data-slot="2"] { background: var(--team-2); }
+  .team-avatar[data-slot="3"] { background: var(--team-3); }
+  .team-avatar[data-slot="4"] { background: var(--team-4); color: var(--navy-900); }
+  .team-avatar[data-slot="5"] { background: var(--team-5); }
+
+  /* Nerf target picker: one big tap row per rival team. */
+  .target-picker {
+    display: grid;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .target-picker__row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    min-height: var(--min-tap-target);
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    color: var(--ink-strong);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .target-picker__row:active:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-wash);
+  }
+
+  .target-picker__row:disabled {
+    cursor: not-allowed;
+    opacity: .6;
+  }
+
+  .target-picker__name {
+    flex: 1;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .target-picker__note {
+    font-family: var(--font-data);
+    font-size: var(--fs-2);
+    color: var(--ink-muted);
+  }
+}

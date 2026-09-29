@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Dialog, Input, Textarea, Button, Notice } from '@ds';
+import { plainError } from '../../../core/ui/plainError';
 
 export interface CreateItemDialogProps {
   open: boolean;
@@ -31,7 +32,7 @@ export const CreateItemDialog: React.FC<CreateItemDialogProps> = ({
       setDescription('');
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to submit roadmap item');
+      setError(plainError(err, 'Failed to submit roadmap item'));
     } finally {
       setSubmitting(false);
     }
@@ -51,7 +52,7 @@ export const CreateItemDialog: React.FC<CreateItemDialogProps> = ({
 
         <Textarea
           label="Description"
-          placeholder="Describe your idea or feature request in detail..."
+          placeholder="Describe your idea"
           rows={4}
           value={description}
           onChange={(e) => setDescription(e.target.value)}

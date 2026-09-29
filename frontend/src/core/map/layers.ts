@@ -27,7 +27,7 @@ export const WAYPOINT_HIT_LAYERS = ['waypoints-layer-outer', 'waypoints-layer-in
 export function setupMapLayers(
   map: maplibregl.Map,
   mapPalette: MapPalette,
-  options: { editorMode: boolean }
+  options: { editorMode: boolean; popups?: boolean }
 ): void {
   registerMapIcons(map, mapPalette);
 
@@ -40,7 +40,7 @@ export function setupMapLayers(
   addWaypointLayers(map, mapPalette);
   addTeamPositionLayers(map, mapPalette);
   addPlayerLocationLayers(map, mapPalette);
-  addWaypointPopups(map, options.editorMode);
+  if (options.popups !== false) addWaypointPopups(map, options.editorMode);
 }
 
 // `emphasis` is 0 for the unselected editor rings and 1 for the focused ones;
@@ -195,7 +195,38 @@ function addRoadLayers(map: maplibregl.Map, mapPalette: MapPalette): void {
   });
 }
 
+/** Ring drawn under the marker of the waypoint the player has chosen to head for. */
+function addTargetRingLayers(map: maplibregl.Map, mapPalette: MapPalette): void {
+  map.addLayer({
+    id: 'waypoints-target-halo',
+    type: 'circle',
+    source: 'waypoints',
+    filter: ['==', ['get', 'isTarget'], true],
+    paint: {
+      'circle-radius': 24,
+      'circle-opacity': 0,
+      'circle-stroke-color': mapPalette.labelHalo,
+      'circle-stroke-width': 9
+    }
+  });
+
+  map.addLayer({
+    id: 'waypoints-target-ring',
+    type: 'circle',
+    source: 'waypoints',
+    filter: ['==', ['get', 'isTarget'], true],
+    paint: {
+      'circle-radius': 24,
+      'circle-opacity': 0,
+      'circle-stroke-color': mapPalette.waypointCurrent,
+      'circle-stroke-width': 4.5
+    }
+  });
+}
+
 function addWaypointLayers(map: maplibregl.Map, mapPalette: MapPalette): void {
+  addTargetRingLayers(map, mapPalette);
+
   map.addLayer({
     id: 'waypoints-layer-outer',
     type: 'circle',
@@ -267,8 +298,8 @@ function addWaypointLayers(map: maplibregl.Map, mapPalette: MapPalette): void {
       'text-field': [
         'case',
         ['==', ['get', 'status'], 'inaccessible'], '',
-        ['get', 'isStart'], '▶',
-        ['get', 'isFinish'], '🏁',
+        ['get', 'isStart'], '',
+        ['get', 'isFinish'], '',
         ['coalesce', ['get', 'symbol'], ['get', 'orderLabel'], '']
       ],
       'text-size': [
@@ -294,8 +325,8 @@ function addWaypointLayers(map: maplibregl.Map, mapPalette: MapPalette): void {
     layout: {
       'text-field': [
         'case',
-        ['get', 'isStart'], ['concat', '▶ START · ', ['coalesce', ['get', 'name'], '']],
-        ['get', 'isFinish'], ['concat', '🏁 FINISH · ', ['coalesce', ['get', 'name'], '']],
+        ['get', 'isStart'], ['concat', 'START · ', ['coalesce', ['get', 'name'], '']],
+        ['get', 'isFinish'], ['concat', 'FINISH · ', ['coalesce', ['get', 'name'], '']],
         ['coalesce', ['get', 'name'], '']
       ],
       'text-size': [
@@ -422,8 +453,8 @@ function addWaypointPopups(map: maplibregl.Map, editorMode: boolean): void {
     const coordinates = geometry.coordinates as [number, number];
 
     let roleText = 'Waypoint';
-    if (props.isStart) roleText = '▶ Start Point';
-    else if (props.isFinish) roleText = '🏁 Finish Line';
+    if (props.isStart) roleText = 'Start Point';
+    else if (props.isFinish) roleText = 'Finish Line';
 
     new maplibregl.Popup({ className: 'custom-map-popup' })
       .setLngLat(coordinates)

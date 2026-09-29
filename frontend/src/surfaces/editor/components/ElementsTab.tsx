@@ -1,6 +1,5 @@
 import React from 'react';
-import { Button, Empty } from '@ds';
-import { IconWaypoint } from './EditorIcons';
+import { Button, Empty, Icon } from '@ds';
 import { ToolPalette } from './ToolPalette';
 import { WaypointInspector } from './WaypointInspector';
 import type { EditorTool } from './toolDefs';
@@ -37,7 +36,7 @@ export const ElementsTab: React.FC<ElementsTabProps> = ({
     return (
       <>
         <Empty
-          icon={<IconWaypoint />}
+          icon={<Icon name="pin" />}
           title="No waypoints yet"
           action={
             <Button
@@ -72,9 +71,9 @@ export const ElementsTab: React.FC<ElementsTabProps> = ({
       ) : (
         <p className="tool-hint tool-hint--muted">
           <span className="tool-hint__mark" aria-hidden="true">
-            <IconWaypoint />
+            <Icon name="pin" />
           </span>
-          <span>Select a waypoint on the map to edit its name, radius and role.</span>
+          <span>Select a waypoint on the map to edit it.</span>
         </p>
       )}
     </>

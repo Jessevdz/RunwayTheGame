@@ -1,11 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, screen, fireEvent } from '@testing-library/react';
 import { MapCore } from './MapCore';
 import { projectionStore } from '../projection/projectionStore';
 import { DEFAULT_CENTER } from './basemap';
 
 const loadCbs: Array<() => void> = [];
 const fitBounds = vi.fn();
+const easeTo = vi.fn();
 const mapOptions: Array<Record<string, unknown>> = [];
 
 vi.mock('maplibre-gl', () => {
@@ -30,6 +31,7 @@ vi.mock('maplibre-gl', () => {
     addImage = vi.fn();
     hasImage = vi.fn().mockReturnValue(false);
     fitBounds = fitBounds;
+    easeTo = easeTo;
     dragPan = { enable: vi.fn(), disable: vi.fn() };
   }
   class LngLatBoundsMock {
@@ -83,6 +85,7 @@ beforeEach(() => {
   loadCbs.length = 0;
   mapOptions.length = 0;
   fitBounds.mockClear();
+  easeTo.mockClear();
   projectionStore.reset();
 });
 
@@ -196,5 +199,50 @@ describe('MapCore framing the board', () => {
     render(<MapCore interactive editorMode draftWaypoints={draft} />);
 
     expect(fitBounds).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MapCore following the player', () => {
+  const player = { lat: 51.2, lon: 4.4, accuracy: 6 };
+
+  it('offers no follow control until there is a position', async () => {
+    render(<MapCore interactive />);
+    await act(async () => {
+      projectionStore.applySnapshot(snapshot('board-1', ['a', 'b'], 52.3) as never);
+    });
+
+    expect(screen.queryByRole('button', { name: /centre the map on you/i })).toBeNull();
+  });
+
+  it('centres on the player above the sheet and keeps following new fixes', async () => {
+    const { rerender } = render(<MapCore interactive playerLocation={player} bottomInset={300} />);
+    await act(async () => {
+      projectionStore.applySnapshot(snapshot('board-1', ['a', 'b'], 52.3) as never);
+    });
+    await act(async () => { loadCbs.forEach((cb) => cb()); });
+
+    fireEvent.click(screen.getByRole('button', { name: /centre the map on you/i }));
+
+    expect(easeTo).toHaveBeenCalledTimes(1);
+    expect(easeTo.mock.calls[0][0]).toMatchObject({ center: [4.4, 51.2], offset: [0, -150] });
+    expect(screen.getByRole('button', { name: /stop following/i })).toHaveAttribute('aria-pressed', 'true');
+
+    rerender(<MapCore interactive playerLocation={{ ...player, lat: 51.201 }} bottomInset={300} />);
+    expect(easeTo).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops following when tapped again', async () => {
+    const { rerender } = render(<MapCore interactive playerLocation={player} />);
+    await act(async () => {
+      projectionStore.applySnapshot(snapshot('board-1', ['a', 'b'], 52.3) as never);
+    });
+    await act(async () => { loadCbs.forEach((cb) => cb()); });
+
+    fireEvent.click(screen.getByRole('button', { name: /centre the map on you/i }));
+    fireEvent.click(screen.getByRole('button', { name: /stop following/i }));
+    easeTo.mockClear();
+    rerender(<MapCore interactive playerLocation={{ ...player, lat: 51.202 }} />);
+
+    expect(easeTo).not.toHaveBeenCalled();
   });
 });

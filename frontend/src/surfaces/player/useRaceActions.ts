@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { startChallenge, vetoChallenge, arriveWaypoint } from '../../core/api/client';
 import { type GameState } from '../../core/projection/projectionStore';
 import { type GPSPosition } from '../../core/player/locationService';
 import { type TeamSession } from '../../core/game/teamSession';
+import { NO_FIX_MESSAGE, playerErrorMessage, type PlayerAction } from './playerErrors';
 
 /** Race action handlers and error state interface. */
 export interface RaceActions {
-  /** The last failure message, or null when clean. */
+  /** The last failure as a plain sentence, or null when clean. */
   error: string | null;
+  /** True while a command is on its way, so a second tap cannot send it twice. */
+  busy: boolean;
   startChallenge: (waypointId: string, roadId?: string) => Promise<void>;
   veto: (waypointId: string, roadId?: string) => Promise<void>;
   arrive: (waypointId: string) => Promise<void>;
@@ -25,6 +28,9 @@ interface RaceActionsInput {
   resetOn: string | undefined;
 }
 
+/** Raised instead of sending a command that needs a position when the phone has none. */
+class NoFixError extends Error {}
+
 export const useRaceActions = ({
   gameState,
   session,
@@ -34,33 +40,45 @@ export const useRaceActions = ({
   resetOn
 }: RaceActionsInput): RaceActions => {
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     setError(null);
   }, [resetOn]);
 
-  const run = async (label: string, fn: () => Promise<unknown>) => {
+  const run = async (action: PlayerAction, fn: () => Promise<unknown>) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setBusy(true);
     setError(null);
     try {
       await fn();
-    } catch (err: any) {
-      setError(`${label} — ${err?.message || 'unknown error'}`);
+    } catch (err) {
+      setError(err instanceof NoFixError ? NO_FIX_MESSAGE : playerErrorMessage(err, action));
+    } finally {
+      inFlightRef.current = false;
+      setBusy(false);
     }
   };
 
-  /** Every command carries where the phone thinks it is; the server decides what that buys. */
-  const here = () => ({
-    team_token: session.teamToken,
-    lat: playerLocation?.lat || 0,
-    lon: playerLocation?.lon || 0,
-    accuracy_m: playerLocation?.accuracy || 10
-  });
+  /** Every command carries where the phone is; with no fix it refuses rather than claim to be at 0, 0. */
+  const here = () => {
+    if (!playerLocation) throw new NoFixError();
+    return {
+      team_token: session.teamToken,
+      lat: playerLocation.lat,
+      lon: playerLocation.lon,
+      accuracy_m: playerLocation.accuracy || 10
+    };
+  };
 
   return {
     error,
+    busy,
 
     startChallenge: (waypointId, roadId) =>
-      run('Could not start the challenge', async () => {
+      run('start', async () => {
         const result = await startChallenge(gameState.gameId!, {
           waypoint_id: waypointId,
           ...(roadId ? { road_id: roadId } : {}),
@@ -71,7 +89,7 @@ export const useRaceActions = ({
       }),
 
     veto: (waypointId, roadId) =>
-      run('Veto failed', () =>
+      run('veto', () =>
         vetoChallenge(gameState.gameId!, {
           waypoint_id: waypointId,
           ...(roadId ? { road_id: roadId } : {}),
@@ -81,7 +99,7 @@ export const useRaceActions = ({
       ),
 
     arrive: (waypointId) =>
-      run('Arrival not recorded', () =>
+      run('arrive', () =>
         arriveWaypoint(gameState.gameId!, {
           waypoint_id: waypointId,
           ...here(),
@@ -91,7 +109,7 @@ export const useRaceActions = ({
 
     endRun: async () => {
       if (!onEndRun) return;
-      await run('Could not end the run', onEndRun);
+      await run('end', onEndRun);
     }
   };
 };

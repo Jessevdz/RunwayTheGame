@@ -40,7 +40,7 @@ frontend/src/
 │   └── util/         # Common pure utilities (math, string, array)
 ├── design-system/    # "Departure" component library & design primitives (@ds alias)
 │   └── __gallery__/  # Visual component testbed (`/design-system` in DEV mode)
-└── styles/           # Modular CSS architecture & tokens (`tokens.css`, `app-tokens.css`)
+└── styles/           # Global CSS only: layer order, tokens, design-system and shell rules (`layers.css`, `tokens.css`, `app-tokens.css`)
 ```
 
 ---
@@ -84,12 +84,19 @@ Runway implements accountless capability security:
 The UI implements the authoritative **Departure** design system specified in [`DESIGN.md`](../DESIGN.md):
 
 *   **Design Tokens:** CSS custom properties defined in `src/styles/tokens.css` (`--navy-900`..`--navy-050`, `--amber`, `--orange`, `--red`, `--ember`, `--indigo-700`..`--indigo-050`, `--cream`, `--signal`, `--surface`, `--ink`, etc.).
+    *   **Generated mirror:** `src/design-system/theme/tokens.generated.ts` is generated, never hand-edited. `npm run tokens` runs `scripts/generate-tokens.mjs`, which parses the `:root` and `[data-theme="night"]` blocks of `tokens.css` and `app-tokens.css`, resolves every `var()` chain and writes the colour tokens as `TOKEN_FALLBACKS` (light) and `TOKEN_FALLBACKS_NIGHT`; `tokenReader.ts` uses them when the DOM cannot resolve a token (tests, SSR) and `ThemeProvider` reads the `--theme-color-*` entries for the browser chrome. After changing a colour token in either CSS file, run `npm run tokens` and commit the result; `npm run tokens:check` (part of `npm run lint`) fails when the file is stale. The generated file is the only place in `src/**` allowed to contain raw hex.
 *   **Typography:** The Departure 4-voice font hierarchy:
     *   **Announce:** `Archivo Black` (`--font-announce`) for headers, plates, and badges.
     *   **Narrate:** `Playfair Display` (`--font-narrate`) for editorial framing and quotes.
     *   **UI:** `Inter` (`--font-ui`) for interface controls, dialogs, and body text.
     *   **Data:** `JetBrains Mono` (`--font-data`) for coordinates, clocks, and numeric telemetry.
-*   **Touch Targets:** Outdoor ergonomic standard enforced via `--min-tap-target` (`54px` minimum tap height/width) for reliable touchscreen operation on the move.
+*   **Touch Targets:** Outdoor ergonomic standard enforced via `--min-tap-target` (`48px` minimum tap height/width, defined in `src/styles/app-tokens.css`) for reliable touchscreen operation on the move.
+*   **CSS Loading & Layers:** `src/main.tsx` imports only the global sheets (`layers.css`, `fonts.css`, `tokens.css`, `app-tokens.css`, `components.css`, `ds-components.css`, `ds-mobile.css`, `shells.css`, `index.css`, `pwa-shell.css`). Everything screen-specific lives next to the code that uses it and is imported by that module, so Vite ships it with the lazy chunk (`surfaces/editor/editor.css` and `editor-pane.css`, `surfaces/host/host-console.css`, `surfaces/report/race-report.css`, `core/map/map.css`, and so on). New screen or component styles go beside the component, never into the global sheets.
+    *   `src/styles/layers.css` declares the cascade order once: `vendor, base, tokens, components, utilities, surfaces`. Wrap each sheet's rules in the matching `@layer` block: global sheets use `base`, `tokens`, `components` or `utilities`, and per-surface sheets use `surfaces`. A later layer beats an earlier one regardless of specificity, and unlayered rules beat every layer.
+    *   MapLibre's stylesheet is imported from `core/map/map.css` into the `vendor` layer, so it only loads with a map.
+*   **Breakpoints:** One convention, in `rem` so it follows the user's font size: phone-first with `@media (min-width: 48rem)` for tablet and desktop (768px at the default size), `40rem` for a small step and `64rem` for wide desktop. Phone-only overrides use the exact complement `@media (width < 48rem)`, so the two sets never both apply. JS mirrors the same values in `core/ui/useIsDesktop.ts` (`DESKTOP_QUERY`, `MOBILE_QUERY`).
+*   **Lint guardrails:** Stylelint (`.stylelintrc.json`) rejects raw hex, px of 2 or more in `margin`, `padding`, `gap`, `inset`, `top`/`right`/`bottom`/`left` and `border-radius` (use `--sp-*`, `--sp-q`, `--sp-h`, `--r-*`), border or outline widths above 3px, and any `font-size` that is not `var(--fs-*)` (or another token, `inherit`, or a relative `em`/`%`). The ESLint adherence config (`eslint.adherence.config.js`) rejects number-valued inline styles such as `style={{ width: 12 }}` (unitless properties like `opacity`, `zIndex`, `flex` and `lineHeight` are exempt; pass a token string or use a class) and raw `fontSize` literals. Add new type-scale or sizing values as tokens instead of suppressing the rule.
+*   **Hover:** Hover-only styling goes inside `@media (hover: hover)` so it never sticks after a tap; animate `transform` and `opacity` only, never `box-shadow` or `transition: all`.
 *   **Component Testing:** Previews available via `/design-system` route when running in development mode.
 
 ---
@@ -103,7 +110,10 @@ npm run dev
 # Run TypeScript compilation and build production bundle
 npm run build
 
-# Run multi-stage code quality check (Oxlint + ESLint + Stylelint)
+# Regenerate src/design-system/theme/tokens.generated.ts from the token CSS
+npm run tokens
+
+# Run multi-stage code quality check (token drift check + Oxlint + ESLint + Stylelint)
 npm run lint
 
 # Run unit & component test suite (Vitest)

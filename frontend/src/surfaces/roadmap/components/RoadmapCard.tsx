@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Badge, Button, IconButton } from '@ds';
+import { Card, Badge, Button, IconButton, Icon } from '@ds';
 import type { ApiRoadmapItem } from '../../../core/api/client';
 
 export interface RoadmapCardProps {
@@ -85,7 +85,7 @@ export const RoadmapCard: React.FC<RoadmapCardProps> = ({
             <>
               {onEdit && (
                 <Button variant="ghost" size="sm" onClick={() => onEdit(item)} title="Edit feature">
-                  ✏️ Edit
+                  <Icon name="edit" /> Edit
                 </Button>
               )}
               {onDelete && (
@@ -95,7 +95,7 @@ export const RoadmapCard: React.FC<RoadmapCardProps> = ({
                   onClick={handleDeleteClick}
                   title="Remove feature"
                 >
-                  {confirmDelete ? 'Confirm Delete?' : '🗑️'}
+                  {confirmDelete ? 'Confirm Delete?' : <Icon name="trash" label="Remove" />}
                 </Button>
               )}
             </>
@@ -111,7 +111,7 @@ export const RoadmapCard: React.FC<RoadmapCardProps> = ({
                 </Button>
               ) : (
                 <IconButton
-                  icon="🚩"
+                  icon={<Icon name="flag" />}
                   label="Report item"
                   variant="ghost"
                   size="sm"
@@ -168,7 +168,7 @@ export const RoadmapCard: React.FC<RoadmapCardProps> = ({
                 title={`Move to ${prevStatus}`}
                 style={{ maxWidth: '100%' }}
               >
-                ← {BADGE_CONFIG[prevStatus].label}
+                <Icon name="arrow-left" /> {BADGE_CONFIG[prevStatus].label}
               </Button>
             )}
             {nextStatus && (
@@ -179,7 +179,7 @@ export const RoadmapCard: React.FC<RoadmapCardProps> = ({
                 title={`Move to ${nextStatus}`}
                 style={{ maxWidth: '100%' }}
               >
-                {BADGE_CONFIG[nextStatus].label} →
+                {BADGE_CONFIG[nextStatus].label} <Icon name="arrow-right" />
               </Button>
             )}
           </div>
@@ -192,7 +192,7 @@ export const RoadmapCard: React.FC<RoadmapCardProps> = ({
           size="sm"
           onClick={() => onVote(item.id, item.voted)}
         >
-          ▲ <span className="t-data" style={{ marginLeft: 'var(--sp-1)' }}>{item.vote_count}</span>
+          <Icon name="arrow-up" /> <span className="t-data" style={{ marginLeft: 'var(--sp-1)' }}>{item.vote_count}</span>
         </Button>
         <span className="t-data fs-2" style={{ color: 'var(--ink-muted)' }}>
           {new Date(item.created_at).toLocaleDateString()}

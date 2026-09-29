@@ -1,4 +1,4 @@
-import { TOKEN_FALLBACKS } from './tokens.generated';
+import { TOKEN_FALLBACKS, TOKEN_FALLBACKS_NIGHT } from './tokens.generated';
 
 let probeEl: HTMLElement | null = null;
 const tokenCache = new Map<string, string>();
@@ -15,6 +15,13 @@ function getProbeElement(): HTMLElement | null {
   return probeEl;
 }
 
+function fallbackFor(tokenName: string): string {
+  const night =
+    typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'night';
+  const table = night ? TOKEN_FALLBACKS_NIGHT : TOKEN_FALLBACKS;
+  return table[tokenName] ?? table['--ink'];
+}
+
 export function resolveToken(tokenName: string): string {
   if (tokenCache.has(tokenName)) {
     return tokenCache.get(tokenName)!;
@@ -22,7 +29,7 @@ export function resolveToken(tokenName: string): string {
 
   const probe = getProbeElement();
   if (!probe) {
-    return TOKEN_FALLBACKS[tokenName] ?? TOKEN_FALLBACKS['--ink'];
+    return fallbackFor(tokenName);
   }
 
   try {
@@ -36,7 +43,7 @@ export function resolveToken(tokenName: string): string {
     // fallback
   }
 
-  const fallback = TOKEN_FALLBACKS[tokenName] ?? TOKEN_FALLBACKS['--ink'];
+  const fallback = fallbackFor(tokenName);
   tokenCache.set(tokenName, fallback);
   return fallback;
 }

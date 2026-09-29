@@ -482,8 +482,8 @@ func DefaultRuleset() Ruleset {
 			"challenge_skip": 100,
 		},
 		RewardOnlyFirstCompleter:  true,
-		FreezeDurationSeconds:     1800,
-		TrackerOffDurationSeconds: 2700,
+		FreezeDurationSeconds:     300,
+		TrackerOffDurationSeconds: 600,
 		CurseDurationSeconds:      86400,
 		VetoTimePenaltySeconds:    900,
 		CoinRushFinishBonuses:     []int{150, 100, 60, 30},
@@ -654,8 +654,8 @@ func (rs Ruleset) CurseDuration() time.Duration {
 // DefaultPowerups returns the default catalog of built-in powerups.
 func DefaultPowerups() []Powerup {
 	return []Powerup{
-		{ID: "nerf", Icon: "", Name: "Nerf Dart", Description: "Freeze the opponent team, halting their progress.", Cost: 10, DurationS: 1800, Effect: "nerf"},
-		{ID: "tracker_off", Icon: "", Name: "Tracker Off", Description: "Hide your map position dot from opponents.", Cost: 25, DurationS: 2700, Effect: "tracker_off"},
+		{ID: "nerf", Icon: "", Name: "Nerf Dart", Description: "Freeze the opponent team, halting their progress.", Cost: 10, DurationS: 300, Effect: "nerf"},
+		{ID: "tracker_off", Icon: "", Name: "Tracker Off", Description: "Hide your map position dot from opponents.", Cost: 25, DurationS: 600, Effect: "tracker_off"},
 		{ID: "challenge_skip", Icon: "", Name: "Challenge Skip", Description: "Bypass your current blocking challenge immediately without penalty.", Cost: 100, DurationS: 0, Effect: "challenge_skip"},
 	}
 }

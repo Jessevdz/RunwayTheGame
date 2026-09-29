@@ -1,0 +1,83 @@
+@layer components {
+  /* Gallery board search and filter bar container. */
+  .board-filters {
+    display: grid;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-6);
+  }
+
+  /* Prevent grid items from overflowing on small viewports. */
+  .board-filters__controls,
+    .board-filters__facets {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .board-filters__controls {
+    align-items: flex-end;
+  }
+
+  .board-filters__facets {
+    align-items: center;
+  }
+
+  /* Search and sort input sizing. */
+  .board-filters__search {
+    flex: 1 1 16rem;
+    min-width: 0;
+  }
+
+  .board-filters__sort {
+    flex: 0 0 auto;
+    min-width: 12rem;
+  }
+
+  /* Horizontally scrollable filter tabs container. */
+  .board-filters__bands {
+    flex: 0 0 auto;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .board-filters__status {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
+  @media (width < 48rem) {
+    /* Stack filter controls vertically on mobile viewports. */
+    .board-filters__controls,
+      .board-filters__facets {
+      flex-direction: column;
+      flex-wrap: nowrap;
+      align-items: stretch;
+    }
+
+    /* Prevent search input from expanding vertically when stacked. */
+    .board-filters__search {
+      flex: 0 0 auto;
+    }
+
+    /* Compact tab styling for mobile viewports without badge counts. */
+    .board-filters__bands {
+      overflow-x: hidden;
+    }
+
+    .board-filters__bands .tab {
+      flex: 1 1 0;
+      min-width: 0;
+      justify-content: center;
+      padding: 0 var(--sp-1);
+      overflow: hidden;
+    }
+
+    .board-filters__bands .tab__badge {
+      display: none;
+    }
+  }
+}

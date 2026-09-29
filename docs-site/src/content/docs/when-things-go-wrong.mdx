@@ -1,0 +1,106 @@
+---
+title: When things go wrong
+description: What to do when a phone loses its place in a race. Why it happens, how a player gets back onto their team, and what cannot be recovered.
+sidebar:
+  label: When things go wrong
+  order: 4
+---
+
+import { Aside, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Runway has no accounts. When you join a team or create a race, your browser is
+handed a key and keeps it in its own storage. That key is the only thing that
+says the phone belongs to your team, or that it is the host.
+
+Anything that wipes the browser's storage throws the key away, and the server
+cannot hand the same one back.
+
+## What loses your place
+
+| Cause | |
+| :--- | :--- |
+| Clearing browsing data, cookies, or site data | Wipes every key this browser holds |
+| A private or incognito window | Forgets everything when the window closes |
+| Switching browser or phone | The key stays behind on the old one |
+| Opening the installed app instead of the browser you joined in | On iPhone, the home-screen app keeps its own storage |
+
+<Aside type="tip" title="Before you set off">
+Join in the browser you will race in, outside a private window, and leave its
+data alone until the race is over.
+</Aside>
+
+## A player lost their place
+
+The team is fine. Its coins, power-ups, and progress live on the server, not on
+the phone. The player only needs to join the team again.
+
+**Before the race starts,** open the lobby again, enter your name, and tap your
+squad. No code is needed.
+
+**Once the race is live,** you need your team's code, and it comes from a
+teammate who is still in:
+
+<Steps>
+
+1. On their race screen, the teammate scrolls down to **Your Squad** and taps **Invite**.
+
+2. They tap **Copy Teammate Link** and send it to you. The link carries the team code.
+
+3. You open the link itself, enter your name, and tap the squad. Pasting it into the box on the home screen does not work here; it drops the team code.
+
+</Steps>
+
+You are back on the team with everything it has earned. The old phone may still
+be listed as a member; it does no harm.
+
+<Aside type="caution" title="Nobody left to ask">
+If every phone on a team has lost its place, or the player was racing alone,
+the team cannot be recovered. The race still takes new squads, so you can start
+a fresh one, but it begins from nothing.
+</Aside>
+
+## The host lost their place
+
+Hosting belongs to the browser that created the race, and there is no way to
+move it or get it back.
+
+| When | What happens |
+| :--- | :--- |
+| Still in the lobby | Nobody can press start. Create a new race and share the new code |
+| Race is live | Teams keep racing. Nobody can end the race early, settle a dispute, or use the host tools. The race ends by itself six hours after it was created |
+
+If the host was also racing on a team, they can rejoin that team like any other
+player. That gets them back into the race, not back into hosting.
+
+## A solo run lost its place
+
+A solo run is hosted and raced by the same phone, so it cannot be picked up
+again. The run ends by itself after 24 hours and no time is posted. Start a new
+run.
+
+## After the race
+
+An ended race cannot be joined, so a lost place cannot be reclaimed once the
+race is over.
+
+## Next
+
+<CardGrid>
+  <LinkCard
+    title="Set up a race"
+    href="../set-up-a-race/"
+    description="The lobby, the race code, and the start button."
+  />
+  <LinkCard
+    title="Run your own instance"
+    href="../run-it-locally/"
+    description="Postgres and MinIO in Docker, the Go server and worker, and the Vite dev server from source."
+  />
+</CardGrid>
+
+<Aside type="caution" title="Runway is in Alpha release">
+Rules, data formats, and APIs change without notice, and databases may be wiped
+between releases. Runway is an independent, fan-made game, not affiliated with,
+endorsed by, or associated with Jet Lag: The Game, Wendover Productions, or
+Half as Interesting.
+</Aside>

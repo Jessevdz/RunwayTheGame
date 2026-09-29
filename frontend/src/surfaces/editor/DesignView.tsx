@@ -2,8 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { analytics } from '../../core/analytics/analyticsClient';
 import { currentViewport } from '../../core/analytics/events';
 import { useNavigate } from 'react-router-dom';
-import { Button, Empty, BrandLines } from '@ds';
-import { IconBack } from './components/EditorIcons';
+import { Button, Empty, PageHeader, Icon } from '@ds';
 import { MapCore } from '../../core/map/MapCore';
 import { EditorSurface } from './EditorSurface';
 import { EDITOR_TOOLS } from './components/toolDefs';
@@ -24,32 +23,21 @@ const DesignUnavailable: React.FC = () => {
   return (
     <PageShell
       navPlacement="topbar"
-      topBarProps={{
-        title: (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-            <BrandLines size={24} />
-            <span className="t-announce fs-7" style={{ letterSpacing: '0.04em', color: 'var(--ink-strong)' }}>
-              RUNWAY
-            </span>
-          </div>
-        ),
-      }}
+      topBarProps={{}}
     >
       <section style={{ maxWidth: '62.5rem', margin: '0 auto var(--sp-7)' }}>
-        <h1 className="t-announce fs-d-md" style={{ color: 'var(--ink-strong)', marginBottom: 'var(--sp-5)' }}>
-          DESKTOP REQUIRED
-        </h1>
+        <PageHeader title="DESKTOP REQUIRED" />
 
         <Empty
-          icon="🖥️"
+          icon={<Icon name="monitor" />}
           title="Please use a desktop or laptop"
-          description="Map design is not optimized for mobile. Open Runway on a desktop or laptop device to draw waypoints, connect roads, and publish a route."
+          description="Open Runway on a desktop or laptop to design maps."
           action={
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-3)', justifyContent: 'center' }}>
               <Button variant="primary" onClick={() => navigate('/')}>
                 Back to Home
               </Button>
-              <Button variant="secondary" icon="🎯" onClick={() => navigate('/gallery')}>
+              <Button variant="secondary" icon={<Icon name="target" />} onClick={() => navigate('/gallery')}>
                 Browse the Gallery
               </Button>
             </div>
@@ -111,7 +99,7 @@ export const DesignView: React.FC = () => {
           <Button
             variant="secondary"
             size="sm"
-            icon={<IconBack />}
+            icon={<Icon name="arrow-left" />}
             onClick={() => navigate('/')}
             className="map-back-btn"
           >

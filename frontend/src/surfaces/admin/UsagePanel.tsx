@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Empty, Notice, Stat, Tabs } from '@ds';
+import { Button, Card, Empty, Notice, Stat, Tabs, Icon } from '@ds';
 import { getAnalyticsOverview } from '../../core/api/client';
 import type { AnalyticsBreakdown, AnalyticsOverview } from '../../core/api/client';
+import { plainError } from '../../core/ui/plainError';
 
 /** Windows an operator can ask for, capped by the 90-day retention window. */
 const WINDOWS = [
@@ -142,7 +143,7 @@ export const UsagePanel: React.FC = () => {
     try {
       setOverview(await getAnalyticsOverview(Number(windowDays)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load usage analytics');
+      setError(plainError(err, "Couldn't load usage analytics."));
     } finally {
       setLoading(false);
     }
@@ -186,7 +187,7 @@ export const UsagePanel: React.FC = () => {
 
       {overview && overview.totals.events === 0 && !loading ? (
         <Empty
-          icon="📈"
+          icon={<Icon name="chart" />}
           title="Nothing recorded yet"
           description="No usage events landed in this window. Events arrive in batches once people browse the site, so give it a little time after enabling recording."
         />

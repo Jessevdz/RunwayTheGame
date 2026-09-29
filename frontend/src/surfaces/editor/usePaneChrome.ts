@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { MOBILE_QUERY } from '../../core/ui/useIsDesktop';
 
 const STORE_KEY = 'runway:editor:pane';
 
@@ -7,10 +8,6 @@ const MAX_W = 620;
 const DEFAULT_W = 380;
 
 /** Sheet height is a viewport fraction so it survives rotation. */
-/** DESIGN.md sanctions exactly two breakpoints; this is the md one. */
-const SHEET_BP = 768;
-const SHEET_QUERY = `(max-width: ${SHEET_BP}px)`;
-
 const MIN_H = 0.28;
 const MAX_H = 0.9;
 const DEFAULT_H = 0.62;
@@ -64,7 +61,7 @@ export const usePaneChrome = () => {
 
   const handleResizeStart = useCallback((e: React.PointerEvent<HTMLElement>) => {
     e.preventDefault();
-    const isSheet = window.matchMedia(SHEET_QUERY).matches;
+    const isSheet = window.matchMedia(MOBILE_QUERY).matches;
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
     setDragging(true);
@@ -94,7 +91,7 @@ export const usePaneChrome = () => {
 
   /** Keyboard parity for the drag handle — a mouse-only resizer is not a control. */
   const handleResizeKey = useCallback((e: React.KeyboardEvent<HTMLElement>) => {
-    const isSheet = window.matchMedia(SHEET_QUERY).matches;
+    const isSheet = window.matchMedia(MOBILE_QUERY).matches;
     const grow = e.key === (isSheet ? 'ArrowUp' : 'ArrowLeft');
     const shrink = e.key === (isSheet ? 'ArrowDown' : 'ArrowRight');
     if (!grow && !shrink) return;

@@ -1,9 +1,10 @@
 /// <reference types="vitest/config" />
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, type Plugin, type Rolldown } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 import { createHash } from 'crypto'
+import { gunzipSync } from 'zlib'
 import { execSync } from 'child_process'
 
 // The build a bug report was filed against, so a report can be tied to a commit.
@@ -18,6 +19,80 @@ function buildStamp(): string {
   }
 }
 
+const GLYPH_FONTSTACK = 'Noto Sans Regular';
+const GLYPH_SOURCE_DIR = path.resolve(import.meta.dirname, './node_modules/smp-noto-glyphs/fixtures/glyphs');
+const GLYPH_RANGE_SIZE = 256;
+const GLYPH_RANGE_COUNT = 65536 / GLYPH_RANGE_SIZE;
+
+/** The glyph PBF for one 256-codepoint range, or an empty PBF that MapLibre renders as blank space. */
+function readGlyphRange(range: string): Buffer {
+  try {
+    return gunzipSync(fs.readFileSync(path.join(GLYPH_SOURCE_DIR, `${range}.pbf.gz`)));
+  } catch {
+    return Buffer.alloc(0);
+  }
+}
+
+/** Serves the vendored Noto Sans SDF glyphs same-origin so map labels render offline. */
+function mapGlyphsPlugin(): Plugin {
+  return {
+    name: 'runway-map-glyphs',
+    configureServer(server) {
+      server.middlewares.use('/glyphs', (req, res) => {
+        const match = /^\/[^/]+\/(\d+-\d+)\.pbf$/.exec((req.url || '').split('?')[0]);
+        if (!match) {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        res.setHeader('Content-Type', 'application/x-protobuf');
+        res.end(readGlyphRange(match[1]));
+      });
+    },
+    generateBundle() {
+      for (let i = 0; i < GLYPH_RANGE_COUNT; i++) {
+        const range = `${i * GLYPH_RANGE_SIZE}-${i * GLYPH_RANGE_SIZE + GLYPH_RANGE_SIZE - 1}`;
+        this.emitFile({
+          type: 'asset',
+          fileName: `glyphs/${GLYPH_FONTSTACK}/${range}.pbf`,
+          source: readGlyphRange(range),
+        });
+      }
+    },
+  };
+}
+
+/** Modules that make up the race and map experience, whose chunks must work offline. */
+const OFFLINE_CHUNK_MODULES = /[\\/](surfaces[\\/](race|player)|core[\\/]map)[\\/]|node_modules[\\/]maplibre-gl[\\/]/;
+
+/** Latin-subset font files and the MapLibre worker, which every race needs to paint. */
+const OFFLINE_ASSETS = /(-latin-(?!ext)[^/]*\.woff2|maplibre-gl-worker[^/]*\.m?js)$/;
+
+/** Emitted file names that the service worker precaches next to the static shell. */
+function offlinePrecacheList(bundle: Rolldown.OutputBundle): string[] {
+  const wanted = new Set<string>();
+
+  const addChunk = (fileName: string) => {
+    if (wanted.has(fileName)) return;
+    const chunk = bundle[fileName];
+    if (!chunk || chunk.type !== 'chunk') return;
+    wanted.add(fileName);
+    chunk.imports.forEach(addChunk);
+    chunk.viteMetadata?.importedCss.forEach((css) => wanted.add(css));
+  };
+
+  for (const [fileName, output] of Object.entries(bundle)) {
+    if (output.type === 'chunk') {
+      const isRaceOrMap = Object.keys(output.modules).some((id) => OFFLINE_CHUNK_MODULES.test(id));
+      if (output.isEntry || isRaceOrMap) addChunk(fileName);
+    } else if (OFFLINE_ASSETS.test(fileName)) {
+      wanted.add(fileName);
+    }
+  }
+
+  return [...wanted].sort().map((fileName) => `/${fileName}`);
+}
+
 function serviceWorkerPlugin(): Plugin {
   return {
     name: 'runway-service-worker',
@@ -26,19 +101,22 @@ function serviceWorkerPlugin(): Plugin {
       const template = fs.readFileSync(
         path.resolve(import.meta.dirname, './sw.template.js'),
         'utf8'
-      )
+      );
+      const precache = offlinePrecacheList(bundle);
       const stamp = createHash('sha256')
         .update(Object.keys(bundle).sort().join('\n'))
         .digest('hex')
-        .slice(0, 12)
+        .slice(0, 12);
 
       this.emitFile({
         type: 'asset',
         fileName: 'sw.js',
-        source: template.replaceAll('__SW_BUILD__', stamp),
-      })
+        source: template
+          .replaceAll('__SW_BUILD__', stamp)
+          .replace('__SW_PRECACHE__', JSON.stringify(precache)),
+      });
     },
-  }
+  };
 }
 
 function docsDevServerPlugin(): Plugin {
@@ -110,7 +188,7 @@ function docsDevServerPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), serviceWorkerPlugin(), docsDevServerPlugin()],
+  plugins: [react(), mapGlyphsPlugin(), serviceWorkerPlugin(), docsDevServerPlugin()],
   define: {
     __APP_BUILD__: JSON.stringify(buildStamp()),
   },

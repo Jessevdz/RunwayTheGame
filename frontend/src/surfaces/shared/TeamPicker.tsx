@@ -34,7 +34,7 @@ export const TeamPicker: React.FC<TeamPickerProps> = ({ gameId, teams, boardName
 
       <Input label="Team name" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="e.g. Red Dragons" />
       <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 0 }}>
-        Pick an available team color slot to establish your team:
+        Pick a colour to create your team:
       </p>
 
       {/* A <Button> tinted with an inline background is a button pretending to

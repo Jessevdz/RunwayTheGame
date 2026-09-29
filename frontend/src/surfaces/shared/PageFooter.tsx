@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrandLines, LinkButton, IconBook, IconGithub } from '@ds';
+import { BrandLines, LinkButton, Icon } from '@ds';
 import { CONTACT_EMAIL, contactMailto, docsUrl, GITHUB_URL } from '../../core/docs';
 
 /** Closing rule for the document-scroll surfaces (landing, gallery, roadmap). */
@@ -41,10 +41,10 @@ export const PageFooter: React.FC = () => {
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)', flexWrap: 'wrap' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-          <LinkButton href={docsUrl()} icon={<IconBook />} variant="ghost" size="sm">
+          <LinkButton href={docsUrl()} icon={<Icon name="book" />} variant="ghost" size="sm">
             Docs
           </LinkButton>
-          <LinkButton href={GITHUB_URL} external icon={<IconGithub />} variant="ghost" size="sm">
+          <LinkButton href={GITHUB_URL} external icon={<Icon name="github" />} variant="ghost" size="sm">
             GitHub
           </LinkButton>
         </div>

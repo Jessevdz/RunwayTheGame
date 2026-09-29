@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Dialog } from '@ds';
+import { Button, Dialog, Icon } from '@ds';
 import { type TeamSession } from '../../../core/game/teamSession';
 import { lobbyPath } from '../../../core/game/raceSession';
 import { shareLink } from '../../../core/share';
@@ -29,7 +29,7 @@ export const InviteDialog: React.FC<{ session: TeamSession; onClose: () => void 
   };
 
   return (
-    <Dialog open title="🔗 Invite Teammates" onClose={onClose}>
+    <Dialog open title="Invite Teammates" onClose={onClose}>
       {session.joinCode ? (
         <div className="player-code">
           <div className="player-code__row">
@@ -37,13 +37,13 @@ export const InviteDialog: React.FC<{ session: TeamSession; onClose: () => void 
             <span className="player-code__value">{session.joinCode}</span>
           </div>
           <p className="player-more__note">
-            Teammates on separate phones share your squad coin bank, inventory, and waypoint progress. Give them this code or invite link:
+            Teammates share your coins, inventory, and progress.
           </p>
           <div className="player-code__actions">
-            <Button variant="secondary" size="sm" icon={copiedTeamCode ? '✅' : '📋'} onClick={handleCopyTeamCode}>
+            <Button variant="secondary" size="sm" icon={<Icon name={copiedTeamCode ? 'check-circle' : 'copy'} />} onClick={handleCopyTeamCode}>
               {copiedTeamCode ? 'Code Copied' : 'Copy Code'}
             </Button>
-            <Button variant="secondary" size="sm" icon={copiedInvite ? '✅' : '🔗'} onClick={handleCopyInviteLink}>
+            <Button variant="secondary" size="sm" icon={<Icon name={copiedInvite ? 'check-circle' : 'link'} />} onClick={handleCopyInviteLink}>
               {copiedInvite ? 'Link Copied' : 'Copy Teammate Link'}
             </Button>
           </div>
@@ -51,9 +51,9 @@ export const InviteDialog: React.FC<{ session: TeamSession; onClose: () => void 
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
           <p className="player-more__note">
-            Teammates on separate phones share your squad coin bank, inventory, and waypoint progress. Send them an invite link:
+            Teammates share your coins, inventory, and progress.
           </p>
-          <Button variant="secondary" size="sm" icon={copiedInvite ? '✅' : '🔗'} onClick={handleCopyInviteLink}>
+          <Button variant="secondary" size="sm" icon={<Icon name={copiedInvite ? 'check-circle' : 'link'} />} onClick={handleCopyInviteLink}>
             {copiedInvite ? 'Link Copied' : 'Copy Teammate Link'}
           </Button>
         </div>

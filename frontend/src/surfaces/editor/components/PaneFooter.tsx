@@ -1,6 +1,5 @@
 import React from 'react';
-import { Button } from '@ds';
-import { IconCheck, IconSave, IconShare, IconImport, IconExport, IconTrash } from './EditorIcons';
+import { Button, Icon } from '@ds';
 import type { SaveStatus } from './PaneHeader';
 
 interface PaneFooterProps {
@@ -56,7 +55,7 @@ export const PaneFooter: React.FC<PaneFooterProps> = ({
         title="Open validation"
         onClick={onReviewIssues}
       >
-        <IconCheck />
+        <Icon name="warning" />
         <span className="pane-foot__status-text">{summary}</span>
       </button>
 
@@ -65,7 +64,7 @@ export const PaneFooter: React.FC<PaneFooterProps> = ({
           <Button
             variant="secondary"
             size="sm"
-            icon={<IconShare />}
+            icon={<Icon name="link" />}
             onClick={onShare}
             className="pane-foot__btn"
             title={
@@ -84,7 +83,7 @@ export const PaneFooter: React.FC<PaneFooterProps> = ({
           <Button
             variant="secondary"
             size="sm"
-            icon={<IconTrash />}
+            icon={<Icon name="trash" />}
             onClick={onClear}
             className="pane-foot__btn"
             title="Clear the map and start over"
@@ -95,7 +94,7 @@ export const PaneFooter: React.FC<PaneFooterProps> = ({
         <Button
           variant="secondary"
           size="sm"
-          icon={<IconExport />}
+          icon={<Icon name="upload" />}
           onClick={onExport}
           className="pane-foot__btn"
           title="Export map JSON"
@@ -106,7 +105,7 @@ export const PaneFooter: React.FC<PaneFooterProps> = ({
           <Button
             variant="secondary"
             size="sm"
-            icon={<IconImport />}
+            icon={<Icon name="download" />}
             onClick={onImport}
             className="pane-foot__btn"
             title="Import map JSON"
@@ -118,7 +117,7 @@ export const PaneFooter: React.FC<PaneFooterProps> = ({
           <Button
             variant={status === 'saved' ? 'secondary' : 'primary'}
             size="sm"
-            icon={<IconSave />}
+            icon={<Icon name="save" />}
             disabled={status === 'saving'}
             onClick={onSave}
             className="pane-foot__btn pane-foot__btn--save"

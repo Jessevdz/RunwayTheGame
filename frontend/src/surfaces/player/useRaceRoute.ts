@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   roadblockBlocksTeam,
   type GameState,
@@ -8,6 +8,13 @@ import {
 } from '../../core/projection/projectionStore';
 import { type GPSPosition, calculateDistance } from '../../core/player/locationService';
 import { type TeamSession } from '../../core/game/teamSession';
+import { resolveDestinationId } from './destination';
+
+/** The destination a player picked by hand, held by the shell so it survives the console closing for a photo. */
+export interface DestinationChoice {
+  id: string | null;
+  set: (waypointId: string | null) => void;
+}
 
 /** One road out of where this team is standing, and what it costs to take it. */
 export interface RaceRoute {
@@ -27,11 +34,13 @@ type RouteCandidate = Omit<RaceRoute, 'waypoint'> & { waypoint: Waypoint | undef
 export interface RaceRouteView {
   currentWaypoint: Waypoint | null;
   isCurrentWaypointCleared: boolean;
-  /** Onward routes, nearest first — the order a walker reads them in. */
+  /** Onward routes in board order, so the strip does not reshuffle as GPS drifts. */
   routes: RaceRoute[];
-  /** The route the objective card is arguing for. */
+  /** The route the objective card is arguing for; it stays put until the player picks another or one is clearly nearer. */
   destination: RaceRoute | null;
   destinationId: string | null;
+  /** True when the player picked the destination rather than the app defaulting to the nearest. */
+  destinationChosen: boolean;
   chooseDestination: (waypointId: string) => void;
   reachedFinish: boolean;
   /** Waypoints behind this team, out of the board's total. */
@@ -48,11 +57,9 @@ export interface RaceRouteView {
 export const useRaceRoute = (
   gameState: GameState,
   session: TeamSession,
-  playerLocation: GPSPosition | null
+  playerLocation: GPSPosition | null,
+  choice: DestinationChoice
 ): RaceRouteView => {
-  /** Destination the player chose at a branch. Null means "the nearest one". */
-  const [destinationId, setDestinationId] = useState<string | null>(null);
-
   const myProgress = gameState.progress[session.teamId];
   const currentWaypointId = myProgress?.currentWaypointId;
   const currentWaypoint =
@@ -60,12 +67,6 @@ export const useRaceRoute = (
     gameState.waypoints.find((w) => w.isStart) ||
     gameState.waypoints[0] ||
     null;
-
-  // A branch is a choice, not a list, so the pick resets when the player moves
-  // on — otherwise a stale id silently survives into the next junction.
-  useEffect(() => {
-    setDestinationId(null);
-  }, [currentWaypoint?.id]);
 
   const clearedWaypointsSet = useMemo(() => {
     const set = new Set<string>(myProgress?.clearedWaypoints || []);
@@ -103,9 +104,26 @@ export const useRaceRoute = (
           inRange: distance !== null && !!waypoint && distance <= waypoint.arrival_radius_m
         };
       })
-      .filter((r): r is RaceRoute => !!r.waypoint && !clearedWaypointsSet.has(r.waypoint.id))
-      .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+      .filter((r): r is RaceRoute => !!r.waypoint && !clearedWaypointsSet.has(r.waypoint.id));
   }, [gameState.roads, gameState.waypoints, gameState.roadblocks, currentWaypoint, playerLocation, session, clearedWaypointsSet]);
+
+  // The pick from the previous render is kept unless another route is clearly nearer, but a pick made before any GPS fix was only a guess.
+  const pickedRef = useRef<{ at: string | undefined; id: string | null; measured: boolean }>({
+    at: undefined,
+    id: null,
+    measured: false
+  });
+  const previous = pickedRef.current;
+  const destinationId = resolveDestinationId(
+    routes.map((r) => ({ waypointId: r.waypoint.id, distance: r.distance })),
+    choice.id,
+    previous.at === currentWaypoint?.id && previous.measured ? previous.id : null
+  );
+  pickedRef.current = {
+    at: currentWaypoint?.id,
+    id: destinationId,
+    measured: routes.find((r) => r.waypoint.id === destinationId)?.distance != null
+  };
 
   const currentWaypointState = currentWaypoint ? gameState.waypointStates[currentWaypoint.id] : null;
   // Checks if waypoint is cleared or bypassed for team.
@@ -123,9 +141,10 @@ export const useRaceRoute = (
     currentWaypoint,
     isCurrentWaypointCleared,
     routes,
-    destination: routes.find((r) => r.waypoint.id === destinationId) || routes[0] || null,
+    destination: routes.find((r) => r.waypoint.id === destinationId) || null,
     destinationId,
-    chooseDestination: setDestinationId,
+    destinationChosen: !!choice.id && choice.id === destinationId,
+    chooseDestination: choice.set,
     reachedFinish: !!myProgress?.reachedFinish,
     reached,
     total,

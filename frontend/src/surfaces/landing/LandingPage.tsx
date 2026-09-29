@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { listMyMaps, removeMyMap } from '../../core/game/mapSession';
 import type { MapRecord } from '../../core/game/mapSession';
 import { listMyRaces, forgetRace, lobbyPath, racePathFor, refreshRaceStatuses, type RaceRecord } from '../../core/game/raceSession';
@@ -11,11 +11,16 @@ import { MyMapsGrid } from './components/MyMapsGrid';
 import { MyRacesGrid } from './components/MyRacesGrid';
 import { PageShell } from '../shared/PageShell';
 import { PageFooter } from '../shared/PageFooter';
-import { Button, Input, Notice, BrandLines, RouteGlobe, Badge, LinkButton, IconGithub } from '@ds';
+import { Button, Input, Notice, RouteGlobe, Badge, LinkButton, Icon, useConfirm } from '@ds';
 import { useIsDesktop } from '../../core/ui/useIsDesktop';
+import './landing.css';
+
+const JOIN_INPUT_ID = 'landing-join-input';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  const { hash } = useLocation();
+  const confirm = useConfirm();
   const isDesktop = useIsDesktop();
   const [localMaps, setLocalMaps] = useState<MapRecord[]>([]);
   const [myRaces, setMyRaces] = useState<RaceRecord[]>([]);
@@ -42,6 +47,13 @@ export const LandingPage: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (hash !== '#join') return;
+    const field = document.getElementById(JOIN_INPUT_ID);
+    field?.scrollIntoView({ block: 'center' });
+    field?.focus({ preventScroll: true });
+  }, [hash]);
 
   const handleJoinInputChange = (value: string) => {
     setJoinInput(looksLikeUrl(value) ? value : value.toUpperCase());
@@ -84,17 +96,19 @@ export const LandingPage: React.FC = () => {
     navigate(`/design/${mapId}`);
   };
 
-  const handleRemoveMap = (mapId: string) => {
+  const handleRemoveMap = async (mapId: string) => {
     // Forgetting a map drops the edit key with it. For a private map that is
     // just tidying up; for a published one it strands the map in the gallery
     // with nobody able to take it down, so that case gets asked about first.
     const map = localMaps.find((m) => m.mapId === mapId);
     if (map?.isListed) {
-      const ok = window.confirm(
-        `“${map.name || 'Untitled Map'}” is published in the public gallery.\n\n` +
-        'Removing it from this device drops the edit key, and it will stay in the gallery with no way to take it down. ' +
-        'Open the map and remove it from the gallery first if that is what you meant.\n\nForget it on this device anyway?'
-      );
+      const ok = await confirm({
+        title: 'Forget a gallery map?',
+        message: `“${map.name || 'Untitled Map'}” is in the public gallery. Forgetting it here drops the edit key, so it can never be taken down. Remove it from the gallery first.`,
+        confirmLabel: 'Forget it anyway',
+        cancelLabel: 'Keep it',
+        danger: true,
+      });
       if (!ok) return;
     }
     removeMyMap(mapId);
@@ -121,6 +135,7 @@ export const LandingPage: React.FC = () => {
   const joinBlock = (
     <div className="landing-join-block">
       <Input
+        id={JOIN_INPUT_ID}
         label="RACE CODE OR INVITE LINK"
         placeholder="K7RQ2M"
         value={joinInput}
@@ -167,14 +182,6 @@ export const LandingPage: React.FC = () => {
       heroBackdrop
       navPlacement="topbar"
       topBarProps={{
-        title: (
-          <div className="landing-brand">
-            <BrandLines size={24} />
-            <span className="t-announce fs-7 landing-brand__text">
-              RUNWAY
-            </span>
-          </div>
-        ),
         /* The docs link is the TopBar's own — every header carries it. */
         actions: (
           <LinkButton
@@ -182,11 +189,11 @@ export const LandingPage: React.FC = () => {
             external
             variant="ghost"
             size="sm"
-            className="btn--icon"
+            className="btn--icon landing-topbar-github"
             title="GitHub Repository"
             aria-label="GitHub Repository"
           >
-            <IconGithub />
+            <Icon name="github" />
           </LinkButton>
         ),
       }}
@@ -218,7 +225,10 @@ export const LandingPage: React.FC = () => {
         </h1>
 
         <p className="t-narrate fs-8 landing-hero__tagline">
-          Create races <em className="landing-hero__em">anywhere on Earth</em>, then play them with friends.
+          Walk between <em className="landing-hero__em">real places</em>, clear photo challenges, and race your friends to the finish.
+        </p>
+        <p className="fs-6 landing-hero__value">
+          Design a course anywhere on Earth, host it, and play it on foot.
         </p>
 
         {/* Mobile puts the code field first and desktop puts it last, and that is

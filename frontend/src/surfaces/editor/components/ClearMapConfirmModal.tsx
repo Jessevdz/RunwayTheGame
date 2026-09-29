@@ -20,19 +20,19 @@ export const ClearMapConfirmModal: React.FC<ClearMapConfirmModalProps> = ({
   onConfirm,
   onCancel
 }) => (
-  <Dialog open title="🗑️ CLEAR MAP" onClose={onCancel}>
+  <Dialog open title="CLEAR MAP" onClose={onCancel}>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
       <div>
-        <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: '1rem', fontWeight: 600 }}>
+        <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: 'var(--fs-6)', fontWeight: 600 }}>
           Start this design over from scratch?
         </p>
-        <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: '0.9rem' }}>
-          This removes {plural(waypointCount, 'waypoint')} and {plural(roadCount, 'road')}, along
-          with the map name, its challenges and its power-up prices. This action cannot be undone.
+        <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: 'var(--fs-4)' }}>
+          This removes {plural(waypointCount, 'waypoint')}, {plural(roadCount, 'road')}, the map name,
+          challenges and power-up prices. This cannot be undone.
         </p>
         {savedToServer && (
-          <p style={{ margin: 'var(--sp-2) 0 0 0', color: 'var(--ink-muted)', fontSize: '0.9rem' }}>
-            The saved version stays on the server until you save the empty map over it.
+          <p style={{ margin: 'var(--sp-2) 0 0 0', color: 'var(--ink-muted)', fontSize: 'var(--fs-4)' }}>
+            The saved version stays on the server until you save over it.
           </p>
         )}
       </div>

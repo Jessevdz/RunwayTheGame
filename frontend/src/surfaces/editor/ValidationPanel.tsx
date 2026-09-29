@@ -1,7 +1,6 @@
 import React from 'react';
 import type { ValidationError } from '../../core/editor/geometryUtils';
-import { IconButton } from '@ds';
-import { IconLocate } from './components/EditorIcons';
+import { IconButton, Icon } from '@ds';
 
 interface ValidationPanelProps {
   issues: ValidationError[];
@@ -55,7 +54,7 @@ const IssueList: React.FC<IssueListProps> = ({ title, issues, tone, emptyCopy, o
               {targets && (
                 <span className="pane-row__aside">
                   <IconButton
-                    icon={<IconLocate />}
+                    icon={<Icon name="locate" />}
                     label="Show on map"
                     variant="ghost"
                     size="sm"
@@ -78,7 +77,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({ issues, onFocu
 
   if (waypointCount === 0) {
     return (
-      <p className="pane-blank">Nothing to check yet — place a waypoint on the map first.</p>
+      <p className="pane-blank">Nothing to check yet. Place a waypoint first.</p>
     );
   }
 
@@ -88,7 +87,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({ issues, onFocu
         title="Blocks publish"
         issues={errors}
         tone="error"
-        emptyCopy="No blocking problems. This map can be published."
+        emptyCopy="No blocking problems."
         onFocusIssue={onFocusIssue}
       />
       <IssueList

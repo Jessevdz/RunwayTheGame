@@ -1,0 +1,143 @@
+@layer surfaces {
+  /* Full-screen celebration overlay: the Sunset arc, the moment, and one big continue button. */
+  .celebration {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: celebration-in var(--dur-2) var(--ease-premium) both;
+  }
+
+  .celebration__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    padding: var(--sp-5) var(--sp-4);
+    overflow-y: auto;
+    text-align: center;
+  }
+
+  .celebration__arc {
+    width: min(20rem, 80vw);
+    height: auto;
+    margin-bottom: var(--sp-3);
+    overflow: visible;
+  }
+
+  .celebration__arc .arc-band {
+    fill: none;
+    stroke-linecap: round;
+    transform-box: fill-box;
+    transform-origin: center bottom;
+    animation: celebration-band var(--dur-4) var(--ease-premium) both;
+  }
+
+  .celebration__arc .arc-band:nth-of-type(2) { animation-delay: var(--dur-2); }
+  .celebration__arc .arc-band:nth-of-type(3) { animation-delay: var(--dur-3); }
+
+  .celebration__eyebrow {
+    font-family: var(--font-data);
+    font-size: var(--fs-3);
+    font-weight: 600;
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    animation: celebration-rise var(--dur-3) var(--ease-premium) var(--dur-2) both;
+  }
+
+  .celebration__title {
+    font-family: var(--font-announce);
+    font-size: var(--fs-d-lg);
+    line-height: 1;
+    text-transform: uppercase;
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+    animation: celebration-pop var(--dur-4) var(--ease-premium) var(--dur-2) both;
+  }
+
+  .celebration__detail {
+    font-family: var(--font-body);
+    font-size: var(--fs-8);
+    color: var(--ink);
+    animation: celebration-rise var(--dur-3) var(--ease-premium) var(--dur-3) both;
+  }
+
+  .celebration__facts {
+    display: grid;
+    gap: var(--sp-2);
+    width: min(28rem, 100%);
+    margin: var(--sp-3) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .celebration__fact {
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    font-size: var(--fs-6);
+    color: var(--ink);
+    animation: celebration-rise var(--dur-3) var(--ease-premium) var(--dur-4) both;
+  }
+
+  .celebration__fact--coins {
+    font-family: var(--font-data);
+    font-weight: 700;
+    color: var(--ink-strong);
+  }
+
+  .celebration__fact--next {
+    border-color: var(--accent);
+    font-weight: 600;
+    color: var(--ink-strong);
+  }
+
+  .celebration__actions {
+    display: grid;
+    padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  }
+
+  .celebration__actions .btn:not(.btn--icon) {
+    width: 100%;
+    min-height: var(--min-tap-target);
+  }
+
+  @keyframes celebration-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes celebration-band {
+    from { opacity: 0; transform: translateY(var(--sp-4)) scale(.6); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes celebration-rise {
+    from { opacity: 0; transform: translateY(var(--sp-3)); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes celebration-pop {
+    from { opacity: 0; transform: scale(.7); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .celebration,
+    .celebration__arc .arc-band,
+    .celebration__eyebrow,
+    .celebration__title,
+    .celebration__detail,
+    .celebration__fact {
+      animation: none;
+    }
+  }
+}

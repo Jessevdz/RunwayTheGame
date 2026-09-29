@@ -171,14 +171,7 @@ func (s *Server) handleArrive(w http.ResponseWriter, r *http.Request) {
 	events = append(events, eventstore.Event{Type: "WaypointReached", Payload: string(arrivePayload)})
 
 	// Flag and reject arrivals with implausible speed based on location history.
-	startWP := ""
-	for _, wp := range proj.Board.Waypoints {
-		if wp.IsStart {
-			startWP = wp.ID
-			break
-		}
-	}
-	if reason, speed := s.detectArrivalAnomaly(r.Context(), gameID, team.ID, prog.CurrentWaypointID, startWP, req.Lat, req.Lon); reason != "" {
+	if reason, speed := s.detectArrivalAnomaly(r.Context(), gameID, team.ID, proj.Board, prog.CurrentWaypointID, req.Lat, req.Lon); reason != "" {
 		flagPayload, _ := json.Marshal(eventstore.ArrivalFlaggedPayload{
 			TeamID:     team.ID,
 			WaypointID: req.WaypointID,
@@ -318,19 +311,31 @@ func (s *Server) recordArrivalFlag(ctx context.Context, gameID string, payload [
 	}
 }
 
-// detectArrivalAnomaly checks if arrival movement speed exceeds plausible velocity bounds relative to the last reported position.
-func (s *Server) detectArrivalAnomaly(ctx context.Context, gameID, teamID, currentWaypointID, startWaypointID string, lat, lon float64) (string, float64) {
+// detectArrivalAnomaly checks if arrival movement speed exceeds plausible velocity bounds relative to the last known fix.
+func (s *Server) detectArrivalAnomaly(ctx context.Context, gameID, teamID string, board rules.Board, currentWaypointID string, lat, lon float64) (string, float64) {
 	var prevLat, prevLon float64
 	var reportedAt time.Time
 	err := s.DB.Pool.QueryRow(ctx, `
 		SELECT lat, lon, reported_at FROM team_positions WHERE game_id = $1 AND team_id = $2
 	`, gameID, teamID).Scan(&prevLat, &prevLon, &reportedAt)
-	if err != nil {
-		// A missing fix gives no velocity baseline, so it can never be trusted for movement beyond the start.
-		if errors.Is(err, pgx.ErrNoRows) && currentWaypointID != "" && currentWaypointID == startWaypointID {
-			return "", 0
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Pings are best-effort, so the team's server-verified arrival at its current waypoint stands in for a missing one.
+		var found bool
+		prevLat, prevLon, reportedAt, found, err = s.lastVerifiedArrival(ctx, gameID, teamID, board, currentWaypointID)
+		if err == nil && !found {
+			if isStartWaypoint(board, currentWaypointID) {
+				return "", 0
+			}
+			return "no recent position fix; no baseline to verify movement speed", 0
 		}
-		return "no recent position fix; no baseline to verify movement speed", 0
+	}
+	if err != nil {
+		logger.Warn(ctx, "could not load a velocity baseline for an arrival", map[string]interface{}{
+			"game_id": gameID,
+			"team_id": teamID,
+			"error":   err.Error(),
+		})
+		return "could not load a velocity baseline", 0
 	}
 
 	travelled := geo.DistanceM(prevLat, prevLon, lat, lon)
@@ -339,6 +344,48 @@ func (s *Server) detectArrivalAnomaly(ctx context.Context, gameID, teamID, curre
 		return "implausible velocity since last position report", speed
 	}
 	return "", 0
+}
+
+// lastVerifiedArrival returns the location and time of the team's recorded arrival at its current waypoint.
+func (s *Server) lastVerifiedArrival(ctx context.Context, gameID, teamID string, board rules.Board, currentWaypointID string) (float64, float64, time.Time, bool, error) {
+	if currentWaypointID == "" {
+		return 0, 0, time.Time{}, false, nil
+	}
+	var waypointID string
+	var reachedAt time.Time
+	err := s.DB.Pool.QueryRow(ctx, `
+		SELECT payload->>'waypoint_id', created_at FROM events
+		WHERE game_id = $1 AND event_type = 'WaypointReached' AND payload->>'team_id' = $2
+		ORDER BY sequence DESC LIMIT 1
+	`, gameID, teamID).Scan(&waypointID, &reachedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, 0, time.Time{}, false, nil
+	}
+	if err != nil {
+		return 0, 0, time.Time{}, false, err
+	}
+	if waypointID != currentWaypointID {
+		return 0, 0, time.Time{}, false, nil
+	}
+	for _, wp := range board.Waypoints {
+		if wp.ID == waypointID {
+			return wp.Lat, wp.Lon, reachedAt, true, nil
+		}
+	}
+	return 0, 0, time.Time{}, false, nil
+}
+
+// isStartWaypoint reports whether waypointID is the board's start waypoint.
+func isStartWaypoint(board rules.Board, waypointID string) bool {
+	if waypointID == "" {
+		return false
+	}
+	for _, wp := range board.Waypoints {
+		if wp.IsStart {
+			return wp.ID == waypointID
+		}
+	}
+	return false
 }
 
 // validPositionFix reports whether lat/lon/accuracy form a plausible GPS fix.

@@ -1,10 +1,5 @@
 import React from 'react';
-import {
-  IconCheck,
-  IconMap,
-  IconPowerup,
-  IconChallenge
-} from './EditorIcons';
+import { Icon } from '@ds';
 
 export type EditorTabId = 'elements' | 'challenges' | 'decks' | 'powerups' | 'validation';
 
@@ -20,11 +15,11 @@ export interface EditorTabDef {
 }
 
 export const EDITOR_TABS: EditorTabDef[] = [
-  { id: 'elements', label: 'Map', fullLabel: 'Map', title: 'Map geometry', icon: <IconMap /> },
-  { id: 'challenges', label: 'Challenges', fullLabel: 'Challenges', title: 'Waypoint challenges', icon: <IconChallenge /> },
+  { id: 'elements', label: 'Map', fullLabel: 'Map', title: 'Map geometry', icon: <Icon name="map" /> },
+  { id: 'challenges', label: 'Challenges', fullLabel: 'Challenges', title: 'Waypoint challenges', icon: <Icon name="challenge" /> },
   // Decks tab inactive for current PoC
-  // { id: 'decks', label: 'Decks', fullLabel: 'Decks', title: 'Roadblock & curse decks', icon: <IconDeck /> },
-  { id: 'powerups', label: 'Power', fullLabel: 'Power-ups', title: 'Power-ups', icon: <IconPowerup /> },
-  { id: 'validation', label: 'Issues', fullLabel: 'Validation', title: 'Validation', icon: <IconCheck /> }
+  // { id: 'decks', label: 'Decks', fullLabel: 'Decks', title: 'Roadblock & curse decks', icon: <Icon name="deck" /> },
+  { id: 'powerups', label: 'Power', fullLabel: 'Power-ups', title: 'Power-ups', icon: <Icon name="powerup" /> },
+  { id: 'validation', label: 'Issues', fullLabel: 'Validation', title: 'Validation', icon: <Icon name="warning" /> }
 ];
 

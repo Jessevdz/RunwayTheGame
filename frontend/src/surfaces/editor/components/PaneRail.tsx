@@ -1,8 +1,7 @@
 import React from 'react';
-import { IconButton } from '@ds';
+import { IconButton, Icon } from '@ds';
 import { EDITOR_TABS } from './tabDefs';
 import type { EditorTabId } from './tabDefs';
-import { IconBack, IconChevronLeft } from './EditorIcons';
 
 interface PaneRailProps {
   active: EditorTabId;
@@ -17,14 +16,14 @@ export const PaneRail: React.FC<PaneRailProps> = ({ active, errorCount, onBack, 
   <>
     <div className="pane-rail-head">
       <IconButton
-        icon={<IconBack />}
+        icon={<Icon name="arrow-left" />}
         label="Back to home"
         variant="secondary"
         size="sm"
         onClick={onBack}
       />
       <IconButton
-        icon={<IconChevronLeft />}
+        icon={<Icon name="chevron-left" />}
         label="Expand panel"
         variant="ghost"
         size="sm"

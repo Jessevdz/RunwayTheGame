@@ -29,6 +29,7 @@ docs-site/
 │   │       ├── index.mdx            # "What is Runway?" (Overview, rules, modes, grading)
 │   │       ├── design-a-board.mdx   # "Design a board" (Living map editor guide)
 │   │       ├── set-up-a-race.mdx    # "Set up a race" (Host lobby & player entry guide)
+│   │       ├── when-things-go-wrong.mdx # "When things go wrong" (Lost sessions & recovery)
 │   │       └── run-it-locally.mdx   # "Run your own instance" (Docker & local hosting guide)
 │   └── styles/
 │       └── departure.css    # Departure design system typography & Starlight theme overrides
@@ -44,6 +45,7 @@ The site documentation is managed in `src/content/docs/` and configured in `astr
 *   **What is Runway? (`index.mdx`):** Comprehensive introduction to core concepts (boards, waypoints, challenges, coins, power-ups, game modes, and evidence grading modes).
 *   **Design a board (`design-a-board.mdx`):** Guide for authoring interactive maps, drawing waypoints and roads, writing challenges and grading criteria, and publishing to the gallery.
 *   **Set up a race (`set-up-a-race.mdx`):** Guide for hosting multiplayer games, configuring lobby parameters, distributing join codes/QR links, and starting solo time trials or casual runs.
+*   **When things go wrong (`when-things-go-wrong.mdx`):** Recovery guide for players, hosts, and solo runners whose browser lost its stored capability token, and what cannot be recovered.
 *   **Run your own instance (`run-it-locally.mdx`):** Infrastructure guide for self-hosting Runway with Docker Compose, MinIO S3 evidence storage, PostGIS database, AI referee keys, reverse proxies, and volume backups.
 
 ---

@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatClock } from '../../../core/format/clock';
+import { Icon } from '@ds';
 
 interface EffectChipsProps {
   vetoLeft: number;
@@ -19,13 +20,13 @@ export const EffectChips: React.FC<EffectChipsProps> = ({ vetoLeft, trackerLeft,
     <div className="effects">
       {showVetoChip && (
         <div className="effect effect--warn">
-          <span className="effect__text">⏳ Skipped a challenge — no new challenges until this lapses</span>
+          <span className="effect__text"><Icon name="hourglass" /> Challenges locked</span>
           <span className="effect__time">{formatClock(vetoLeft)}</span>
         </div>
       )}
       {trackerLeft > 0 && (
         <div className="effect effect--warn">
-          <span className="effect__text">👁️ Tracker off — rivals cannot see you</span>
+          <span className="effect__text"><Icon name="eye-off" /> Hidden from rivals</span>
           <span className="effect__time">{formatClock(trackerLeft)}</span>
         </div>
       )}

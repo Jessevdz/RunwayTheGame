@@ -97,6 +97,21 @@ describe('race arrival-radius rings', () => {
   });
 });
 
+describe('race destination highlight', () => {
+  const targets = (features: GeoJSON.Feature[]) =>
+    features.filter((f) => f.properties?.isTarget).map((f) => f.properties?.id);
+
+  it('flags only the chosen waypoint as the target', () => {
+    const overlays = buildRaceOverlays(board(), 'team-1', palette, 'far');
+    expect(targets(overlays.waypoints.features)).toEqual(['far']);
+  });
+
+  it('flags nothing when no destination is chosen', () => {
+    const overlays = buildRaceOverlays(board(), 'team-1', palette);
+    expect(targets(overlays.waypoints.features)).toEqual([]);
+  });
+});
+
 describe('buildEditorOverlays', () => {
   it('builds editor overlays for waypoints and roads', () => {
     const realPalette = getMapPalette();
@@ -148,7 +163,8 @@ describe('buildEditorOverlays', () => {
     expect(overlays.waypoints.features[0].properties).toMatchObject({
       id: 'wp-1',
       isStart: true,
-      symbol: '▶',
+      symbol: '',
+      iconImage: 'icon-start',
       textColor: realPalette.onAccent,
       textHaloColor: realPalette.waypointStart
     });
@@ -167,7 +183,8 @@ describe('buildEditorOverlays', () => {
     expect(overlays.waypoints.features[2].properties).toMatchObject({
       id: 'wp-3',
       isFinish: true,
-      symbol: '🏁',
+      symbol: '',
+      iconImage: 'icon-finish',
       textColor: realPalette.onAccent,
       textHaloColor: realPalette.waypointFinish
     });

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { GameState } from '../../../core/projection/projectionStore';
-import { Card, Badge, Empty, Tabs, type TabItem } from '@ds';
+import { Card, Badge, Empty, Tabs, type TabItem, Icon } from '@ds';
 
 interface HostEventLogProps {
   gameState: GameState;
@@ -56,7 +56,7 @@ export const HostEventLog: React.FC<HostEventLogProps> = ({ gameState }) => {
       />
 
       {filtered.length === 0 ? (
-        <Empty icon="📜" title="Nothing to show" description="No events match this filter yet." />
+        <Empty icon={<Icon name="log" />} title="No events" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
           {filtered

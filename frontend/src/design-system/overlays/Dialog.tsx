@@ -1,8 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from '../primitives/Icon';
+
+export type DialogPresentation = 'center' | 'sheet' | 'fullscreen';
 
 export interface DialogProps {
   open?: boolean;
+  /** Centered card (default), bottom sheet, or edge-to-edge screen; heights use dvh. */
+  presentation?: DialogPresentation;
   title?: string;
   children?: React.ReactNode;
   onClose?: () => void;
@@ -12,6 +17,7 @@ export interface DialogProps {
 
 export const Dialog: React.FC<DialogProps> = ({
   open = true,
+  presentation = 'center',
   title,
   children,
   onClose,
@@ -87,17 +93,18 @@ export const Dialog: React.FC<DialogProps> = ({
   if (!open) return null;
 
   return createPortal(
-    <div className="scrim" onClick={onClose}>
+    <div className={`scrim scrim--${presentation}`} onClick={onClose}>
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={title || 'Dialog'}
-        className={`dialog ${className}`.trim()}
+        className={`dialog dialog--${presentation} ${className}`.trim()}
         onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
         style={style}
       >
+        {presentation === 'sheet' && <span className="dialog__grabber" aria-hidden="true" />}
         {title && (
           <div className="dialog__header">
             <h2 className="dialog__title">{title}</h2>
@@ -108,7 +115,7 @@ export const Dialog: React.FC<DialogProps> = ({
                 onClick={onClose}
                 aria-label="Close dialog"
               >
-                ✕
+                <Icon name="x" />
               </button>
             )}
           </div>

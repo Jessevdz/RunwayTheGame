@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './Icon';
 
 export interface TagProps {
   children?: React.ReactNode;
@@ -23,7 +24,7 @@ export const Tag: React.FC<TagProps> = ({
           onClick={onRemove}
           aria-label="Remove tag"
         >
-          ×
+          <Icon name="x" />
         </button>
       )}
     </span>

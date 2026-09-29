@@ -6,13 +6,7 @@ import {
   formatDuration
 } from './powerups';
 import type { PowerupDraft } from './powerups';
-import { Dialog, Button, Input, Chip } from '@ds';
-import {
-  IconClock,
-  IconCoin,
-  IconDone,
-  IconPowerup
-} from './components/EditorIcons';
+import { Dialog, Button, Input, Chip, Icon } from '@ds';
 
 interface PowerupWorkshopProps {
   powerups: PowerupDraft[];
@@ -61,7 +55,7 @@ export const PowerupWorkshop: React.FC<PowerupWorkshopProps> = ({
                   className="deck-card deck-card--power deck-card--editing"
                 >
                   <div className="deck-card__badge">
-                    <IconPowerup />
+                    <Icon name="powerup" />
                     <span>POWER-UP · #{idx + 1}</span>
                   </div>
 
@@ -77,7 +71,7 @@ export const PowerupWorkshop: React.FC<PowerupWorkshopProps> = ({
                     <Input
                       label={
                         <>
-                          <IconCoin /> Cost
+                          <Icon name="coin" /> Cost
                         </>
                       }
                       type="number"
@@ -87,10 +81,10 @@ export const PowerupWorkshop: React.FC<PowerupWorkshopProps> = ({
                     <Input
                       label={
                         <>
-                          <IconClock /> Duration
+                          <Icon name="clock" /> Duration
                         </>
                       }
-                      hint="Seconds — 0 is instant"
+                      hint="Seconds (0 = instant)"
                       type="number"
                       value={p.duration_s}
                       onChange={(e) => patch(p.id, { duration_s: parseInt(e.target.value) || 0 })}
@@ -100,12 +94,12 @@ export const PowerupWorkshop: React.FC<PowerupWorkshopProps> = ({
                   <div className="field">
                     <label className="field__label">Engine Effect</label>
                     <div className="field__hint">
-                      <strong>{effectMeta.label}</strong> — {effectMeta.hint}
+                      <strong>{effectMeta.label}</strong>: {effectMeta.hint}
                     </div>
                   </div>
 
                   <div className="deck-card__actions">
-                    <Button variant="primary" icon={<IconDone />} onClick={() => setEditingId(null)}>
+                    <Button variant="primary" icon={<Icon name="check" />} onClick={() => setEditingId(null)}>
                       Done
                     </Button>
                   </div>
@@ -120,7 +114,7 @@ export const PowerupWorkshop: React.FC<PowerupWorkshopProps> = ({
                 onClick={() => isEditable && setEditingId(p.id)}
               >
                 <div className="deck-card__badge">
-                  <IconPowerup />
+                  <Icon name="powerup" />
                   <span>
                     {effectMeta.label} · #{idx + 1}
                   </span>
@@ -133,10 +127,10 @@ export const PowerupWorkshop: React.FC<PowerupWorkshopProps> = ({
                 </div>
                 <div className="powerup-card__chips">
                   <Chip kind="power">
-                    <IconCoin /> {p.cost}
+                    <Icon name="coin" /> {p.cost}
                   </Chip>
                   <Chip>
-                    <IconClock /> {formatDuration(p.duration_s)}
+                    <Icon name="clock" /> {formatDuration(p.duration_s)}
                   </Chip>
                 </div>
               </div>

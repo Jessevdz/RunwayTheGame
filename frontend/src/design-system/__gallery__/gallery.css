@@ -1,0 +1,77 @@
+@layer surfaces {
+  .d-lg {
+    font-size: var(--fs-d-lg);
+  }
+
+  /* Design system gallery */
+  .gallery-shell {
+    padding: var(--sp-6);
+    max-width: var(--wrap);
+    margin: 0 auto;
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .gallery-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--sp-6);
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+  }
+
+  .gallery-section {
+    margin-bottom: var(--sp-6);
+  }
+
+  .gallery-section__title {
+    margin-bottom: var(--sp-4);
+  }
+
+  .gallery-row {
+    display: flex;
+    gap: var(--sp-3);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .gallery-grid-sm {
+    display: grid;
+    gap: var(--sp-2);
+  }
+
+  .gallery-grid-md {
+    display: grid;
+    gap: var(--sp-4);
+    max-width: 25rem;
+  }
+
+  .gallery-grid-auto {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+    gap: var(--sp-5);
+  }
+
+  .gallery-mb-2 {
+    margin-bottom: var(--sp-2);
+  }
+
+  .gallery-mt-3 {
+    margin-top: var(--sp-3);
+  }
+
+  .gallery-mt-4 {
+    margin-top: var(--sp-4);
+  }
+
+  .gallery-fig {
+    margin: 0;
+    text-align: center;
+  }
+
+  .gallery-figcaption {
+    margin-top: var(--sp-3);
+    color: var(--ink-muted);
+  }
+}

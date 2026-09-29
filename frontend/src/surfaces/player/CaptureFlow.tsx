@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { projectionStore, type VerificationMode } from '../../core/projection/projectionStore';
 import { generateIdempotencyKey, enqueueAction } from '../../core/projection/offlineStore';
-import { presignUpload, uploadToPresignedUrl, submitChallengeEvidence, clearRoadblock, ApiError } from '../../core/api/client';
+import { presignUpload, uploadToPresignedUrl, submitChallengeEvidence, clearRoadblock } from '../../core/api/client';
 import { frameFromFile, type CapturedFrame } from '../../core/player/cameraService';
 import type { GPSPosition } from '../../core/player/locationService';
 import type { TeamSession } from '../../core/game/teamSession';
-import { Dialog, Button, Callout, Chip, Notice } from '@ds';
+import { Dialog, Button, Callout, Notice } from '@ds';
+import { CAPTURE_QUEUED_EVENT } from './captureEvents';
+import { playerErrorMessage } from './playerErrors';
 import './capture-flow.css';
 
 interface CaptureFlowProps {
@@ -144,7 +146,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
   const handleSubmit = async () => {
     if (!frame) return;
     if (!playerLocation) {
-      setSubmitError('No GPS fix yet — step into the open so your phone can find satellites, then submit.');
+      setSubmitError('No GPS fix yet. Step into the open and try again.');
       setUploadProgress(null);
       setStage('review');
       return;
@@ -229,10 +231,11 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
             clientCapturedAt: frame.capturedAt
           }
         }).finally(() => {
+          window.dispatchEvent(new Event(CAPTURE_QUEUED_EVENT));
           if (!uploadCancelledRef.current) setStage('queued');
         });
       } else {
-        setSubmitError(err instanceof ApiError ? err.message : 'Upload failed — check your signal and try again.');
+        setSubmitError(playerErrorMessage(err, 'photo'));
         setUploadProgress(null);
         // Return to review stage on network failure.
         setStage('review');
@@ -369,7 +372,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
               {mustShow.length === 0 && failsIf.length === 0 && !latitude && (
                 <div className="capture__criteria">
                   <span className="capture__criteria-label">No extra criteria</span>
-                  <p>Shoot the challenge above, and make it obvious in one frame.</p>
+                  <p>Make it obvious in one frame.</p>
                 </div>
               )}
             </section>
@@ -385,13 +388,6 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
             <Button variant="primary" size="lg" onClick={openCamera}>
               {opening ? 'Opening camera…' : 'Take the photo'}
             </Button>
-            <p className="capture__bar-hint">
-              {verification === 'trust'
-                ? "Opens your phone's camera. You get to check the shot before it is saved."
-                : verification === 'host'
-                  ? "Opens your phone's camera. You get to check the shot before it goes to your host."
-                  : "Opens your phone's camera. You get to check the shot before it goes to the referee."}
-            </p>
             {import.meta.env.DEV && (
               <Button
                 variant="ghost"
@@ -446,7 +442,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
           {confirmDiscard ? (
             <div className="capture__status" role="status">
               <Notice kind="warn" title="Discard this upload?">
-                Your photo is still sending. Leaving now throws it away and the waypoint stays unproven.
+                Leaving now cancels the upload.
               </Notice>
               <div className="capture__actions">
                 <Button variant="secondary" onClick={handleDiscard}>
@@ -459,8 +455,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
             </div>
           ) : (
             <div className="capture__status" role="status" aria-live="polite">
-              <h3 className="t-announce fs-7">SENDING EVIDENCE</h3>
-              <p>Your photo is going straight to the referee&apos;s store.</p>
+              <h3 className="t-announce fs-7">SENDING PHOTO</h3>
               <div
                 className={`capture__progress${uploadProgress === null ? ' capture__progress--waiting' : ''}`}
                 role="progressbar"
@@ -482,8 +477,7 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
           <div className="capture__status" role="status" aria-live="polite">
             <h3 className="t-announce fs-7">SAVED FOR LATER</h3>
             <p>
-              No signal out here. Your photo is stored on this phone and sends itself the moment coverage
-              comes back — keep racing.
+              No signal. Your photo is saved on this phone and sends when coverage returns. Keep racing.
             </p>
             <Button variant="primary" onClick={onClose}>
               Back to the race
@@ -495,7 +489,6 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
       {stage === 'pending' && (
         <div className="capture">
           <div className="capture__status" role="status" aria-live="polite">
-            <Chip kind="live">{verification === 'host' ? 'WITH YOUR HOST' : 'EVALUATING EVIDENCE'}</Chip>
             <h3 className="t-announce fs-7">
               {verification === 'host' ? 'YOUR HOST IS LOOKING' : 'THE REFEREE IS LOOKING'}
             </h3>
@@ -505,10 +498,10 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
             {/* Host grading can be asynchronous; allow players to dismiss and continue racing. */}
             <p>
               {verification === 'host'
-                ? 'A person is grading this one, so it takes as long as it takes. Go and keep racing — we will tell you the moment it lands.'
+                ? 'A person is grading this, so it may take a while. Keep racing and we will tell you when it lands.'
                 : waited < PATIENCE_SECONDS
-                  ? 'Checking your photo against what this waypoint asks for.'
-                  : 'This one is taking a while. You do not have to wait here — we will tell you the moment it lands.'}
+                  ? 'Checking your photo.'
+                  : 'This is taking a while. Keep racing and we will tell you when it lands.'}
             </p>
             {(verification === 'host' || waited >= PATIENCE_SECONDS) && (
               <Button variant="primary" onClick={handleDismiss}>
@@ -524,9 +517,6 @@ export const CaptureFlow: React.FC<CaptureFlowProps> = ({
           <div className="capture__verdict" role="alert">
             <Callout kind={verdict.outcome === 'pass' ? 'pass' : 'curse'}>
               <div className="callout__kind">{verdict.outcome === 'pass' ? 'Cleared' : 'Not accepted'}</div>
-              <h3 className="callout__title fs-8">
-                {verdict.outcome === 'pass' ? 'Verdict: approved' : 'Verdict: rejected'}
-              </h3>
             </Callout>
 
             <div className="capture__note">

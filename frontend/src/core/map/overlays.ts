@@ -68,7 +68,8 @@ export function buildEditorOverlays(input: EditorOverlayInput): MapOverlays {
         radiusOuter = 16;
         radiusInner = 9;
         strokeWidth = 4.5;
-        symbol = '▶';
+        symbol = '';
+        iconImage = 'icon-start';
         textColor = palette.onAccent;
         textHaloColor = palette.waypointStart;
       } else if (w.isFinish) {
@@ -76,7 +77,8 @@ export function buildEditorOverlays(input: EditorOverlayInput): MapOverlays {
         radiusOuter = 16;
         radiusInner = 9;
         strokeWidth = 4.5;
-        symbol = '🏁';
+        symbol = '';
+        iconImage = 'icon-finish';
         textColor = palette.onAccent;
         textHaloColor = palette.waypointFinish;
       } else if (isSelected) {
@@ -199,7 +201,8 @@ function ringColor(status: WaypointRaceStatus, palette: MapPalette): string {
 export function buildRaceOverlays(
   gameState: GameState,
   teamId: string | null,
-  palette: MapPalette
+  palette: MapPalette,
+  targetWaypointId: string | null = null
 ): MapOverlays {
   const raceAcc = computeRaceAccessibility(gameState, teamId);
 
@@ -237,7 +240,8 @@ export function buildRaceOverlays(
         radiusOuter = 14;
         radiusInner = 7;
         opacity = 1.0;
-        symbol = '📍';
+        symbol = '';
+        iconImage = 'icon-current';
         textColor = palette.onAccent;
         textHaloColor = palette.waypointCurrent;
       } else if (status === 'cleared') {
@@ -247,7 +251,8 @@ export function buildRaceOverlays(
         radiusOuter = 9;
         radiusInner = 5;
         opacity = 0.9;
-        symbol = '✓';
+        symbol = '';
+        iconImage = 'icon-check';
         textColor = palette.onAccent;
         textHaloColor = palette.waypointCleared;
       } else if (status === 'inaccessible') {
@@ -268,7 +273,8 @@ export function buildRaceOverlays(
         radiusOuter = 16;
         radiusInner = 9;
         opacity = 1.0;
-        symbol = '▶';
+        symbol = '';
+        iconImage = 'icon-start';
         textColor = palette.onAccent;
         textHaloColor = palette.waypointStart;
       } else if (w.isFinish || status === 'finish') {
@@ -278,7 +284,8 @@ export function buildRaceOverlays(
         radiusOuter = 16;
         radiusInner = 9;
         opacity = 1.0;
-        symbol = '🏁';
+        symbol = '';
+        iconImage = 'icon-finish';
         textColor = palette.onAccent;
         textHaloColor = palette.waypointFinish;
       } else if (status === 'accessible') {
@@ -308,6 +315,7 @@ export function buildRaceOverlays(
           status,
           isAccessible: acc?.isAccessible ?? true,
           orderLabel: tier !== undefined ? String(tier) : '',
+          isTarget: w.id === targetWaypointId,
           color,
           strokeColor,
           strokeWidth,

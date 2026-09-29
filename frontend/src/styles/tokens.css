@@ -1,7 +1,8 @@
-/* ==========================================================================
+@layer tokens {
+  /* ==========================================================================
    CODENAME RUNWAY — DESIGN SYSTEM TOKENS
    ========================================================================== */
-:root {
+  :root {
 
 
     /* Navy — sampled from the wordmark plate (#202F40) and extended */
@@ -11,7 +12,9 @@
     --navy-600: #2B3D50;
     --navy-500: #3C5064;
     --navy-400: #5A6E82;
+    --navy-450: #465A6E;
     --navy-300: #8794A2;
+    --navy-250: #A3AEBA;
     --navy-200: #B9C2CB;
     --navy-100: #DCE1E6;
     --navy-050: #EFF2F4;
@@ -70,17 +73,19 @@
     --tone-neutral-ink: var(--navy-700);
     --tone-neutral-edge: var(--navy-300);
     --tone-neutral-wash: var(--navy-050);
-}
+  }
 
-/* --- 2. SEMANTICS · Terminal (default, light) ------------------------------ */
-:root {
+  /* --- 2. SEMANTICS · Terminal (default, light) ------------------------------ */
+  :root {
+    color-scheme: light;
+
     --surface: var(--cream);
     --surface-2: var(--cream-2);
     --surface-inverse: var(--navy-700);
 
     --ink: var(--navy-700);
     --ink-strong: var(--navy-900);
-    --ink-muted: var(--navy-400);
+    --ink-muted: var(--navy-450);
     --ink-inverse: var(--signal);
 
     --line: var(--line-light);
@@ -105,17 +110,19 @@
 
     --mesh-a: rgba(67, 56, 202, .10);
     --mesh-b: rgba(245, 122, 60, .10);
-}
+  }
 
-/* --- 3. SEMANTICS · Night flight (dark) ------------------------------------ */
-[data-theme="night"] {
+  /* --- 3. SEMANTICS · Night flight (dark) ------------------------------------ */
+  [data-theme="night"] {
+    color-scheme: dark;
+
     --surface: var(--navy-900);
     --surface-2: var(--navy-800);
     --surface-inverse: var(--signal);
 
     --ink: var(--signal);
     --ink-strong: #FFFFFF;
-    --ink-muted: var(--navy-300);
+    --ink-muted: var(--navy-250);
     --ink-inverse: var(--navy-900);
 
     --line: rgba(240, 240, 240, .14);
@@ -160,10 +167,64 @@
     --tone-neutral-ink: var(--signal);
     --tone-neutral-edge: var(--navy-400);
     --tone-neutral-wash: rgba(240, 240, 240, .10);
-}
+  }
 
-/* --- 4. TYPE --------------------------------------------------------------- */
-:root {
+  /* --- 3b. SEMANTICS · Sunlight (high contrast, outdoors) ---------------------
+   Set data-contrast="high" on <html>, or follow prefers-contrast: more unless data-contrast="normal" opts out. */
+  :root[data-contrast="high"]:not([data-theme="night"]) {
+    --ink: var(--navy-900);
+    --ink-muted: var(--navy-600);
+    --line: var(--navy-300);
+    --line-strong: var(--navy-500);
+    --accent: var(--indigo-700);
+    --accent-hover: var(--indigo-700);
+    --focus: var(--indigo-700);
+    --danger-text: var(--ember);
+    --warn-text: #6B4506;
+    --moss: #2D4C31;
+    --tone-neutral-edge: var(--navy-500);
+  }
+
+  :root[data-contrast="high"][data-theme="night"] {
+    --ink: #FFFFFF;
+    --ink-muted: var(--navy-100);
+    --line: rgba(240, 240, 240, .40);
+    --line-strong: rgba(240, 240, 240, .75);
+    --accent: #C4C1F4;
+    --accent-hover: #FFFFFF;
+    --focus: #FFFFFF;
+    --tone-neutral-edge: var(--navy-200);
+  }
+
+  @media (prefers-contrast: more) {
+    :root:not([data-contrast="normal"]):not([data-theme="night"]) {
+      --ink: var(--navy-900);
+      --ink-muted: var(--navy-600);
+      --line: var(--navy-300);
+      --line-strong: var(--navy-500);
+      --accent: var(--indigo-700);
+      --accent-hover: var(--indigo-700);
+      --focus: var(--indigo-700);
+      --danger-text: var(--ember);
+      --warn-text: #6B4506;
+      --moss: #2D4C31;
+      --tone-neutral-edge: var(--navy-500);
+    }
+
+    :root:not([data-contrast="normal"])[data-theme="night"] {
+      --ink: #FFFFFF;
+      --ink-muted: var(--navy-100);
+      --line: rgba(240, 240, 240, .40);
+      --line-strong: rgba(240, 240, 240, .75);
+      --accent: #C4C1F4;
+      --accent-hover: #FFFFFF;
+      --focus: #FFFFFF;
+      --tone-neutral-edge: var(--navy-200);
+    }
+  }
+
+  /* --- 4. TYPE --------------------------------------------------------------- */
+  :root {
     --font-announce: 'Archivo Black', 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     /* badge voice   */
     --font-narrate: 'Playfair Display', Georgia, serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
@@ -172,15 +233,16 @@
     /* interface     */
     --font-data: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     /* clocks, data  */
-}
+  }
 
-/* --- 4b. FONT SIZE SCALE --------------------------------------------------- */
-:root {
-    --fs-1: 9px;
-    --fs-2: 11px;
-    --fs-3: 12px;
-    --fs-4: 13px;
-    --fs-5: 14px;
+  /* --- 4b. FONT SIZE SCALE --------------------------------------------------- */
+  :root {
+    /* Type floor: nothing renders under 12px, this app is read outdoors in sunlight. */
+    --fs-1: 12px;
+    --fs-2: 12px;
+    --fs-3: 13px;
+    --fs-4: 14px;
+    --fs-5: 15px;
     --fs-6: 16px;
     --fs-7: 18px;
     --fs-8: 20px;
@@ -195,25 +257,55 @@
     --fs-d-md: clamp(1.8rem, 3.6vw, 2.75rem);
     --fs-d-lg: clamp(2.4rem, 6.5vw, 5rem);
     --fs-d-hero: clamp(3.2rem, 11vw, 10rem);
-}
 
-.fs-1 { font-size: var(--fs-1); }
-.fs-2 { font-size: var(--fs-2); }
-.fs-3 { font-size: var(--fs-3); }
-.fs-4 { font-size: var(--fs-4); }
-.fs-5 { font-size: var(--fs-5); }
-.fs-6 { font-size: var(--fs-6); }
-.fs-7 { font-size: var(--fs-7); }
-.fs-8 { font-size: var(--fs-8); }
-.fs-9 { font-size: var(--fs-9); }
-.fs-10 { font-size: var(--fs-10); }
-.fs-11 { font-size: var(--fs-11); }
-.fs-d-md { font-size: var(--fs-d-md); }
-.fs-d-lg { font-size: var(--fs-d-lg); }
-.fs-d-hero { font-size: var(--fs-d-hero); }
+    /* Glance sizes for numbers read at arm's length while walking. */
+    --fs-stat: clamp(1.8rem, 3vw, 2.4rem);
+    --fs-lead: clamp(1.05rem, 1.6vw, 1.3rem);
+    --fs-glance-clock: clamp(2.5rem, 12vw, 3.5rem);
+    --fs-glance-distance: clamp(2.25rem, 10vw, 3rem);
+    --fs-glance-coin: clamp(1.5rem, 6vw, 2rem);
 
-/* --- 5. SPACE · 4px base --------------------------------------------------- */
-:root {
+    /* Label tracking, eased from the old .24em-.30em so small caps stay legible. */
+    --ls-label: .14em;
+    --ls-label-tight: .08em;
+  }
+
+  .fs-1 { font-size: var(--fs-1); }
+
+  .fs-2 { font-size: var(--fs-2); }
+
+  .fs-3 { font-size: var(--fs-3); }
+
+  .fs-4 { font-size: var(--fs-4); }
+
+  .fs-5 { font-size: var(--fs-5); }
+
+  .fs-6 { font-size: var(--fs-6); }
+
+  .fs-7 { font-size: var(--fs-7); }
+
+  .fs-8 { font-size: var(--fs-8); }
+
+  .fs-9 { font-size: var(--fs-9); }
+
+  .fs-10 { font-size: var(--fs-10); }
+
+  .fs-11 { font-size: var(--fs-11); }
+
+  .fs-d-md { font-size: var(--fs-d-md); }
+
+  .fs-d-lg { font-size: var(--fs-d-lg); }
+
+  .fs-d-hero { font-size: var(--fs-d-hero); }
+
+  .fs-glance-clock { font-size: var(--fs-glance-clock); }
+
+  .fs-glance-distance { font-size: var(--fs-glance-distance); }
+
+  .fs-glance-coin { font-size: var(--fs-glance-coin); }
+
+  /* --- 5. SPACE · 4px base --------------------------------------------------- */
+  :root {
     --sp-1: 4px;
     --sp-2: 8px;
     --sp-3: 12px;
@@ -225,10 +317,10 @@
     --sp-9: 96px;
     --sp-10: 128px;
     --sp-11: 160px;
-}
+  }
 
-/* --- 6. SHAPE -------------------------------------------------------------- */
-:root {
+  /* --- 6. SHAPE -------------------------------------------------------------- */
+  :root {
     --r-xs: 2px;
     --r-sm: 6px;
     --r-md: 12px;
@@ -238,10 +330,10 @@
     --plate-inset: 4px;
     /* the wordmark plate's inset stroke offset */
     --hex: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-}
+  }
 
-/* --- 7. MOTION ------------------------------------------------------------- */
-:root {
+  /* --- 7. MOTION ------------------------------------------------------------- */
+  :root {
     --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
     /* everything that enters or settles */
     --ease-exit: cubic-bezier(0.4, 0, 1, 1);
@@ -256,10 +348,10 @@
     /* arc draw, number tickers        */
     --dur-5: 1000ms;
     /* scroll reveals, 80ms stagger    */
-}
+  }
 
-/* --- 8. LAYOUT ------------------------------------------------------------- */
-:root {
+  /* --- 8. LAYOUT ------------------------------------------------------------- */
+  :root {
     --wrap: 1320px;
     /* gutters 20px           */
     --wrap-content: 62.5rem;
@@ -272,64 +364,64 @@
     /* sticky metadata rail   */
 
     /* Stacking order. Every fixed/sticky layer sources its z-index here so the
-       shells (topbar 40, rail/bottomnav 50) can never occlude an overlay. */
+     shells (topbar 40, rail/bottomnav 50) can never occlude an overlay. */
     --z-sticky: 40;
     --z-shell: 50;
     --z-modal: 100;
     --z-toast: 120;
-}
+  }
 
-/* --- 9. TYPE ROLES --------------------------------------------------------- */
-.t-announce {
+  /* --- 9. TYPE ROLES --------------------------------------------------------- */
+  .t-announce {
     font-family: var(--font-announce);
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: -.02em;
     line-height: .90;
-}
+  }
 
-.t-narrate {
+  .t-narrate {
     font-family: var(--font-narrate);
     font-weight: 400;
     line-height: 1.08;
     letter-spacing: -.01em;
-}
+  }
 
-.t-data {
+  .t-data {
     font-family: var(--font-data);
     font-variant-numeric: tabular-nums;
     letter-spacing: -.01em;
-}
+  }
 
-.t-label {
+  .t-label {
     font-family: var(--font-data);
     font-size: var(--fs-2);
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: .30em;
+    letter-spacing: var(--ls-label);
     color: var(--ink-muted);
-}
+  }
 
-/* --- 10. QUALITY FLOOR ----------------------------------------------------- */
-:focus-visible {
+  /* --- 10. QUALITY FLOOR ----------------------------------------------------- */
+  :focus-visible {
     outline: 3px solid var(--focus);
     outline-offset: 3px;
     border-radius: var(--r-xs);
-}
+  }
 
-::selection {
+  ::selection {
     background: var(--amber);
     color: var(--navy-900);
-}
+  }
 
-@media (prefers-reduced-motion: reduce) {
-
+  @media (prefers-reduced-motion: reduce) {
     *,
-    *::before,
-    *::after {
-        animation-duration: .001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: .001ms !important;
-        scroll-behavior: auto !important;
+      *::before,
+      *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+      scroll-behavior: auto !important;
     }
+  }
 }

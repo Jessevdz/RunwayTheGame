@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { elapsedSeconds, type GameState } from '../../core/projection/projectionStore';
 import { formatClock } from '../../core/format/clock';
-import { Tabs, type TabItem } from '@ds';
+import { Tabs, showToast, type TabItem, Icon } from '@ds';
 import { HostDashboard } from './panels/HostDashboard';
 import { DisputeQueue } from './panels/DisputeQueue';
 import { ReviewQueue } from './panels/ReviewQueue';
@@ -22,11 +22,13 @@ interface HostToolsPanelProps {
   gameId: string;
   hostToken: string;
   gameState: GameState;
-  onToast: (text: string, tone?: ToastMessage['tone']) => void;
 }
 
 /** Host management panel containing dashboard, disputes, overrides, log, and recap. */
-export const HostToolsPanel: React.FC<HostToolsPanelProps> = ({ gameId, hostToken, gameState, onToast }) => {
+export const HostToolsPanel: React.FC<HostToolsPanelProps> = ({ gameId, hostToken, gameState }) => {
+  const onToast = useCallback((text: string, tone: ToastMessage['tone'] = 'moss') => {
+    showToast(text, { tone });
+  }, []);
   const [activeTab, setActiveTab] = useState<HostTab>('dashboard');
 
   const disputeCount = useMemo(
@@ -43,12 +45,12 @@ export const HostToolsPanel: React.FC<HostToolsPanelProps> = ({ gameId, hostToke
   );
 
   const tabs: TabItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    ...(hostGrades ? [{ id: 'review', label: 'Review', icon: '📷', badge: reviewCount }] : []),
-    { id: 'disputes', label: 'Disputes', icon: '⚖️', badge: disputeCount },
-    { id: 'overrides', label: 'Overrides', icon: '🛠️' },
-    { id: 'log', label: 'Log', icon: '📜' },
-    ...(gameState.state === 'ended' ? [{ id: 'recap', label: 'Recap', icon: '🏆' }] : [])
+    { id: 'dashboard', label: 'Dashboard', icon: <Icon name="chart" /> },
+    ...(hostGrades ? [{ id: 'review', label: 'Review', icon: <Icon name="camera" />, badge: reviewCount }] : []),
+    { id: 'disputes', label: 'Disputes', icon: <Icon name="scale" />, badge: disputeCount },
+    { id: 'overrides', label: 'Overrides', icon: <Icon name="sliders" /> },
+    { id: 'log', label: 'Log', icon: <Icon name="log" /> },
+    ...(gameState.state === 'ended' ? [{ id: 'recap', label: 'Recap', icon: <Icon name="trophy" /> }] : [])
   ];
 
   // The bar is sticky and the clock is the only thing on it that moves, so it

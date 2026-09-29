@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams, useNavigate, Navigate } from 'react-router-dom';
 import { MapCore } from '../../core/map/MapCore';
 import { PlayerConsole } from '../player/PlayerConsole';
 import { CaptureFlow } from '../player/CaptureFlow';
-import { HostToolsPanel, type ToastMessage } from '../host/HostToolsPanel';
+import { HostToolsPanel } from '../host/HostToolsPanel';
 import { projectionStore, isSoloMode, type GameState } from '../../core/projection/projectionStore';
 import { websocketClient } from '../../core/projection/websocketClient';
-import { watchPlayerLocation, type GPSPosition } from '../../core/player/locationService';
+import { useGpsWatch } from '../../core/player/useGpsWatch';
 import { syncEngine } from '../../core/projection/syncEngine';
 import { updateManager } from '../../core/pwa/updateManager';
 import { loadTeamSession, clearTeamSession, type TeamSession } from '../../core/game/teamSession';
@@ -15,7 +15,11 @@ import { resolveFeedToken, rememberRace, getRaceMode, isSoloRaceMode, lobbyPathF
 import { useRaceIndexSync } from '../../core/game/useRaceIndexSync';
 import { reportPosition, endGame } from '../../core/api/client';
 import { TopBar } from '../shared/TopBar';
-import { Tabs, BottomNav, Toast, Button, Badge, Empty, BrandLines } from '@ds';
+import { Tabs, Toast, Button, Badge, Empty, showToast, useConfirm, Icon } from '@ds';
+import { CelebrationOverlay } from '../player/CelebrationOverlay';
+import { useRaceMoments } from '../../core/game/useRaceMoments';
+import { useWakeLock } from '../../core/hooks/useWakeLock';
+import './race-shell.css';
 
 type RaceView = 'play' | 'host';
 
@@ -30,18 +34,19 @@ const CONNECTION_LABEL = {
 export const RaceShell: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [gameState, setGameState] = useState<GameState>(projectionStore.getState());
   const [session, setSession] = useState<TeamSession | null>(() => (gameId ? loadTeamSession(gameId) : null));
   const [hostSession, setHostSession] = useState<HostSession | null>(() => (gameId ? loadHostSession(gameId) : null));
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [queuedCount, setQueuedCount] = useState<number>(0);
   const [syncState, setSyncState] = useState<'online' | 'offline' | 'syncing'>('online');
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
 
-  const [playerLocation, setPlayerLocation] = useState<GPSPosition | null>(null);
-  const latestLocationRef = useRef<GPSPosition | null>(null);
+  const [chosenDestination, setChosenDestination] = useState<string | null>(null);
+  const [targetWaypointId, setTargetWaypointId] = useState<string | null>(null);
+  const [sheetInset, setSheetInset] = useState(0);
   const [activeChallenge, setActiveChallenge] = useState<{ mode?: 'challenge' | 'roadblock'; waypointId: string; roadId?: string; challengeId?: string; prompt: string; rubric: any } | null>(null);
 
   const [watchedSubmission, setWatchedSubmission] = useState<string | null>(null);
@@ -49,9 +54,9 @@ export const RaceShell: React.FC = () => {
   const solo = isSoloMode(gameState.mode) || (gameId ? isSoloRaceMode(getRaceMode(gameId)) : false);
 
   const destinations = useMemo(() => {
-    const items: Array<{ id: RaceView; label: string; icon: string }> = [];
-    if (session) items.push({ id: 'play', label: 'Play', icon: '📱' });
-    if (hostSession && !solo) items.push({ id: 'host', label: 'Host tools', icon: '🛠️' });
+    const items: Array<{ id: RaceView; label: string; icon: React.ReactNode }> = [];
+    if (session) items.push({ id: 'play', label: 'Play', icon: <Icon name="flag" /> });
+    if (hostSession && !solo) items.push({ id: 'host', label: 'Host tools', icon: <Icon name="sliders" /> });
     return items;
   }, [session, hostSession, solo]);
 
@@ -97,21 +102,13 @@ export const RaceShell: React.FC = () => {
 
   useRaceIndexSync(gameId);
 
-  // Continuous player GPS location watcher
-  useEffect(() => {
-    if (view !== 'play') return;
-    const unsubscribeLocation = watchPlayerLocation(
-      (pos) => {
-        const prev = latestLocationRef.current;
-        latestLocationRef.current = pos;
-        // A repeated fix carries no new information, so it should not re-render the shell.
-        if (prev && prev.lat === pos.lat && prev.lon === pos.lon && prev.accuracy === pos.accuracy) return;
-        setPlayerLocation(pos);
-      },
-      (err) => console.warn('[GPS] Geolocation watch error:', err.message)
-    );
-    return () => unsubscribeLocation();
-  }, [view]);
+  const moments = useRaceMoments(session?.teamId);
+  useWakeLock(view === 'play' && !!session && gameState.state === 'live' && !gameState.winner);
+
+  // Continuous player GPS watcher; the position, its error and the last-fix time all reach the console as state.
+  const gpsWatch = useGpsWatch(view === 'play');
+  const playerLocation = gpsWatch.position;
+  const latestLocationRef = gpsWatch.latestRef;
 
   // Periodic background position reporter (every 10 seconds)
   useEffect(() => {
@@ -132,13 +129,13 @@ export const RaceShell: React.FC = () => {
       }
     }, 10000);
     return () => clearInterval(interval);
-  }, [view, session]);
+  }, [view, session, latestLocationRef]);
 
-  const pushToast = (text: string, tone: ToastMessage['tone'] = 'moss') => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, tone, text }]);
-    window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3200);
-  };
+  // A new junction wipes the hand-picked destination, so a stale pick cannot follow the team to the next fork.
+  const currentWaypointId = session ? gameState.progress[session.teamId]?.currentWaypointId : undefined;
+  useEffect(() => {
+    setChosenDestination(null);
+  }, [currentWaypointId]);
 
   // Listens for submission verdict updates.
   useEffect(() => {
@@ -147,17 +144,10 @@ export const RaceShell: React.FC = () => {
     const announce = (state: GameState): boolean => {
       const sub = state.submissions?.[watchedSubmission];
       if (!sub || (sub.status !== 'pass' && sub.status !== 'fail')) return false;
-      const passed = sub.status === 'pass';
-      const id = Date.now() + Math.random();
-      setToasts((prev) => [
-        ...prev,
-        {
-          id,
-          tone: passed ? 'moss' : 'crimson',
-          text: passed ? 'Verdict: approved — waypoint cleared.' : 'Verdict: rejected — take another photo.'
-        }
-      ]);
-      window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 6000);
+      // An approval is celebrated full-screen by useRaceMoments, so only a rejection needs a toast.
+      if (sub.status === 'fail') {
+        showToast('Rejected. Take another photo.', { tone: 'crimson', duration: 6000 });
+      }
       setWatchedSubmission(null);
       return true;
     };
@@ -192,6 +182,35 @@ export const RaceShell: React.FC = () => {
     }
   };
 
+  const confirmLeave = async () => {
+    const runOver = gameState.state === 'ended' || !!gameState.winner;
+    const timeTrial = gameState.mode === 'solo_time_trial';
+    const ok = solo
+      ? runOver
+        ? await confirm({
+            title: 'Leave this run?',
+            message: 'The run is already over. Your result stays in My Races.',
+            confirmLabel: 'Leave',
+            cancelLabel: 'Stay'
+          })
+        : await confirm({
+            title: 'Leave and end this run?',
+            message: `Leaving ends your run for good, and you cannot pick it back up.${timeTrial ? ' No time will be posted.' : ''}`,
+            confirmLabel: 'End run and leave',
+            cancelLabel: 'Keep going',
+            danger: true
+          })
+      : await confirm({
+          title: 'Leave this race?',
+          message:
+            'This phone stops playing for your team, and the race carries on without it. To get back in you need your team’s invite again.',
+          confirmLabel: 'Leave race',
+          cancelLabel: 'Stay in the race',
+          danger: true
+        });
+    if (ok) await handleLeaveTeam();
+  };
+
   const handleEndRun = async () => {
     if (!gameId || !hostSession) return;
     await endGame(gameId, hostSession.hostToken);
@@ -201,9 +220,9 @@ export const RaceShell: React.FC = () => {
     return (
       <div className="app-shell">
         <Empty
-          icon="🧭"
+          icon={<Icon name="compass" />}
           title="No race to show"
-          description="This link is missing its race id. Find your race in My Races, or join with a code."
+          description="This link is incomplete. Try My Races."
           action={
             <Button variant="primary" onClick={() => navigate('/races')}>
               My Races
@@ -225,7 +244,7 @@ export const RaceShell: React.FC = () => {
   if (syncState === 'offline') {
     banners.push(
       <Toast key="offline" tone="rust">
-        📶 Disconnected — Playing offline. {queuedCount > 0 ? `${queuedCount} submission${queuedCount === 1 ? '' : 's'} pending sync.` : 'Actions will be queued locally until signal returns.'}
+        <Icon name="wifi-off" /> Offline. {queuedCount > 0 ? `${queuedCount} submission${queuedCount === 1 ? '' : 's'} waiting to sync.` : 'Actions sync when signal returns.'}
       </Toast>
     );
   }
@@ -233,7 +252,7 @@ export const RaceShell: React.FC = () => {
   if (updateAvailable && !activeChallenge) {
     banners.push(
       <Toast key="update" tone="gold">
-        <span>⬇️ A new version is ready.</span>
+        <span><Icon name="download" /> A new version is ready.</span>
         <Button variant="primary" size="sm" onClick={() => updateManager.applyUpdate()}>
           Reload now
         </Button>
@@ -244,7 +263,7 @@ export const RaceShell: React.FC = () => {
   if (syncState === 'syncing') {
     banners.push(
       <Toast key="syncing" tone="moss">
-        ⚡ Network Restored — Syncing queued offline actions to the server...
+        <Icon name="powerup" /> Back online. Syncing…
       </Toast>
     );
   }
@@ -252,21 +271,12 @@ export const RaceShell: React.FC = () => {
   const fullBleed = view === 'host';
 
   return (
-    <div className={`app-shell${showSwitcher ? ' app-shell--navved' : ''}`}>
+    <div className="app-shell">
       <TopBar
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-            <BrandLines size={24} />
-            <span className="t-announce fs-7" style={{ letterSpacing: '0.04em', color: 'var(--ink-strong)' }}>
-              RUNWAY
-            </span>
-          </div>
-        }
         subtitle={gameState.boardName || undefined}
         actions={
           <>
-            {/* Desktop switcher. Below 768px it hides and the BottomNav below
-                takes over. */}
+            {/* The Play and Host tools switch stays in the header at every width, because a bottom bar would sit under the race panel. */}
             {showSwitcher && (
               <Tabs
                 items={destinations.map((d) => ({ ...d }))}
@@ -282,13 +292,20 @@ export const RaceShell: React.FC = () => {
       <main className={`app-main${fullBleed ? ' app-main--full' : ''}`}>
         {!fullBleed && (
           <div className="map-stage">
-            <MapCore interactive={true} playerLocation={playerLocation} activeTeamId={session?.teamId} />
+            <MapCore
+              interactive={true}
+              playerLocation={playerLocation}
+              activeTeamId={session?.teamId}
+              targetWaypointId={view === 'play' && session ? targetWaypointId : null}
+              onPickWaypoint={view === 'play' && session ? setChosenDestination : undefined}
+              bottomInset={view === 'play' ? sheetInset : 0}
+            />
             {banners.length > 0 && <div className="toast-stack">{banners}</div>}
           </div>
         )}
 
         {view === 'host' && hostSession && (
-          <HostToolsPanel gameId={gameId} hostToken={hostSession.hostToken} gameState={gameState} onToast={pushToast} />
+          <HostToolsPanel gameId={gameId} hostToken={hostSession.hostToken} gameState={gameState} />
         )}
 
         {view === 'play' && session && (
@@ -309,8 +326,12 @@ export const RaceShell: React.FC = () => {
           ) : (
             <PlayerConsole
               playerLocation={playerLocation}
+              gps={{ error: gpsWatch.error, lastFixAt: gpsWatch.lastFixAt }}
               session={session}
-              onLeave={handleLeaveTeam}
+              destinationChoice={{ id: chosenDestination, set: setChosenDestination }}
+              onDestinationChange={setTargetWaypointId}
+              onSheetInset={setSheetInset}
+              onLeave={confirmLeave}
               onEndRun={solo && hostSession ? handleEndRun : undefined}
               onStartChallenge={(waypointId, prompt, rubric, challengeId, roadId) => setActiveChallenge({ waypointId, roadId, challengeId, prompt, rubric })}
               onClearRoadblock={(roadId, cardText) =>
@@ -326,25 +347,11 @@ export const RaceShell: React.FC = () => {
         )}
       </main>
 
-      {toasts.length > 0 && (
-        <div className="host-console__toasts">
-          {toasts.map((t) => (
-            <Toast key={t.id} tone={t.tone}>
-              {t.text}
-            </Toast>
-          ))}
-        </div>
-      )}
-
-      {/* Mobile switcher — hidden at 768px and up, where the Tabs take over,
-          and absent entirely when there is nothing to switch between. */}
-      {showSwitcher && (
-        <BottomNav
-          slots={destinations.map((d) => ({
-            ...d,
-            active: view === d.id,
-            onClick: () => setView(d.id),
-          }))}
+      {view === 'play' && session && moments.current && (
+        <CelebrationOverlay
+          key={moments.current.moment.key}
+          celebration={moments.current}
+          onContinue={moments.dismiss}
         />
       )}
     </div>

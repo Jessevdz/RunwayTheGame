@@ -1,6 +1,6 @@
 import React from 'react';
 import type { RaceRecord } from '../../../core/game/raceSession';
-import { Card, Badge, Button, IconButton, Empty, Flap } from '@ds';
+import { Card, Badge, Button, IconButton, Empty, Flap, Icon } from '@ds';
 
 interface MyRacesGridProps {
   races: RaceRecord[];
@@ -26,16 +26,16 @@ export const MyRacesGrid: React.FC<MyRacesGridProps> = ({ races, onResume, onRem
   if (races.length === 0) {
     return (
       <Empty
-        icon="🏁"
+        icon={<Icon name="flag" />}
         title="No races on this device"
-        description="Host a race or join one with a code, and it will wait for you here even if you close the page."
+        description="Host a race or join one with a code."
         action={emptyAction}
       />
     );
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(18rem, 1fr))', gap: 'var(--sp-5)' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(18rem, 100%), 1fr))', gap: 'var(--sp-5)' }}>
       {races.map((race) => {
         const status = STATUS_LABEL[race.status] ?? STATUS_LABEL.draft;
         return (
@@ -66,7 +66,7 @@ export const MyRacesGrid: React.FC<MyRacesGridProps> = ({ races, onResume, onRem
               <Button variant="primary" size="sm" onClick={() => onResume(race.gameId)} style={{ flex: 1 }}>
                 {race.status === 'ended' ? 'Race report' : 'Resume'}
               </Button>
-              <IconButton icon="🗑️" label="Forget this race" variant="ghost" size="sm" onClick={() => onRemove(race.gameId)} />
+              <IconButton icon={<Icon name="trash" />} label="Forget this race" variant="ghost" size="sm" onClick={() => onRemove(race.gameId)} />
             </div>
           </Card>
         );

@@ -1,0 +1,65 @@
+@layer components {
+  /* Route preview card thumbnail. */
+  .route-preview {
+    aspect-ratio: 320 / 132;
+    width: 100%;
+    background-color: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+  }
+
+  .route-preview svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .route-preview--blank {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-style: dashed;
+    border-color: var(--line-strong);
+    color: var(--ink-muted);
+    letter-spacing: .12em;
+  }
+
+  .route-preview__grid {
+    fill: var(--line-strong);
+  }
+
+  .route-preview__seg {
+    stroke: var(--map-road-draft);
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: .85;
+  }
+
+  .route-preview__halo {
+    fill: var(--map-waypoint-fill);
+    stroke: var(--map-waypoint-stroke);
+    stroke-width: 1;
+    opacity: .9;
+  }
+
+  .route-preview__waypoint {
+    fill: var(--map-waypoint);
+    stroke: var(--map-waypoint-fill);
+    stroke-width: 1.5;
+  }
+
+  .route-preview__waypoint--start {
+    fill: var(--map-waypoint-start);
+  }
+
+  .route-preview__waypoint--finish {
+    fill: var(--map-waypoint-finish);
+  }
+
+  @media (width < 48rem) {
+    .map-card__thumb .route-preview {
+      aspect-ratio: 1;
+    }
+  }
+}

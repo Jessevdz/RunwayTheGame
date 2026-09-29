@@ -1,0 +1,290 @@
+/* MapLibre's stylesheet lives in the vendor layer so the overrides below always win. */
+@import 'maplibre-gl/dist/maplibre-gl.css' layer(vendor);
+
+@layer components {
+  /* MapLibre UI overrides */
+  .maplibregl-popup .maplibregl-popup-content {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-hover);
+    font-family: var(--font-ui);
+  }
+
+  /* Waypoint popup body markup. */
+  .map-popup {
+    padding: var(--sp-1);
+  }
+
+  .map-popup__name {
+    margin: 0;
+    font-family: var(--font-announce);
+    font-size: var(--fs-5);
+    text-transform: uppercase;
+  }
+
+  .map-popup__role {
+    margin: var(--sp-1) 0 0;
+    font-family: var(--font-data);
+    font-size: var(--fs-2);
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  .maplibregl-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+    border-bottom-color: var(--surface);
+  }
+
+  .maplibregl-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+    border-top-color: var(--surface);
+  }
+
+  .maplibregl-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+    border-right-color: var(--surface);
+  }
+
+  .maplibregl-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+    border-left-color: var(--surface);
+  }
+
+  .maplibregl-ctrl-group.maplibregl-ctrl-group {
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+  }
+
+  .maplibregl-ctrl-group.maplibregl-ctrl-group button {
+    height: var(--min-tap-target);
+    width: var(--min-tap-target);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .maplibregl-ctrl-group.maplibregl-ctrl-group button:last-child {
+    border-bottom: none;
+  }
+
+  /* Maplibre active tool cursor styles. */
+  .map-container[data-tool="waypoint"] .maplibregl-canvas-container,
+    .map-container[data-tool="road"] .maplibregl-canvas-container {
+    cursor: crosshair;
+  }
+
+  .map-container[data-tool="start"] .maplibregl-canvas-container,
+    .map-container[data-tool="finish"] .maplibregl-canvas-container {
+    cursor: cell;
+  }
+
+  .map-container[data-tool="delete"] .maplibregl-canvas-container {
+    cursor: not-allowed;
+  }
+
+  .map-floating-controls {
+    position: absolute;
+    bottom: var(--sp-6);
+    right: var(--sp-5);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--sp-2);
+  }
+
+  .map-floating-controls__row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .map-chip {
+    gap: var(--sp-2);
+    background-color: var(--surface);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--shadow-soft);
+    color: var(--ink);
+  }
+
+  @media (hover: hover) {
+    .map-chip:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+  }
+
+  .map-chip--on {
+    border-color: var(--accent);
+    background-color: var(--accent-wash);
+    color: var(--accent);
+  }
+
+  .map-chip--highlight {
+    position: relative;
+    background-color: var(--accent);
+    color: var(--signal);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-wash), var(--shadow-over);
+  }
+
+  /* The attention ring animates transform and opacity only, so it stays on the compositor. */
+  .map-chip--highlight::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--accent);
+    border-radius: inherit;
+    pointer-events: none;
+    animation: map-chip-pulse 2s infinite ease-out;
+  }
+
+  .map-chip--highlight .map-chip__label {
+    color: var(--signal);
+    font-weight: var(--fw-bold, 600);
+  }
+
+  .map-chip__badge {
+    background-color: rgba(255, 255, 255, 0.25);
+    color: var(--signal);
+    font-size: var(--fs-2);
+    font-weight: var(--fw-bold, 600);
+    padding: var(--sp-q) var(--sp-h);
+    border-radius: var(--r-pill);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: var(--sp-q);
+  }
+
+  @keyframes map-chip-pulse {
+    from {
+      transform: scale(1);
+      opacity: .6;
+    }
+    to {
+      transform: scale(1.3);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .map-chip--highlight::after {
+      animation: none;
+    }
+  }
+
+  .map-basemaps {
+    display: flex;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .map-basemaps__btn {
+    gap: var(--sp-1);
+  }
+
+  .map-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-soft);
+    font-family: var(--font-data);
+    font-size: var(--fs-2);
+    color: var(--ink);
+  }
+
+  .map-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .map-legend__muted {
+    color: var(--ink-muted);
+  }
+
+  .map-legend__item--cleared {
+    color: var(--map-waypoint-cleared);
+  }
+
+  .map-legend__sep {
+    width: 1px;
+    height: var(--sp-4);
+    background-color: var(--line-strong);
+  }
+
+  .map-legend__rule {
+    flex: none;
+    width: var(--sp-5);
+    height: var(--sp-1);
+    border-radius: var(--r-xs);
+  }
+
+  .map-legend__rule--open {
+    background-color: var(--map-road-accessible);
+    box-shadow: 0 0 var(--sp-h) var(--map-road-accessible-glow);
+  }
+
+  .map-legend__rule--closed {
+    height: 0;
+    border-bottom: 3px dashed var(--map-road-locked);
+    border-radius: 0;
+    opacity: .85;
+  }
+
+  .map-legend__rule--roadblock {
+    width: var(--sp-4);
+    background-color: var(--map-road-roadblock);
+  }
+
+  .map-legend__rule--cleared {
+    background-color: var(--map-road-cleared);
+  }
+
+  @media (width < 48rem) {
+    .map-floating-controls {
+      top: var(--sp-3);
+      bottom: auto;
+      right: var(--sp-3);
+      max-width: calc(100vw - var(--sp-6));
+      flex-direction: column-reverse;
+    }
+
+    .map-chip__label,
+      .map-chip__badge {
+      display: none;
+    }
+
+    .map-chip {
+      width: 2.75rem;
+      min-height: 2.75rem;
+      padding-inline: 0;
+    }
+
+    .map-legend,
+      .map-basemaps {
+      max-width: 100%;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+  }
+
+  .map-container {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    height: 100%;
+  }
+
+  .map-container__canvas {
+    width: 100%;
+    height: 100%;
+  }
+}

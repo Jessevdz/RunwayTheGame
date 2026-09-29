@@ -3,8 +3,14 @@
   "rules": {
     "color-no-hex": true,
     "declaration-property-value-disallowed-list": {
-      "/^(margin|padding|gap|row-gap|column-gap)/": ["/^-?\\d+px$/"],
-      "border-radius": ["/^-?\\d+px$/"]
+      "/^(margin|padding)(-|$)/": ["/(^|[\\s(,*/+-])-?([2-9]|[1-9]\\d+)(\\.\\d+)?px/"],
+      "/^(gap|row-gap|column-gap|inset|inset-[a-z-]+|top|right|bottom|left)$/": ["/(^|[\\s(,*/+-])-?([2-9]|[1-9]\\d+)(\\.\\d+)?px/"],
+      "border-radius": ["/(^|[\\s(,*/+-])-?([2-9]|[1-9]\\d+)(\\.\\d+)?px/"],
+      "/^(border|outline)(-(top|right|bottom|left))?$/": ["/(^|[\\s(,*/+-])([4-9]|[1-9]\\d+)(\\.\\d+)?px/"],
+      "/^(border|outline)(-(top|right|bottom|left))?-width$/": ["/(^|[\\s(,*/+-])([4-9]|[1-9]\\d+)(\\.\\d+)?px/"]
+    },
+    "declaration-property-value-allowed-list": {
+      "font-size": ["/^(inherit|initial|unset|-?\\d*\\.?\\d+(em|%))$/", "/var\\(--[a-z0-9-]+\\)/"]
     }
   },
   "overrides": [
@@ -12,7 +18,8 @@
       "files": ["src/styles/tokens.css"],
       "rules": {
         "color-no-hex": null,
-        "declaration-property-value-disallowed-list": null
+        "declaration-property-value-disallowed-list": null,
+        "declaration-property-value-allowed-list": null
       }
     }
   ]

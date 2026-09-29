@@ -1,21 +1,40 @@
 import React from 'react';
 import { isCoinRush, isSoloMode, type GameState } from '../../core/projection/projectionStore';
 import { type GPSPosition } from '../../core/player/locationService';
+import { bearingDegrees } from '../../core/player/bearing';
+import { type GpsStatus } from '../../core/player/gpsStatus';
 import { type TeamSession } from '../../core/game/teamSession';
 import { getTeamName } from '../../core/team/palette';
 import { formatClock, formatDurationWords } from '../../core/format/clock';
-import { IconCoin } from '@ds';
+import { Icon, type IconName } from '@ds';
 import { formatDistance, ordinal } from './consoleFormat';
+import { type PhotoState } from './photoStatus';
 import { type RaceClock } from './useRaceClock';
 import { type RaceRouteView } from './useRaceRoute';
+
+/** Where the next stop lies from here, for the arrow beside the distance. */
+export interface ObjectiveGuide {
+  /** Compass bearing to the target, degrees clockwise from north. */
+  bearing: number;
+  /** Metres to the target. */
+  distance: number;
+  inRange: boolean;
+  targetName: string;
+}
 
 /** What the objective card is currently saying. */
 export interface ObjectiveView {
   tone: 'go' | 'challenge' | 'stop' | 'block' | 'done' | 'idle';
   title: string;
   say?: React.ReactNode;
-  readout?: { value: string; unit: string };
-  primary?: { label: string; icon: string; disabled?: boolean; onClick: () => void };
+  /** A countdown also carries its seconds, so a roomy card can draw it on split-flap tiles. */
+  readout?: { value: string; unit: string; clockSeconds?: number };
+  /** Honest state of a photo already sent or saved, shown instead of inviting a second one. */
+  status?: { kind: 'pending' | 'queued' | 'rejected'; text: string };
+  guide?: ObjectiveGuide;
+  /** True when the card is about the next stop, so the field bar draws a direction arrow even before there is a fix. */
+  showArrow?: boolean;
+  primary?: { label: string; icon: IconName; disabled?: boolean; onClick: () => void };
   minor?: { label: string; onClick: () => void };
 }
 
@@ -25,6 +44,11 @@ export interface ObjectiveInput {
   playerLocation: GPSPosition | null;
   clock: RaceClock;
   route: RaceRouteView;
+  /** State of the photo for the current waypoint's challenge and for the chosen road's challenge. */
+  photos: { waypoint: PhotoState; road: PhotoState };
+  gps: GpsStatus;
+  /** True while a command is in flight, so the button cannot send it twice. */
+  busy: boolean;
   /** The three things the card's buttons can ask for. */
   on: {
     startChallenge: (waypointId: string, roadId?: string) => void;
@@ -34,6 +58,25 @@ export interface ObjectiveInput {
   };
 }
 
+/** Longest rejection reason shown on the card. */
+const REASON_MAX = 140;
+
+/** The words for a photo that has left the player's hands but not yet become a result. */
+export function photoStatusLine(photo: PhotoState, verification: GameState['ruleset']['verification']): ObjectiveView['status'] {
+  if (photo.kind === 'pending') {
+    const who = verification === 'host' ? 'your host' : verification === 'trust' ? 'the group' : 'the referee';
+    return { kind: 'pending', text: `With ${who}, ${formatClock(photo.elapsedSeconds)}` };
+  }
+  if (photo.kind === 'queued') {
+    return { kind: 'queued', text: 'Saved on this phone. It sends when you are back online.' };
+  }
+  if (photo.kind === 'rejected') {
+    const reason = photo.rationale.length > REASON_MAX ? `${photo.rationale.slice(0, REASON_MAX)}…` : photo.rationale;
+    return { kind: 'rejected', text: reason ? `Not accepted: ${reason}` : 'Your last photo was not accepted.' };
+  }
+  return undefined;
+}
+
 /** Computes current objective card view state based on race state and clock. */
 export function buildObjective({
   gameState,
@@ -41,6 +84,9 @@ export function buildObjective({
   playerLocation,
   clock,
   route,
+  photos,
+  gps,
+  busy,
   on
 }: ObjectiveInput): ObjectiveView {
   const { currentWaypoint, isCurrentWaypointCleared, routes, destination } = route;
@@ -62,16 +108,16 @@ export function buildObjective({
           tone: 'done',
           title: timeTrial ? formatClock(runElapsed) : 'You made it',
           say: timeTrial
-            ? 'That is your time, penalties included.'
-            : 'The whole route, at your own pace. Nothing to post, nothing to beat.'
+            ? 'Penalties included.'
+            : 'Route complete.'
         };
       }
       return {
         tone: 'done',
         title: 'Ended early',
         say: timeTrial
-          ? 'This time trial was ended before reaching the finish line. No time was posted.'
-          : 'This walk was ended before reaching the finish line.'
+          ? 'You ended this run before the finish. No time posted.'
+          : 'You ended this walk before the finish.'
       };
     }
     if (coinRush && gameState.winner) {
@@ -79,9 +125,7 @@ export function buildObjective({
       return {
         tone: 'done',
         title: iWon ? 'You won' : `${getTeamName(gameState.winner, gameState.teams)} won`,
-        say: winnerCoins == null
-          ? 'The winner’s coin balance is hidden in this view.'
-          : <><IconCoin /> {winnerCoins} banked. {iWon ? 'Richest on the board.' : 'Full breakdown is below.'}</>,
+        say: winnerCoins == null ? undefined : <><Icon name="coin" /> {winnerCoins} banked.</>,
         readout: { value: `${coins}`, unit: 'your final coins' }
       };
     }
@@ -91,8 +135,8 @@ export function buildObjective({
         ? (iWon ? 'You won' : `${getTeamName(gameState.winner, gameState.teams)} won`)
         : 'Race ended early',
       say: gameState.winner
-        ? (iWon ? 'First to the finish. Nice legs.' : 'The finish has been claimed. Final standings are below.')
-        : 'This race was ended by the host.'
+        ? (iWon ? 'First to the finish.' : 'Final standings below.')
+        : 'Ended by the host.'
     };
   }
 
@@ -100,13 +144,13 @@ export function buildObjective({
     return {
       tone: 'stop',
       title: 'Hold position',
-      say: 'A nerf dart has you. You cannot start challenges or record arrivals until it wears off.',
-      readout: { value: formatClock(freezeLeft), unit: 'until you thaw' }
+      say: 'Hit by a nerf dart. No challenges or arrivals until it wears off.',
+      readout: { value: formatClock(freezeLeft), unit: 'until you thaw', clockSeconds: freezeLeft }
     };
   }
 
   if (!currentWaypoint) {
-    return { tone: 'idle', title: 'Loading the route', say: 'Waiting for the race to reach this device.' };
+    return { tone: 'idle', title: 'Loading the route', say: 'Waiting for the race.' };
   }
 
   if (!isCurrentWaypointCleared) {
@@ -119,15 +163,31 @@ export function buildObjective({
       return {
         tone: 'stop',
         title: currentWaypoint.name,
-        say: 'You cannot start another challenge or skip one while this cooldown is active. Wait for it to end, then clear or skip this challenge.',
-        readout: { value: formatClock(vetoLeft), unit: 'until challenges unlock' }
+        say: 'Challenges and skips are locked during the cooldown.',
+        readout: { value: formatClock(vetoLeft), unit: 'until challenges unlock', clockSeconds: vetoLeft }
+      };
+    }
+    const photo = photos.waypoint;
+    const status = photoStatusLine(photo, gameState.ruleset.verification);
+    if (photo.kind === 'pending' || photo.kind === 'queued') {
+      return {
+        tone: 'challenge',
+        title: currentWaypoint.name,
+        status,
+        say: photo.kind === 'pending' ? 'Hang tight. We will tell you the moment it is graded.' : 'Nothing more to do here until it sends.'
       };
     }
     return {
       tone: 'challenge',
       title: currentWaypoint.name,
-      say: 'Photograph the challenge here to open the roads out of this waypoint.',
-      primary: { label: 'Do the challenge', icon: '📸', onClick: () => on.startChallenge(currentWaypoint.id) },
+      status,
+      say: status ? 'Take another photo to try again.' : 'Clear the challenge to open the roads out.',
+      primary: {
+        label: photo.kind === 'rejected' ? 'Take another photo' : 'Do the challenge',
+        icon: 'camera',
+        disabled: busy,
+        onClick: () => on.startChallenge(currentWaypoint.id)
+      },
       minor: { label: skipLabel, onClick: () => on.askVeto(currentWaypoint.id) }
     };
   }
@@ -139,29 +199,38 @@ export function buildObjective({
         tone: 'done',
         title: mine ? `Banked · ${ordinal(mine.rank)} place` : 'Banked',
         say: mine?.bonusCoins
-          ? `+${mine.bonusCoins} coins for the finish. Your score is settled — the shop is closed to you now.`
-          : 'Your score is settled. The shop is closed to you now.',
+          ? `+${mine.bonusCoins} finish bonus. Score locked, shop closed.`
+          : 'Score locked, shop closed.',
         readout: countdownRunning
-          ? { value: formatClock(countdownLeft), unit: 'until the race is called' }
+          ? { value: formatClock(countdownLeft), unit: 'until the race is called', clockSeconds: countdownLeft }
           : { value: `${coins}`, unit: 'coins banked' }
       };
     }
-    return { tone: 'done', title: 'You made it', say: 'Nothing left to clear. Standings are below.' };
+    return { tone: 'done', title: 'You made it', say: 'Standings below.' };
   }
 
   if (routes.length === 0) {
     return {
       tone: 'idle',
       title: currentWaypoint.name,
-      say: 'No roads lead out of this waypoint. Ask the host to check the board.'
+      say: 'No roads lead out of here. Ask the host.'
     };
   }
 
   if (!destination) {
-    return { tone: 'idle', title: 'Choosing a route', say: 'Pick where you are heading next.' };
+    return { tone: 'idle', title: 'Choosing a route', say: 'Pick your next stop.' };
   }
 
   const next = destination.waypoint;
+  const guide: ObjectiveGuide | undefined =
+    playerLocation && destination.distance !== null
+      ? {
+          bearing: bearingDegrees(playerLocation, next),
+          distance: destination.distance,
+          inRange: destination.inRange,
+          targetName: next.name
+        }
+      : undefined;
 
   if (destination.road.challengeId && destination.road.lockState === 'locked') {
     const skipLabel = timeTrial
@@ -173,17 +242,33 @@ export function buildObjective({
       return {
         tone: 'stop',
         title: `Road to ${next.name}`,
-        say: 'You cannot start another challenge or skip one while this cooldown is active. Wait for it to end, then clear or skip this road challenge.',
-        readout: { value: formatClock(vetoLeft), unit: 'until challenges unlock' }
+        say: 'Challenges and skips are locked during the cooldown.',
+        readout: { value: formatClock(vetoLeft), unit: 'until challenges unlock', clockSeconds: vetoLeft }
+      };
+    }
+    const photo = photos.road;
+    const status = photoStatusLine(photo, gameState.ruleset.verification);
+    if (photo.kind === 'pending' || photo.kind === 'queued') {
+      return {
+        tone: 'challenge',
+        title: `Road to ${next.name}`,
+        status,
+        guide,
+        showArrow: true,
+        say: photo.kind === 'pending' ? 'Hang tight. We will tell you the moment it is graded.' : 'Nothing more to do until it sends.'
       };
     }
     return {
       tone: 'challenge',
       title: `Road to ${next.name}`,
-      say: 'Photograph the challenge on this road from the waypoint where you are standing to open this route.',
+      status,
+      guide,
+      showArrow: true,
+      say: status ? 'Take another photo to try again.' : 'Clear this road’s challenge to open the route.',
       primary: {
-        label: 'Do the road challenge',
-        icon: '📸',
+        label: photo.kind === 'rejected' ? 'Take another photo' : 'Do the road challenge',
+        icon: 'camera',
+        disabled: busy,
         onClick: () => on.startChallenge(currentWaypoint.id, destination.road.id)
       },
       minor: { label: skipLabel, onClick: () => on.askVeto(currentWaypoint.id, destination.road.id) }
@@ -198,7 +283,7 @@ export function buildObjective({
       say: `${getTeamName(destination.roadblock.placedBy, gameState.teams)} left a card on this road: “${destination.roadblock.challengeText}”`,
       primary: {
         label: 'Clear the roadblock',
-        icon: '🚧',
+        icon: 'barrier',
         onClick: () => onClearRoadblock(destination.road.id, destination.roadblock.challengeText)
       }
     };
@@ -213,19 +298,21 @@ export function buildObjective({
       destination.distance === null
         ? { value: '—', unit: 'waiting for GPS' }
         : destination.inRange
-          ? { value: String(Math.round(destination.distance)), unit: 'metres — inside the zone' }
+          ? { value: String(Math.round(destination.distance)), unit: 'metres, in the zone' }
           : formatDistance(destination.distance),
+    guide,
+    showArrow: true,
     say: destination.inRange
-      ? 'You are inside the arrival zone. Record it to take the waypoint.'
+      ? 'In the arrival zone. Record it to take the waypoint.'
       : destination.distance === null
-        ? 'No position yet. Step into the open so your phone can find satellites.'
+        ? gps.detail || 'No GPS yet. Step into the open.'
         : wideGps
-          ? `Arrive within ${next.arrival_radius_m} m. Your GPS is only accurate to ±${Math.round(playerLocation!.accuracy)} m, which may hold the arrival back.`
-          : `Get within ${next.arrival_radius_m} m to record your arrival.`,
+          ? `Get within ${next.arrival_radius_m} m. GPS accuracy is ±${Math.round(playerLocation!.accuracy)} m, which may delay arrival.`
+          : `Get within ${next.arrival_radius_m} m to arrive.`,
     primary: {
       label: destination.inRange ? "I'm here" : 'Keep walking',
-      icon: '🏁',
-      disabled: !destination.inRange,
+      icon: 'flag',
+      disabled: !destination.inRange || busy,
       onClick: () => on.arrive(next.id)
     }
   };

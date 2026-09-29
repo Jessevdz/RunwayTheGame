@@ -6,7 +6,7 @@ import { MyRacesGrid } from '../landing/components/MyRacesGrid';
 import { StartRaceOptions } from './components/StartRaceOptions';
 import { PageShell } from '../shared/PageShell';
 import { PageFooter } from '../shared/PageFooter';
-import { Button, BrandLines } from '@ds';
+import { Button, PageHeader } from '@ds';
 
 export const MyRacesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -55,16 +55,6 @@ export const MyRacesPage: React.FC = () => {
   return (
     <PageShell
       navPlacement="topbar"
-      topBarProps={{
-        title: (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-            <BrandLines size={24} />
-            <span className="t-announce fs-7" style={{ letterSpacing: '0.04em', color: 'var(--ink-strong)' }}>
-              RUNWAY
-            </span>
-          </div>
-        ),
-      }}
     >
       {/* Saved races — the reason someone comes back to this URL, so it stays at
           the top whenever there is anything to show. A device that has never
@@ -73,14 +63,7 @@ export const MyRacesPage: React.FC = () => {
       {hasRaces && (
         <section style={{ maxWidth: 'var(--wrap-content)', margin: '0 auto var(--sp-7)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
-            <div>
-              <p className="t-label fs-label" style={{ marginBottom: 'var(--sp-1)' }}>
-                SAVED ON THIS DEVICE
-              </p>
-              <h1 className="t-announce fs-d-md" style={{ color: 'var(--ink-strong)' }}>
-                MY RACES
-              </h1>
-            </div>
+            <PageHeader title="MY RACES" style={{ flex: 1 }} />
             <Button
               variant="ghost"
               size="sm"
@@ -99,11 +82,7 @@ export const MyRacesPage: React.FC = () => {
           rules difference — a lobby and other teams, or a clock and nobody —
           not a preference. */}
       <section ref={startRef} style={{ maxWidth: 'var(--wrap-content)', margin: '0 auto var(--sp-7)' }}>
-        <div style={{ marginBottom: 'var(--sp-4)' }}>
-          <h1 className="t-announce fs-d-md" style={{ color: 'var(--ink-strong)' }}>
-            START A RACE
-          </h1>
-        </div>
+        <PageHeader title="START A RACE" />
 
         {startOptions}
 
@@ -120,7 +99,7 @@ export const MyRacesPage: React.FC = () => {
           }}
         >
           <span className="fs-5" style={{ color: 'var(--ink-muted)' }}>
-            Someone already sent you a race code or an invite link?
+            Have a race code or invite link?
           </span>
           <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
             Join a race

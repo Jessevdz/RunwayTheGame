@@ -27,11 +27,11 @@ export async function resolveJoinTarget(target: JoinTarget): Promise<ResolvedJoi
       if (err instanceof ApiError) {
         if (err.status === 404) {
           throw new JoinError(
-            'No race with that code. If a teammate sent you a team code, it only works once you are in the lobby — ask the host for the race code or the invite link.'
+            'No race with that code. Team codes only work inside the lobby. Ask the host for the race code or invite link.'
           );
         }
         if (err.status === 410) throw new JoinError('That race has already finished.');
-        if (err.status === 429) throw new JoinError('Too many tries — wait a moment and try again.');
+        if (err.status === 429) throw new JoinError('Too many tries. Wait a moment and try again.');
       }
       throw new JoinError('Could not reach the race server. Check your signal and try again.');
     }

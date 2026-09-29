@@ -92,6 +92,7 @@ export default defineConfig({
             { label: 'What is Runway?', slug: '' },
             { label: 'Design a board', slug: 'design-a-board' },
             { label: 'Set up a race', slug: 'set-up-a-race' },
+            { label: 'When things go wrong', slug: 'when-things-go-wrong' },
             { label: 'Run your own instance', slug: 'run-it-locally' },
           ],
         },

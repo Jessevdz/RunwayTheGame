@@ -1,0 +1,47 @@
+@layer components {
+  .icon {
+    flex: none;
+  }
+
+  .icon.icon--sm {
+    width: var(--sp-4);
+    height: var(--sp-4);
+  }
+
+  .icon.icon--md {
+    width: var(--sp-5);
+    height: var(--sp-5);
+  }
+
+  .icon.icon--lg {
+    width: var(--sp-6);
+    height: var(--sp-6);
+  }
+}
+
+@layer components {
+  .icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(6rem, 100%), 1fr));
+    gap: var(--sp-3);
+  }
+
+  .icon-grid__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    color: var(--ink);
+  }
+
+  .icon-grid__name {
+    font-family: var(--font-data);
+    font-size: var(--fs-1);
+    color: var(--ink-muted);
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+}

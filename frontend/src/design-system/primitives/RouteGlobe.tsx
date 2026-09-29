@@ -1,4 +1,5 @@
 import React from 'react';
+import './route-globe.css';
 
 /** Route treatment variant for the globe. */
 export type RouteGlobeVariant = 'bands' | 'orbit' | 'network' | 'fan';

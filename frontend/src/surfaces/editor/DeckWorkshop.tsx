@@ -9,15 +9,7 @@ import {
   DECK_META
 } from './deckCards';
 import type { CardDraft, DeckKind } from './deckCards';
-import { Dialog, Button, IconButton, Input, Textarea, Tabs, Empty } from '@ds';
-import {
-  IconDeck,
-  IconDone,
-  IconDuplicate,
-  IconPlus,
-  IconReset,
-  IconTrash
-} from './components/EditorIcons';
+import { Dialog, Button, IconButton, Input, Textarea, Tabs, Empty, Icon } from '@ds';
 
 interface DeckWorkshopProps {
   initialDeck: DeckKind;
@@ -39,9 +31,9 @@ const newCardId = (_deck: DeckKind) => generateUUID();
 
 const DECK_BLURB: Record<DeckKind, string> = {
   roadblock:
-    'Roadblocks are the challenges a team has to clear before it can move on. Start from the shipped set, or write your own.',
+    'Challenges a team must clear to move on. Start from the default set or write your own.',
   curse:
-    'Curses are constraints a team inflicts on its opponents. Start from the shipped set, or write your own.'
+    'Constraints a team inflicts on opponents. Start from the default set or write your own.'
 };
 
 export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
@@ -127,7 +119,7 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
     return {
       id: kind,
       label: km.label,
-      icon: <km.Icon />,
+      icon: <Icon name={km.icon} />,
       badge: kind === 'roadblock' ? roadblockCards.length : curseCards.length
     };
   });
@@ -156,14 +148,14 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={<IconReset />}
+                  icon={<Icon name="reset" />}
                   className="deck-workshop__replace"
                   onClick={handleReplaceWithDefaults}
                 >
                   Replace with defaults
                 </Button>
               )}
-              <Button variant="primary" size="sm" icon={<IconPlus />} onClick={handleAddCard}>
+              <Button variant="primary" size="sm" icon={<Icon name="plus" />} onClick={handleAddCard}>
                 Add card
               </Button>
             </div>
@@ -172,16 +164,16 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
 
         {cards.length === 0 ? (
           <Empty
-            icon={<IconDeck />}
+            icon={<Icon name="deck" />}
             title={`No ${meta.label.toLowerCase()} yet`}
             description={DECK_BLURB[activeDeck]}
             action={
               isEditable ? (
                 <div className="deck-workshop__empty-actions">
-                  <Button variant="primary" icon={<IconReset />} onClick={applyDefaults}>
+                  <Button variant="primary" icon={<Icon name="reset" />} onClick={applyDefaults}>
                     Start from the default deck
                   </Button>
-                  <Button variant="ghost" icon={<IconPlus />} onClick={handleAddCard}>
+                  <Button variant="ghost" icon={<Icon name="plus" />} onClick={handleAddCard}>
                     Write the first card
                   </Button>
                 </div>
@@ -201,7 +193,7 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
                     className={`deck-card deck-card--${activeDeck} deck-card--editing`}
                   >
                     <div className="deck-card__badge">
-                      <meta.Icon />
+                      <Icon name={meta.icon} />
                       <span>
                         {meta.kindLabel} · #{idx + 1}
                       </span>
@@ -221,18 +213,18 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
                     />
                     <div className="deck-card__actions">
                       <IconButton
-                        icon={<IconDuplicate />}
+                        icon={<Icon name="copy" />}
                         label="Duplicate card"
                         variant="ghost"
                         onClick={() => handleDuplicate(card)}
                       />
                       <IconButton
-                        icon={<IconTrash />}
+                        icon={<Icon name="trash" />}
                         label="Delete card"
                         variant="ghost"
                         onClick={() => handleRemove(card.id)}
                       />
-                      <Button variant="primary" icon={<IconDone />} onClick={() => setEditing(null)}>
+                      <Button variant="primary" icon={<Icon name="check" />} onClick={() => setEditing(null)}>
                         Done
                       </Button>
                     </div>
@@ -248,7 +240,7 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
                   onClick={() => beginEdit(card)}
                 >
                   <div className="deck-card__badge">
-                    <meta.Icon />
+                    <Icon name={meta.icon} />
                     <span>
                       {meta.kindLabel} · #{idx + 1}
                     </span>
@@ -264,7 +256,7 @@ export const DeckWorkshop: React.FC<DeckWorkshopProps> = ({
             {isEditable && (
               <button className="deck-card deck-card--add" onClick={handleAddCard}>
                 <span className="deck-card--add__plus">
-                  <IconPlus />
+                  <Icon name="plus" />
                 </span>
                 <span>Add card</span>
               </button>

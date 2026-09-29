@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { GameState } from '../../../core/projection/projectionStore';
 import { resolveDispute } from '../../../core/api/client';
-import { Plate, Card, Button, Badge, Empty, Chip } from '@ds';
+import { Plate, Card, Button, Badge, Empty, Chip, Icon } from '@ds';
 import type { ToastMessage } from '../HostToolsPanel';
 
 interface DisputeQueueProps {
@@ -31,7 +31,7 @@ export const DisputeQueue: React.FC<DisputeQueueProps> = ({ gameId, hostToken, g
     setResolving(verdictId);
     try {
       await resolveDispute(gameId, hostToken, verdictId, outcome);
-      onToast(outcome === 'upheld' ? 'Dispute upheld — the pass stands.' : 'Dispute dismissed — the verdict stands.', 'moss');
+      onToast(outcome === 'upheld' ? 'Dispute upheld.' : 'Dispute dismissed.', 'moss');
     } catch (err: any) {
       onToast(err.message || 'Failed to resolve the dispute', 'crimson');
     } finally {
@@ -40,13 +40,13 @@ export const DisputeQueue: React.FC<DisputeQueueProps> = ({ gameId, hostToken, g
   };
 
   if (pending.length === 0 && resolved.length === 0) {
-    return <Empty icon="⚖️" title="No disputes filed" description="Disputes raised by players will appear here for review." />;
+    return <Empty icon={<Icon name="scale" />} title="No disputes filed" description="Player disputes appear here." />;
   }
 
   return (
     <div className="dispute-queue">
       {pending.length === 0 ? (
-        <Empty icon="✅" title="No pending disputes" description="Everything raised so far has been resolved." />
+        <Empty icon={<Icon name="check-circle" />} title="No pending disputes" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
           {pending.map((d) => {

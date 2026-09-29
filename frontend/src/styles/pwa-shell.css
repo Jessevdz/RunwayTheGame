@@ -1,0 +1,12 @@
+@layer base {
+  /* Standalone-shell behaviour: no pull-to-refresh and side insets for notched phones in landscape. */
+  html,
+    body {
+    overscroll-behavior: none;
+  }
+
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}

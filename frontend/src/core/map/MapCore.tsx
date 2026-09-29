@@ -20,17 +20,27 @@ import { useWaypointDrag } from './useWaypointDrag';
 import { useMapInteractions } from './useMapInteractions';
 import { MapControls } from './MapControls';
 import type { DraftMapWaypoint, DraftMapRoad, EditorTool, PlayerLocation } from './types';
+import './map.css';
 
 export type { DraftMapWaypoint, DraftMapRoad } from './types';
 
 /** Threshold zoom level below which the board is considered zoomed out. */
 const OVERVIEW_ZOOM = 13.5;
 
+/** How far below the fit zoom the camera may drift before the board counts as zoomed out. */
+const FIT_ZOOM_SLACK = 0.5;
+
 /** Camera framing used whenever the whole board has to fit on screen. */
 const BOARD_FIT = { padding: 60, maxZoom: 14 };
 
 /** How long a race map waits for its board before opening on the default view. */
 const BOARD_WAIT_MS = 2000;
+
+/** Closest zoom the camera drops to when it starts following the player. */
+const FOLLOW_ZOOM = 16;
+
+/** Glide time in ms when the camera catches up with the player. */
+const FOLLOW_EASE_MS = 600;
 
 /** Bounds around every waypoint, or null when there is no board to frame. */
 const boundsAround = (waypoints: Array<{ lat: number; lon: number }>): maplibregl.LngLatBounds | null => {
@@ -61,6 +71,12 @@ interface MapCoreProps {
   focusWaypointIds?: string[] | null;
   playerLocation?: PlayerLocation | null;
   onMapClick?: (lat: number, lon: number) => void;
+  /** Race mode: the waypoint the player has chosen to head for, drawn with a ring. */
+  targetWaypointId?: string | null;
+  /** Race mode: called when the player taps a waypoint marker, in place of the info popup. */
+  onPickWaypoint?: (waypointId: string) => void;
+  /** Pixels at the bottom of the map covered by a sheet, so centring aims at the visible middle. */
+  bottomInset?: number;
 }
 
 /** Renders the main MapLibre map canvas for editor authoring and live race visualization. */
@@ -83,7 +99,10 @@ export const MapCore: React.FC<MapCoreProps> = ({
   onDeleteRoad,
   focusWaypointIds = null,
   playerLocation = null,
-  onMapClick
+  onMapClick,
+  targetWaypointId = null,
+  onPickWaypoint,
+  bottomInset = 0
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -98,6 +117,14 @@ export const MapCore: React.FC<MapCoreProps> = ({
   const [gameState, setGameState] = useState<GameState>(projectionStore.getState());
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isOffscreenOrZoomedOut, setIsOffscreenOrZoomedOut] = useState(false);
+  const [following, setFollowing] = useState(false);
+
+  const bottomInsetRef = useRef(bottomInset);
+  bottomInsetRef.current = bottomInset;
+  const insetFitDoneRef = useRef(false);
+  const userMovedRef = useRef(false);
+  const canPickRef = useRef(!!onPickWaypoint);
+  canPickRef.current = !!onPickWaypoint;
 
   /** Active waypoints for editor or live race mode. */
   const activeWaypoints = editorMode ? draftWaypoints : gameState.waypoints;
@@ -113,7 +140,7 @@ export const MapCore: React.FC<MapCoreProps> = ({
   activeWaypointsRef.current = activeWaypoints;
 
   const setupLayersRef = useRef<(map: maplibregl.Map) => void>(() => { });
-  setupLayersRef.current = (map) => setupMapLayers(map, mapPalette, { editorMode });
+  setupLayersRef.current = (map) => setupMapLayers(map, mapPalette, { editorMode, popups: !canPickRef.current });
 
   // Latch auto-framing once per board ID in race mode or draft session in editor mode.
   const boardKey = editorMode ? 'draft' : gameState.boardId || activeWaypoints.map((w) => w.id).sort().join(',');
@@ -175,7 +202,11 @@ export const MapCore: React.FC<MapCoreProps> = ({
       const center = map.getCenter();
       const isPannedAway = center ? !bounds.contains(center) : false;
 
-      setIsOffscreenOrZoomedOut(map.getZoom() < OVERVIEW_ZOOM || isPannedAway);
+      // A large board fits below OVERVIEW_ZOOM, so the fitted view itself must never read as zoomed out.
+      const fitZoom = map.cameraForBounds?.(bounds, BOARD_FIT)?.zoom ?? OVERVIEW_ZOOM;
+      const zoomedOut = map.getZoom() < Math.min(OVERVIEW_ZOOM, fitZoom - FIT_ZOOM_SLACK);
+
+      setIsOffscreenOrZoomedOut(zoomedOut || isPannedAway);
     };
 
     map.on('load', () => {
@@ -187,6 +218,17 @@ export const MapCore: React.FC<MapCoreProps> = ({
 
     map.on('move', checkViewportBounds);
     map.on('zoom', checkViewportBounds);
+
+    // A finger dragging the map means the player wants to look elsewhere, so following stops.
+    map.on('dragstart', (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) {
+        userMovedRef.current = true;
+        setFollowing(false);
+      }
+    });
+    map.on('zoomstart', (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) userMovedRef.current = true;
+    });
 
     const handleResize = () => {
       map.resize();
@@ -292,7 +334,8 @@ export const MapCore: React.FC<MapCoreProps> = ({
     onSelectWaypoint,
     onDeleteWaypoint,
     onDeleteRoad,
-    onMapClick
+    onMapClick,
+    onPickWaypoint
   });
 
   // Sync map GeoJSON dataset overlays.
@@ -308,14 +351,14 @@ export const MapCore: React.FC<MapCoreProps> = ({
         dragged: draggedWaypointPos,
         palette: mapPalette
       })
-      : buildRaceOverlays(gameState, resolveActiveTeamId(gameState, activeTeamId), mapPalette);
+      : buildRaceOverlays(gameState, resolveActiveTeamId(gameState, activeTeamId), mapPalette, targetWaypointId);
 
     (map.getSource('waypoints') as maplibregl.GeoJSONSource)?.setData(overlays.waypoints);
     (map.getSource('roads') as maplibregl.GeoJSONSource)?.setData(overlays.roads);
     (map.getSource('radii') as maplibregl.GeoJSONSource)?.setData(overlays.radii);
     (map.getSource('team-positions') as maplibregl.GeoJSONSource)?.setData(overlays.teamPositions);
     (map.getSource('road-midpoints') as maplibregl.GeoJSONSource)?.setData(overlays.roadMidpoints);
-  }, [gameState, draftWaypoints, draftRoads, selectedWaypointId, activeTeamId, editorMode, mapLoaded, draggedWaypointPos, mapPalette]);
+  }, [gameState, draftWaypoints, draftRoads, selectedWaypointId, activeTeamId, editorMode, mapLoaded, draggedWaypointPos, mapPalette, targetWaypointId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -326,12 +369,48 @@ export const MapCore: React.FC<MapCoreProps> = ({
     (map.getSource('player-accuracy') as maplibregl.GeoJSONSource)?.setData(accuracy);
   }, [playerLocation, mapLoaded]);
 
+  // The first time a sheet covers the bottom of the map, the board is framed again inside what is left, unless the player already moved the camera.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (editorMode || !map || !mapLoaded || bottomInset <= 0 || insetFitDoneRef.current) return;
+    insetFitDoneRef.current = true;
+    if (userMovedRef.current) return;
+    const bounds = boundsAround(activeWaypointsRef.current);
+    if (!bounds) return;
+    const pad = BOARD_FIT.padding;
+    map.fitBounds(bounds, {
+      ...BOARD_FIT,
+      padding: { top: pad, left: pad, right: pad, bottom: pad + bottomInset },
+      duration: 0
+    });
+  }, [bottomInset, editorMode, mapLoaded]);
+
+  // While following, the camera glides to each new fix and keeps the player in the visible middle of the map.
+  const playerLat = playerLocation?.lat;
+  const playerLon = playerLocation?.lon;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!following || !map || !mapLoaded || playerLat === undefined || playerLon === undefined) return;
+    map.easeTo({
+      center: [playerLon, playerLat],
+      zoom: Math.max(map.getZoom(), FOLLOW_ZOOM),
+      offset: [0, -bottomInsetRef.current / 2],
+      duration: FOLLOW_EASE_MS
+    });
+  }, [following, playerLat, playerLon, mapLoaded]);
+
   const fitToBoard = () => {
     const map = mapRef.current;
     const bounds = boundsAround(activeWaypoints);
     if (!map || !bounds) return;
 
-    map.fitBounds(bounds, { ...BOARD_FIT, duration: 800 });
+    setFollowing(false);
+    const pad = BOARD_FIT.padding;
+    map.fitBounds(bounds, {
+      ...BOARD_FIT,
+      padding: { top: pad, left: pad, right: pad, bottom: pad + bottomInsetRef.current },
+      duration: 800
+    });
   };
 
   return (
@@ -367,6 +446,8 @@ export const MapCore: React.FC<MapCoreProps> = ({
         canFitBoard={activeWaypoints.length > 0}
         isOffscreenOrZoomedOut={isOffscreenOrZoomedOut}
         onFitToBoard={fitToBoard}
+        onToggleFollow={!editorMode && playerLocation ? () => setFollowing((prev) => !prev) : undefined}
+        following={following}
       />
     </div>
   );

@@ -2,28 +2,32 @@ import React from 'react';
 import type { BoardSummary } from '../../../core/api/client';
 import { RoutePreview } from '../../../core/map/RoutePreview';
 import { boardTitle } from '../../shared/boardFilters';
-import { Card, Badge, Button } from '@ds';
+import { Card, Button, Icon } from '@ds';
+import '../../shared/map-card.css';
 
 interface GalleryCardProps {
   board: BoardSummary;
   onView: (id: string) => void;
   onFork: (id: string) => void;
+  onRace: (id: string) => void;
+  /** Phones race a map directly, since the editor is desktop-only and a fork would be left unedited. */
+  phone?: boolean;
   isForking?: boolean;
+  isHosting?: boolean;
 }
 
 /* The dashed START···FINISH rule is the map-card motif shared with "My Maps" on
    the landing page; the gallery threads the waypoint count through its middle. */
 const DASH = 'repeating-linear-gradient(90deg, var(--line-strong) 0 var(--sp-1), transparent var(--sp-1) var(--sp-2))';
 
-export const GalleryCard: React.FC<GalleryCardProps> = ({ board, onView, onFork, isForking }) => {
+export const GalleryCard: React.FC<GalleryCardProps> = ({ board, onView, onFork, onRace, phone = false, isForking, isHosting }) => {
   /* Shared with the gallery's search so the text you read on the card is the
      text you can type to find it again. */
   const title = boardTitle(board);
 
   return (
     <Card interactive className="card--pad" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Badge tone="moss">PUBLIC</Badge>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
         <span className="t-data fs-2" style={{ color: 'var(--ink-muted)' }}>
           {new Date(board.updated_at).toLocaleDateString()}
         </span>
@@ -44,19 +48,34 @@ export const GalleryCard: React.FC<GalleryCardProps> = ({ board, onView, onFork,
       </div>
 
       <div style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}>
-        <Button variant="secondary" size="sm" onClick={() => onView(board.id)} style={{ flex: 1 }}>
-          View
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          icon="🍴"
-          disabled={isForking}
-          onClick={() => onFork(board.id)}
-          style={{ flex: 1 }}
-        >
-          {isForking ? 'Forking…' : 'Fork'}
-        </Button>
+        {!phone && (
+          <Button variant="secondary" size="sm" onClick={() => onView(board.id)} style={{ flex: 1 }}>
+            View
+          </Button>
+        )}
+        {phone ? (
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Icon name="flag" />}
+            disabled={isHosting}
+            onClick={() => onRace(board.id)}
+            style={{ flex: 1 }}
+          >
+            {isHosting ? 'Starting…' : 'Race this map'}
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Icon name="fork" />}
+            disabled={isForking}
+            onClick={() => onFork(board.id)}
+            style={{ flex: 1 }}
+          >
+            {isForking ? 'Forking…' : 'Fork'}
+          </Button>
+        )}
       </div>
     </Card>
   );

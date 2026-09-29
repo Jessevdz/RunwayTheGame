@@ -1072,6 +1072,47 @@ func TestArrivalIsRefusedWhenTheMovementIsImpossible(t *testing.T) {
 	}
 }
 
+// TestArrivalWithoutAFixUsesTheVerifiedArrival tests that a team with no stored
+// fix, here while hidden by Tracker Off, is checked against its last arrival.
+func TestArrivalWithoutAFixUsesTheVerifiedArrival(t *testing.T) {
+	database, ctx := getTestDB(t)
+	if database == nil {
+		return
+	}
+	defer database.Close()
+
+	r := newRace(t, ctx, database, map[string]interface{}{
+		"powerup_costs": map[string]int{"tracker_off": 1},
+	})
+	red := r.join("Red", 0)
+	r.start()
+
+	r.advance(red, r.board.Mid1)
+	r.completeChallenge(red, r.board.Mid1, r.board.Mid1Challenge, "pass")
+	r.mustPost(http.StatusOK, "/shop/buy", map[string]interface{}{"powerup": "tracker_off", "idempotency_key": uuid.NewString()}, red.Token)
+	r.mustPost(http.StatusOK, "/powerup/use", map[string]interface{}{"powerup": "tracker_off", "idempotency_key": uuid.NewString()}, red.Token)
+
+	// No ping reaches the server between Mid 1 and Mid 2.
+	if _, err := database.Pool.Exec(ctx, `DELETE FROM team_positions WHERE game_id = $1 AND team_id = $2`, r.GameID, red.ID); err != nil {
+		t.Fatalf("failed to clear the fix: %v", err)
+	}
+
+	// Arriving seconds after Mid 1 is a 1.1 km jump the fallback baseline must still catch.
+	r.now = time.Now().UTC()
+	if w, _ := r.rawArrive(red, r.board.Mid2); w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected an instant jump from Mid 1 to be refused with 422, got %d - %s", w.Code, w.Body.String())
+	}
+
+	// Ten minutes of walking later the same arrival is plausible.
+	r.now = time.Now().UTC().Add(10 * time.Minute)
+	if w, _ := r.rawArrive(red, r.board.Mid2); w.Code != http.StatusOK {
+		t.Fatalf("expected the walked arrival to be accepted without a fix, got %d - %s", w.Code, w.Body.String())
+	}
+	if got := r.projection().Progress[red.ID].CurrentWaypointID; got != r.board.Mid2 {
+		t.Fatalf("expected Red at Mid 2, got %q", got)
+	}
+}
+
 func TestSubmissionRequiresTheBoardChallengeID(t *testing.T) {
 	database, ctx := getTestDB(t)
 	if database == nil {

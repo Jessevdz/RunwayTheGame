@@ -28,26 +28,18 @@ export const VetoDialog: React.FC<VetoDialogProps> = ({
     <p className="fs-5" style={{ marginBottom: 'var(--sp-4)' }}>
       {timeTrial ? (
         <>
-          You will not have to photograph anything here, but{' '}
-          <b>{formatDurationWords(vetoTimePenalty)}</b> goes onto your recorded time.
-          {vetoPenaltyTotal > 0 && (
-            <> That would make {formatClock(vetoPenaltyTotal + vetoTimePenalty)} of penalties on this run.</>
-          )}
+          Adds <b>{formatDurationWords(vetoTimePenalty)}</b> to your time
+          {vetoPenaltyTotal > 0 && <> ({formatClock(vetoPenaltyTotal + vetoTimePenalty)} in penalties total)</>}.
         </>
       ) : solo ? (
-        <>
-          You will not have to photograph anything here, and the road out opens straight away. Nothing
-          is timed on a casual walk, so this costs you nothing.
-        </>
+        <>No photo needed, and it costs nothing.</>
       ) : (
         <>
-          You will not have to photograph anything here and the road out opens straight away, but you
-          cannot take on <i>any</i> challenge for <b>{formatDurationWords(vetoCooldown)}</b> — so no coins in
-          that time. Rivals keep moving.
+          No photo needed, but no challenges for <b>{formatDurationWords(vetoCooldown)}</b>.
         </>
       )}
     </p>
-    <div style={{ display: 'flex', gap: 'var(--sp-2)', justifyContent: 'flex-end' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', justifyContent: 'flex-end' }}>
       <Button variant="secondary" onClick={onCancel}>
         Keep the challenge
       </Button>

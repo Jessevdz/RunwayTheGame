@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, Button, Input, Notice, Badge } from '@ds';
+import { Dialog, Button, Input, Notice, Badge, Icon } from '@ds';
 import { useCopyFeedback } from '../../../core/hooks/useCopyFeedback';
 import { analytics } from '../../../core/analytics/analyticsClient';
 
@@ -51,9 +51,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const publishBlockedReason = !canDecideListing
     ? 'Only the device that created this map can publish it.'
     : errorCount > 0
-      ? `Fix ${errorCount} blocking ${errorCount === 1 ? 'error' : 'errors'} before publishing — the gallery is for maps people can actually race.`
+      ? `Fix ${errorCount} blocking ${errorCount === 1 ? 'error' : 'errors'} before publishing.`
       : isDirty
-        ? 'Save your changes first, so the gallery shows the map you are looking at.'
+        ? 'Save your changes first.'
         : null;
 
   return (
@@ -77,8 +77,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
           <p className="fs-4" style={{ margin: '0 0 var(--sp-3)', color: 'var(--ink-muted)' }}>
             {isListed
-              ? 'This map is listed in the public gallery. Anyone can find it, race it, and fork their own copy.'
-              : 'This map is saved to this device only. Nobody else can find it unless you publish it or hand them a link.'}
+              ? 'Anyone can find, race, and fork it.'
+              : 'Only you can see it unless you publish it or share a link.'}
           </p>
 
           {error && (
@@ -119,12 +119,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </Button>
           )}
 
-          {isListed && (
-            <p className="fs-3" style={{ margin: 'var(--sp-2) 0 0', color: 'var(--ink-muted)' }}>
-              Removing it hides it from the gallery. The map itself stays on this device, and you can publish it again
-              whenever you like.
-            </p>
-          )}
         </section>
 
         {/* Links — sharing a map with named people, which works whether or not
@@ -137,11 +131,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               label="Public View Link (Read-Only)"
               value={viewUrl}
               readOnly
-              hint="Anyone with this link can view the map and fork their own copy — gallery or not."
+              hint="Anyone with this link can view and fork the map."
             />
             <div style={{ marginTop: 'var(--sp-2)', display: 'flex', justifyContent: 'flex-end' }}>
               <Button variant="secondary" size="sm" onClick={() => void copyLink('view', viewUrl, copyView)}>
-                {copiedView ? 'Copied! ✓' : 'Copy'}
+                {copiedView ? <>Copied! <Icon name="check" /></> : 'Copy'}
               </Button>
             </div>
           </div>
@@ -149,14 +143,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           {editUrl && (
             <div style={{ marginTop: 'var(--sp-4)' }}>
               <Input
-                label="🔑 Edit Link (Grants Edit Access)"
+                label="Edit Link (Grants Edit Access)"
                 value={editUrl}
                 readOnly
-                hint="Carries the edit key: whoever opens it can edit this map, publish it, and take it down. Share only with trusted co-designers."
+                hint="Grants full edit access, including publishing and removal. Share only with co-designers you trust."
               />
               <div style={{ marginTop: 'var(--sp-2)', display: 'flex', justifyContent: 'flex-end' }}>
                 <Button variant="primary" size="sm" onClick={() => void copyLink('edit', editUrl, copyEdit)}>
-                  {copiedEdit ? 'Copied! ✓' : 'Copy Key Link'}
+                  {copiedEdit ? <>Copied! <Icon name="check" /></> : 'Copy Key Link'}
                 </Button>
               </div>
             </div>

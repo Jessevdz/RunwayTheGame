@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState } from '../../../core/projection/projectionStore';
 import { listPendingReview, submitHostVerdict, ApiError, type PendingReviewItem } from '../../../core/api/client';
-import { Plate, Button, Badge, Empty, Notice, Textarea } from '@ds';
+import { Plate, Button, Badge, Empty, Notice, Textarea, Icon } from '@ds';
 import type { ToastMessage } from '../HostToolsPanel';
 
 interface ReviewQueueProps {
@@ -51,7 +51,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
   const grade = async (item: PendingReviewItem, verdict: 'pass' | 'fail') => {
     const rationale = (notes[item.submission_id] || '').trim();
     if (verdict === 'fail' && !rationale) {
-      onToast('Say why it was rejected — the team sees this note.', 'gold');
+      onToast('Add a note. The team sees it.', 'gold');
       return;
     }
 
@@ -88,12 +88,12 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
   };
 
   if (loading) {
-    return <Empty icon="⏳" title="Loading the queue" description="Fetching what is waiting to be graded." />;
+    return <Empty icon={<Icon name="hourglass" />} title="Loading" />;
   }
 
   if (error) {
     return (
-      <Notice kind="stop" title="The queue could not be loaded">
+      <Notice kind="stop" title="Could not load the queue">
         {error}
         <div style={{ marginTop: 'var(--sp-3)' }}>
           <Button variant="secondary" onClick={() => void fetchQueue(true)}>
@@ -107,9 +107,9 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
   if (items.length === 0) {
     return (
       <Empty
-        icon="📷"
+        icon={<Icon name="camera" />}
         title="Nothing waiting"
-        description="Photos appear here the moment a team submits one. You are the referee in this race — nothing is graded until you look at it."
+        description="Submitted photos appear here."
       />
     );
   }
@@ -119,7 +119,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
       {items.map((item) => {
         // Resolves prompt text for challenge or roadblock submissions.
         const roadblockText = item.road_id ? gameState.roadblocks[item.road_id]?.challengeText : '';
-        const prompt = item.prompt || roadblockText || 'No prompt recorded for this submission.';
+        const prompt = item.prompt || roadblockText || 'No prompt recorded.';
         const mustShow = item.rubric?.must_show?.filter(Boolean) ?? [];
         const failsIf = item.rubric?.fails_if?.filter(Boolean) ?? [];
         const busy = grading === item.submission_id;
@@ -146,7 +146,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
                 <img src={item.photo_url} alt={`Evidence from ${item.team_name}`} loading="lazy" />
               ) : (
                 <p className="review-card__photo-missing fs-4">
-                  The photo could not be loaded. Check that this deployment has an object store configured.
+                  Photo failed to load.
                 </p>
               )}
             </div>
@@ -202,7 +202,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ gameId, hostToken, gam
             <div className="review-card__actions">
               <Textarea
                 label="Note to the team"
-                placeholder={'What made it pass, or what was missing. Required to reject.'}
+                placeholder="Required to reject."
                 rows={2}
                 value={notes[item.submission_id] || ''}
                 onChange={(e) => setNotes((prev) => ({ ...prev, [item.submission_id]: e.target.value }))}

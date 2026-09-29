@@ -33,7 +33,7 @@ export function useJoinTeam(gameId: string | undefined, boardName?: string) {
   const joinNewTeam = useCallback(
     async (teamName: string, slotIndex: number, displayName?: string): Promise<TeamSession | null> => {
       if (!gameId) {
-        setError('This link is missing its race id. Ask the host to resend the invite.');
+        setError('This link is incomplete. Ask the host to resend it.');
         return null;
       }
       if (!teamName.trim()) return null;
@@ -59,11 +59,11 @@ export function useJoinTeam(gameId: string | undefined, boardName?: string) {
         if (err?.status === 409) {
           setError('Another team just took that colour. Pick a different one.');
         } else if (err?.status === 404) {
-          setError('That race no longer exists. Ask the host for a fresh invite link.');
+          setError('That race no longer exists. Ask the host for a new invite.');
         } else if (err?.status === 403) {
-          setError('This race has already finished, so it can no longer be joined.');
+          setError('This race has finished and cannot be joined.');
         } else {
-          setError(err?.message || 'Failed to join — check your signal and try again');
+          setError(err?.message || 'Failed to join. Check your signal and try again.');
         }
         return null;
       } finally {
@@ -97,11 +97,11 @@ export function useJoinTeam(gameId: string | undefined, boardName?: string) {
         return session;
       } catch (err: any) {
         if (err?.status === 403) {
-          setError('That invite link is out of date. Join the squad from the list instead.');
+          setError('That invite link is out of date. Join from the list.');
         } else if (err?.status === 404) {
           setError('That squad is no longer in this race.');
         } else {
-          setError(err?.message || 'Failed to join squad — check your signal and try again');
+          setError(err?.message || 'Failed to join squad. Check your signal and try again.');
         }
         return null;
       } finally {

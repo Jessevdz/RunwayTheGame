@@ -11,10 +11,19 @@ import { loadHostSession } from '../../core/game/hostSession';
 import { loadTeamSession } from '../../core/game/teamSession';
 import { forgetRace } from '../../core/game/raceSession';
 import { slotColor, getNeutralColor } from '../../core/team/palette';
-import { formatClock, formatDurationWords } from '../../core/format/clock';
 import { PageShell } from '../shared/PageShell';
 import { PageFooter } from '../shared/PageFooter';
-import { Badge, Board, Button, Card, Dialog, Empty, Flap, Notice, Select, Stat, BrandLines, IconCoin, type BoardColumn } from '@ds';
+import { Badge, Board, Button, Card, Dialog, Empty, Flap, Notice, Select, Stat, Icon, type BoardColumn } from '@ds';
+import { ResultHero } from './ResultHero';
+import {
+  buildStatTiles,
+  computeRaceResult,
+  ordinal,
+  retentionNotice,
+  type RankedStanding,
+  type RaceResult,
+  type StatTile,
+} from './raceResult';
 import './race-report.css';
 
 /** Post-race summary report page displaying completed race evidence and stats. */
@@ -80,8 +89,8 @@ export const RaceReportPage: React.FC = () => {
       const res = await deleteMyEvidence(gameId, teamSession.teamToken);
       setErased(
         res.photos_deleted === 1
-          ? 'Your photo is gone, along with your last known position.'
-          : `Your ${res.photos_deleted} photos are gone, along with your last known position.`
+          ? 'Photo and last known position deleted.'
+          : `${res.photos_deleted} photos and last known position deleted.`
       );
       setConfirming(null);
       await fetchReport();
@@ -102,13 +111,17 @@ export const RaceReportPage: React.FC = () => {
     );
   }, [report, teamFilter, verdictFilter]);
 
+  const result = useMemo(() => (report ? computeRaceResult(report) : null), [report]);
+  const tiles = useMemo(() => (report ? buildStatTiles(report) : null), [report]);
+  const retention = useMemo(() => (report ? retentionNotice(report, Date.now()) : null), [report]);
+
   if (!gameId) {
     return (
-      <PageShell navPlacement="topbar" topBarProps={{ title: <ReportBrand /> }}>
+      <PageShell navPlacement="topbar" topBarProps={{}}>
         <Empty
-          icon="🧭"
+          icon={<Icon name="compass" />}
           title="No race to report on"
-          description="This link is missing its race id. Find the race in My Races."
+          description="This link is incomplete. Try My Races."
           action={
             <Button variant="primary" onClick={() => navigate('/races')}>
               My Races
@@ -123,11 +136,11 @@ export const RaceReportPage: React.FC = () => {
   // link opened somewhere else, and it has a real answer.
   if (!token) {
     return (
-      <PageShell navPlacement="topbar" topBarProps={{ title: <ReportBrand /> }}>
+      <PageShell navPlacement="topbar" topBarProps={{}}>
         <Empty
-          icon="🔑"
+          icon={<Icon name="key" />}
           title="This device wasn't in that race"
-          description="A report is only readable by the people who raced it, so it opens on the phone that played or hosted. On a new device, rejoin your team with the race code and your team code — the report comes with it."
+          description="Reports open only on the device that played or hosted. On a new device, rejoin your team with the race code and team code."
           action={
             <Button variant="primary" onClick={() => navigate('/')}>
               Join with a code
@@ -141,21 +154,17 @@ export const RaceReportPage: React.FC = () => {
   return (
     <PageShell
       navPlacement="topbar"
-      topBarProps={{ title: <ReportBrand /> }}
+      topBarProps={{}}
       loading={loading && !report}
       error={report ? null : error}
       onRetry={fetchReport}
     >
-      {report && (
+      {report && result && tiles && (
         <div className="race-report">
           <header className="race-report__head">
-            <div>
-              <h1 className="t-announce fs-d-md" style={{ color: 'var(--ink-strong)' }}>
-                {report.board_name || 'UNTITLED RACE'}
-              </h1>
-              <p className="fs-4" style={{ color: 'var(--ink-muted)', margin: 'var(--sp-2) 0 0' }}>
-                {describeResult(report)}
-              </p>
+            <div className="race-report__head-lead">
+              <h1 className="t-announce fs-9 race-report__title">{report.board_name || 'UNTITLED RACE'}</h1>
+              <p className="fs-4 race-report__when">{describeWhen(report)}</p>
             </div>
             <div className="race-report__badges">
               {report.race_code && <Flap value={report.race_code} />}
@@ -179,27 +188,33 @@ export const RaceReportPage: React.FC = () => {
             </Notice>
           )}
 
-          <RetentionLine report={report} />
+          <ResultHero report={report} result={result} />
 
-          <section className="race-report__section">
-            <h2 className="t-announce fs-6 race-report__section-title">THE RACE IN NUMBERS</h2>
-            <StatGrid report={report} />
-          </section>
+          {retention && (
+            <Notice kind={retention.kind} title={retention.title}>
+              {' '}
+              {retention.body}
+            </Notice>
+          )}
 
-          {report.standings.length > 1 && (
+          {result.ranked.length > 1 && (
             <section className="race-report__section">
               <h2 className="t-announce fs-6 race-report__section-title">FINAL STANDINGS</h2>
               <Card className="card--pad">
-                <StandingsBoard report={report} />
+                <StandingsBoard report={report} result={result} />
               </Card>
             </section>
           )}
 
           <section className="race-report__section">
+            <h2 className="t-announce fs-6 race-report__section-title">THE RACE IN NUMBERS</h2>
+            <StatGrid tiles={tiles} />
+          </section>
+
+          <section className="race-report__section">
             <h2 className="t-announce fs-6 race-report__section-title">THE EVIDENCE</h2>
             <p className="fs-4" style={{ color: 'var(--ink-muted)', margin: 0, maxWidth: '68ch' }}>
-              {EVIDENCE_BLURB[report.verification]} Every photo anyone in this race submitted is here, with what
-              it was taken for and what decided it. If something looks wrong, this is what you argue with.
+              {EVIDENCE_BLURB[report.verification]}
             </p>
 
             {report.evidence.length > 0 && (
@@ -226,15 +241,13 @@ export const RaceReportPage: React.FC = () => {
 
             {report.evidence.length === 0 ? (
               <Empty
-                icon="📷"
+                icon={<Icon name="camera" />}
                 title="No photos were taken"
-                description="Nobody submitted evidence in this race, so there is nothing to look back at."
               />
             ) : visible.length === 0 ? (
               <Empty
-                icon="🔍"
+                icon={<Icon name="search" />}
                 title="Nothing matches"
-                description="No photo in this race fits that team and verdict."
                 action={
                   <Button
                     variant="secondary"
@@ -292,12 +305,12 @@ export const RaceReportPage: React.FC = () => {
         >
           <p className="fs-5" style={{ marginTop: 0 }}>
             {confirming === 'all'
-              ? 'Every photo, every position, the whole log, the standings and the teams — for all the teams, not just yours. It happens now and it cannot be undone.'
-              : 'Your photos and your last known position, deleted now. The verdicts and the race log stay: they are the result everyone else played for, and they hold no picture of you.'}
+              ? 'Every photo, position, log entry and standing, for all teams. This cannot be undone.'
+              : 'Your photos and last known position are deleted now. Verdicts and the race log stay.'}
           </p>
           {confirming === 'all' && report?.mode === 'solo_time_trial' && (
             <Notice kind="warn" title="Your leaderboard time goes too">
-              A posted time belongs to the run behind it, so deleting the run takes the entry off the board.
+              The run's leaderboard entry is removed.
             </Notice>
           )}
           <div className="race-report__erase-actions" style={{ marginTop: 'var(--sp-4)' }}>
@@ -318,15 +331,6 @@ export const RaceReportPage: React.FC = () => {
   );
 };
 
-const ReportBrand: React.FC = () => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-    <BrandLines size={24} />
-    <span className="t-announce fs-7" style={{ letterSpacing: '0.04em', color: 'var(--ink-strong)' }}>
-      RUNWAY
-    </span>
-  </div>
-);
-
 const MODE_LABEL: Record<string, string> = {
   team: 'TEAM RACE',
   coin_rush: 'COIN RUSH',
@@ -341,9 +345,9 @@ const GRADING_LABEL: Record<string, string> = {
 };
 
 const EVIDENCE_BLURB: Record<string, string> = {
-  llm: 'A model graded these, and a model can be wrong.',
-  host: 'A person graded these, one photo at a time.',
-  trust: 'Nothing checked these — the honour system was the referee.',
+  llm: 'Graded by AI, which can be wrong.',
+  host: 'Graded by the host.',
+  trust: 'Nothing was checked.',
 };
 
 const VERDICT: Record<string, { tone: 'moss' | 'crimson' | 'neutral'; label: string }> = {
@@ -352,106 +356,58 @@ const VERDICT: Record<string, { tone: 'moss' | 'crimson' | 'neutral'; label: str
   pending: { tone: 'neutral', label: 'Never graded' },
 };
 
-/** "1st", "2nd", "3rd" — teens excepted (11th, not 11st). */
-const ordinal = (n: number): string => {
-  const rem100 = n % 100;
-  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
-  switch (n % 10) {
-    case 1:
-      return `${n}st`;
-    case 2:
-      return `${n}nd`;
-    case 3:
-      return `${n}rd`;
-    default:
-      return `${n}th`;
-  }
-};
-
-const isSolo = (mode: string) => mode === 'solo_time_trial' || mode === 'solo_casual';
-
-/** The one-line answer to "how did it go", in the vocabulary of the mode. */
-function describeResult(report: RaceReport): string {
-  const when = report.ended_at ? new Date(report.ended_at).toLocaleString() : new Date(report.created_at).toLocaleString();
-  if (report.status !== 'ended') {
-    return `Still open · started ${when}`;
-  }
-  if (isSolo(report.mode)) {
-    const elapsed = report.clock.finished_at && report.clock.started_at
-      ? Math.max(0, Math.round((Date.parse(report.clock.finished_at) - Date.parse(report.clock.started_at)) / 1000)) +
-      report.clock.time_penalty_seconds
-      : report.stats.duration_seconds;
-    return `${formatClock(elapsed)} · ${when}`;
-  }
-  return report.winner_name ? `${report.winner_name} won · ${when}` : `No winner recorded · ${when}`;
+/** The date line under the title, the result itself is the hero's job. */
+function describeWhen(report: RaceReport): string {
+  const ended = report.ended_at ? new Date(report.ended_at).toLocaleString() : null;
+  if (report.status !== 'ended') return `Still open · started ${new Date(report.started_at ?? report.created_at).toLocaleString()}`;
+  return ended ?? new Date(report.created_at).toLocaleString();
 }
 
-/** How long this race has left, and what that means. */
-const RetentionLine: React.FC<{ report: RaceReport }> = ({ report }) => {
-  const expires = new Date(report.retention.expires_at);
-  const daysLeft = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / 86_400_000));
-
-  return (
-    <Notice
-      kind={daysLeft <= 3 ? 'warn' : 'info'}
-      title={daysLeft === 0 ? 'This report expires today' : `This report is deleted in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`}
-    >
-    </Notice>
-  );
-};
-
-const StatGrid: React.FC<{ report: RaceReport }> = ({ report }) => {
-  const s = report.stats;
-  const solo = isSolo(report.mode);
-
-  return (
+/** Four tiles that matter, with the remainder behind an expander. */
+const StatGrid: React.FC<{ tiles: { key: StatTile[]; more: StatTile[] } }> = ({ tiles }) => (
+  <>
     <div className="race-report__stats">
-      <Stat label="Photos taken" value={s.submissions} tone="bright" hint={s.photos_deleted > 0 ? `${s.photos_deleted} since deleted` : undefined} />
-      <Stat label="Approved" value={s.passed} />
-      <Stat label="Rejected" value={s.failed} />
-      {s.pending > 0 && <Stat label="Never graded" value={s.pending} hint="the race ended first" />}
-      <Stat label="Waypoints" value={s.waypoints_reached} />
-      <Stat label="Vetoes" value={s.vetoes} hint={solo && report.clock.time_penalty_seconds > 0 ? `+${formatDurationWords(report.clock.time_penalty_seconds)}` : undefined} />
-      <Stat label="Skipped" value={s.challenge_skips} />
-      <Stat label="Coins earned" value={<><IconCoin /> {s.coins_earned}</>} />
-      <Stat label="Coins spent" value={<><IconCoin /> {s.coins_spent}</>} />
-      {s.finish_bonuses > 0 && <Stat label="Paid at the line" value={<><IconCoin /> {s.finish_bonuses}</>} />}
-      {s.powerups_used > 0 && <Stat label="Powerups used" value={s.powerups_used} hint={`${s.powerups_bought} bought`} />}
-      {s.roadblocks_placed > 0 && <Stat label="Roadblocks" value={s.roadblocks_placed} />}
-      {s.curses_played > 0 && <Stat label="Curses" value={s.curses_played} />}
-      {!solo && (
-        <Stat
-          label="Disputes"
-          value={s.disputes}
-          hint={s.disputes > 0 ? `${s.disputes_overturned} overturned` : undefined}
-        />
-      )}
-      {s.gm_overrides > 0 && <Stat label="Host overrides" value={s.gm_overrides} />}
-      {/* Flagged arrivals are recorded and never decisive, so they are stated
-          quietly rather than as an accusation — but stated, because a race
-          settled by argument should not hide the one signal that fired. */}
-      {s.flagged_arrivals > 0 && (
-        <Stat label="Odd arrivals" value={s.flagged_arrivals} hint="flagged, not judged" />
-      )}
-      <Stat label="On the route" value={formatClock(s.duration_seconds)} />
+      {tiles.key.map((t) => (
+        <StatTileView key={t.id} tile={t} />
+      ))}
     </div>
-  );
-};
+    {tiles.more.length > 0 && (
+      <details className="race-report__more">
+        <summary className="race-report__more-toggle">
+          <span className="race-report__more-open">More stats</span>
+          <span className="race-report__more-close">Fewer stats</span>
+        </summary>
+        <div className="race-report__stats">
+          {tiles.more.map((t) => (
+            <StatTileView key={t.id} tile={t} />
+          ))}
+        </div>
+      </details>
+    )}
+  </>
+);
 
-interface StandingRowView {
-  teamId: string;
-  teamName: string;
-  waypoints: number;
-  coins: number | null;
-  coinsVisible: boolean;
-  finishRank: number;
-  finishBonus: number;
-}
+const StatTileView: React.FC<{ tile: StatTile }> = ({ tile }) => (
+  <Stat
+    label={tile.label}
+    value={tile.coin ? <><Icon name="coin" /> {tile.value}</> : tile.value}
+    hint={tile.hint}
+    tone={tile.tone}
+  />
+);
 
-const StandingsBoard: React.FC<{ report: RaceReport }> = ({ report }) => {
+const StandingsBoard: React.FC<{ report: RaceReport; result: RaceResult }> = ({ report, result }) => {
   const coinRush = report.mode === 'coin_rush';
 
-  const columns: BoardColumn<StandingRowView>[] = [
+  const coinsColumn: BoardColumn<RankedStanding> = {
+    key: 'coins',
+    header: 'Coins',
+    numeric: true,
+    render: (row) =>
+      row.coinsVisible ? <><Icon name="coin" /> {row.coins}</> : <span aria-label="Coin balance hidden">Hidden</span>,
+  };
+
+  const columns: BoardColumn<RankedStanding>[] = [
     {
       key: 'team',
       header: 'Team',
@@ -461,8 +417,9 @@ const StandingsBoard: React.FC<{ report: RaceReport }> = ({ report }) => {
         const color = info ? slotColor(info.slot_index).color : getNeutralColor().color;
         return (
           <>
+            <span className="t-data race-report__place">{ordinal(row.place)}</span>
             <span className="race-report__dot" style={{ backgroundColor: color }} />
-            <span>{row.teamName}</span>
+            <span className="race-report__team-name">{row.teamName}</span>
           </>
         );
       },
@@ -470,19 +427,17 @@ const StandingsBoard: React.FC<{ report: RaceReport }> = ({ report }) => {
     // Coins lead in a coin rush, because that column is the result.
     ...(coinRush
       ? [
-        { key: 'coins', header: 'Coins', numeric: true, render: (row: StandingRowView) => row.coinsVisible ? <><IconCoin /> {row.coins}</> : <span aria-label="Coin balance hidden">Hidden</span> } as BoardColumn<StandingRowView>,
+        coinsColumn,
         {
           key: 'placed',
           header: 'Finish',
           numeric: true,
-          render: (row: StandingRowView) => <>{row.finishRank ? `${ordinal(row.finishRank)} · +${row.finishBonus}` : 'DNF'}</>,
-        } as BoardColumn<StandingRowView>,
+          render: (row: RankedStanding) => <>{row.finishRank ? `${ordinal(row.finishRank)} · +${row.finishBonus}` : 'DNF'}</>,
+        } as BoardColumn<RankedStanding>,
       ]
       : []),
     { key: 'waypoints', header: 'Waypoints', numeric: true, render: (row) => <>{row.waypoints}</> },
-    ...(coinRush
-      ? []
-      : [{ key: 'coins', header: 'Coins', numeric: true, render: (row: StandingRowView) => row.coinsVisible ? <><IconCoin /> {row.coins}</> : <span aria-label="Coin balance hidden">Hidden</span> } as BoardColumn<StandingRowView>]),
+    ...(coinRush ? [] : [coinsColumn]),
     {
       key: 'photos',
       header: 'Photos',
@@ -491,19 +446,9 @@ const StandingsBoard: React.FC<{ report: RaceReport }> = ({ report }) => {
     },
   ];
 
-  const rows: StandingRowView[] = report.standings.map((s) => ({
-    teamId: s.team_id,
-    teamName: s.team_name,
-    waypoints: s.waypoints_reached,
-    coins: s.coins_visible === false ? null : s.coins,
-    coinsVisible: s.coins_visible !== false,
-    finishRank: s.finish_rank ?? 0,
-    finishBonus: s.finish_bonus ?? 0,
-  }));
-
   return (
-    <div className="race-report__board">
-      <Board columns={columns} rows={rows} rowKey={(row) => row.teamId} isLeader={(_, i) => i === 0} />
+    <div className="race-report__board" tabIndex={0} role="region" aria-label="Final standings, scrolls sideways">
+      <Board columns={columns} rows={result.ranked} rowKey={(row) => row.teamId} isLeader={(row) => row.place === 1} />
     </div>
   );
 };
@@ -525,7 +470,7 @@ const EvidenceCard: React.FC<{
         </button>
       ) : (
         <div className="race-report__frame race-report__frame--empty">
-          {item.photo_deleted_at ? 'This photo has been deleted.' : 'This photo could not be loaded.'}
+          {item.photo_deleted_at ? 'This photo has been deleted.' : 'Photo failed to load.'}
         </div>
       )}
 
@@ -634,12 +579,12 @@ const EraseSection: React.FC<{
     <section className="race-report__section race-report__erase">
       <div className="race-report__erase-actions">
         {canDeleteAll && (
-          <Button variant="secondary" icon="🗑️" onClick={() => onConfirm('all')}>
-            Delete this race data now.
+          <Button variant="secondary" icon={<Icon name="trash" />} onClick={() => onConfirm('all')}>
+            Delete this race now
           </Button>
         )}
         {canDeleteMine && (
-          <Button variant="secondary" icon="🗑️" onClick={() => onConfirm('mine')}>
+          <Button variant="secondary" icon={<Icon name="trash" />} onClick={() => onConfirm('mine')}>
             Delete my photos
           </Button>
         )}

@@ -1,10 +1,10 @@
-/* ==========================================================================
+@layer tokens {
+  /* ==========================================================================
    CODENAME RUNWAY — APP EXTENSION TOKENS
    Extension token layer on top of Departure design system tokens.
    Only references DS primitives and semantic tokens.
    ========================================================================== */
-
-:root {
+  :root {
     /* Team Extension Tokens — slot-indexed (0-5 + neutral) */
     --team-0: var(--red);
     --team-0-bg: rgba(235, 53, 57, 0.14);
@@ -58,14 +58,18 @@
 
     /* Interface sizing and safe areas */
     --min-tap-target: 48px;
+    --tap-large: 56px;
+    --bottomnav-h: 72px;
+    /* Compact control height, applied only where a precise pointer is present. */
+    --tap-compact: 32px;
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 
     /* Surface Aliases */
     --surface-panel: var(--surface-2);
-}
+  }
 
-[data-theme="night"] {
+  [data-theme="night"] {
     --team-2: var(--indigo-300);
     --team-2-bg: rgba(165, 160, 238, 0.16);
     --team-neutral-bg: var(--navy-800);
@@ -83,6 +87,5 @@
     --map-road-locked: var(--navy-200);
     --map-road-cleared: var(--indigo-300);
     --map-road-roadblock-casing: rgba(245, 122, 60, 0.45);
+  }
 }
-
-

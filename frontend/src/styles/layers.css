@@ -1,0 +1,2 @@
+/* Cascade order, lowest to highest: a later layer beats an earlier one regardless of selector specificity. */
+@layer vendor, base, tokens, components, utilities, surfaces;

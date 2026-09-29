@@ -1,6 +1,5 @@
 import React from 'react';
-import { Button, IconButton } from '@ds';
-import { IconBack, IconChevronRight } from './EditorIcons';
+import { Button, IconButton, Icon } from '@ds';
 
 export type SaveStatus = 'saved' | 'saving' | 'dirty' | 'error';
 
@@ -47,7 +46,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = ({
       <Button
         variant="secondary"
         size="sm"
-        icon={<IconBack />}
+        icon={<Icon name="arrow-left" />}
         onClick={onBack}
         className="pane-head__back-btn"
       >
@@ -63,7 +62,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = ({
         onChange={(e) => onNameChange(e.target.value)}
       />
       <IconButton
-        icon={<IconChevronRight />}
+        icon={<Icon name="chevron-right" />}
         label="Collapse panel"
         variant="ghost"
         size="sm"

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isCoinRush, type GameState } from '../../../core/projection/projectionStore';
 import { slotColor, getNeutralColor } from '../../../core/team/palette';
-import { Hero, Sticker, Board, type BoardColumn, Card, Empty, Button, IconCoin } from '@ds';
+import { Hero, Sticker, Board, type BoardColumn, Card, Empty, Button, Icon } from '@ds';
 
 interface PostGameRecapProps {
   gameState: GameState;
@@ -126,7 +126,7 @@ export const PostGameRecap: React.FC<PostGameRecapProps> = ({ gameState }) => {
             key: 'coins',
             header: 'Coins',
             numeric: true,
-            render: (row: FinalStandingRow) => <><IconCoin /> {row.coins}</>
+            render: (row: FinalStandingRow) => <><Icon name="coin" /> {row.coins}</>
           } as BoardColumn<FinalStandingRow>,
           {
             key: 'placed',
@@ -151,7 +151,7 @@ export const PostGameRecap: React.FC<PostGameRecapProps> = ({ gameState }) => {
             key: 'coins',
             header: 'Coins',
             numeric: true,
-            render: (row: FinalStandingRow) => <><IconCoin /> {row.coins}</>
+            render: (row: FinalStandingRow) => <><Icon name="coin" /> {row.coins}</>
           } as BoardColumn<FinalStandingRow>
         ]),
     {
@@ -173,14 +173,14 @@ export const PostGameRecap: React.FC<PostGameRecapProps> = ({ gameState }) => {
   }));
 
   if (gameState.state !== 'ended') {
-    return <Empty icon="🏆" title="Race still in progress" description="The recap appears once the race has ended." />;
+    return <Empty icon={<Icon name="trophy" />} title="Race still in progress" />;
   }
 
   return (
     <div className="post-game-recap">
       <Hero className="post-game-recap__hero">
         <Sticker tone={winnerInfo && winnerInfo.slotIndex % 2 === 0 ? 'amber' : 'red'}>
-          <span style={{ fontSize: '2rem' }}>🏆</span>
+          <span style={{ fontSize: 'var(--fs-10)' }}><Icon name="trophy" /></span>
         </Sticker>
         <h1 className="t-announce fs-d-lg" style={{ color: winnerColor.color, margin: 0 }}>
           {winnerInfo ? `${winnerInfo.name} WINS` : 'RACE COMPLETE'}
@@ -188,8 +188,7 @@ export const PostGameRecap: React.FC<PostGameRecapProps> = ({ gameState }) => {
         {/* In coin rush, display the total coins banked by the winner. */}
         {coinRush && winnerInfo && (
           <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: 'var(--sp-2) 0 0' }}>
-            <IconCoin /> {gameState.standings.find((s) => s.teamId === gameState.winner)?.coins ?? 0} banked — the most on
-            the board.
+            <Icon name="coin" /> {gameState.standings.find((s) => s.teamId === gameState.winner)?.coins ?? 0} banked.
           </p>
         )}
       </Hero>
@@ -214,16 +213,16 @@ export const PostGameRecap: React.FC<PostGameRecapProps> = ({ gameState }) => {
           <div><span className="fs-8 t-data">{stats.overturned}</span><span className="fs-3">dismissed</span></div>
           <div><span className="fs-8 t-data">{stats.gmOverrides}</span><span className="fs-3">GM overrides</span></div>
           <div>
-            <span className="fs-8 t-data"><IconCoin /> {stats.earned - finishBonusTotal}</span>
+            <span className="fs-8 t-data"><Icon name="coin" /> {stats.earned - finishBonusTotal}</span>
             <span className="fs-3">{coinRush ? 'earned on the route' : 'coins earned'}</span>
           </div>
           {coinRush && (
             <div>
-              <span className="fs-8 t-data"><IconCoin /> {finishBonusTotal}</span>
+              <span className="fs-8 t-data"><Icon name="coin" /> {finishBonusTotal}</span>
               <span className="fs-3">paid at the line</span>
             </div>
           )}
-          <div><span className="fs-8 t-data"><IconCoin /> {stats.spent}</span><span className="fs-3">coins spent</span></div>
+          <div><span className="fs-8 t-data"><Icon name="coin" /> {stats.spent}</span><span className="fs-3">coins spent</span></div>
         </div>
       </Card>
 
@@ -246,11 +245,10 @@ export const PostGameRecap: React.FC<PostGameRecapProps> = ({ gameState }) => {
           THE FULL REPORT
         </h2>
         <p className="fs-5" style={{ color: 'var(--ink-muted)', margin: '0 0 var(--sp-3)' }}>
-          Every photo submitted in this race, what it was taken for, and what graded it — plus the button that
-          deletes the whole race now rather than in 30 days.
+          Photos, verdicts, and the option to delete the race now.
         </p>
         <Button variant="secondary" onClick={() => navigate(`/race/${gameState.gameId}/report`)}>
-          📸 Open the race report
+          <Icon name="log" /> Open the race report
         </Button>
       </Card>
     </div>

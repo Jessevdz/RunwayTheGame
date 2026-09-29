@@ -1,19 +1,6 @@
 import React from 'react';
 import type { BasemapStyle } from './basemap';
-import {
-  IconAuto,
-  IconBasemap,
-  IconFitBounds,
-  IconLegend,
-  IconLock,
-  IconMoon,
-  IconPalette,
-  IconPin,
-  IconRoadblockSign,
-  IconSatellite,
-  IconTarget,
-  IconTick
-} from './MapIcons';
+import { Icon, type IconName } from '@ds';
 
 interface MapControlsProps {
   editorMode: boolean;
@@ -27,18 +14,22 @@ interface MapControlsProps {
   canFitBoard: boolean;
   isOffscreenOrZoomedOut: boolean;
   onFitToBoard: () => void;
+  /** Present only while the player has a position to centre on. */
+  onToggleFollow?: () => void;
+  /** True while the camera is tracking the player. */
+  following?: boolean;
 }
 
 const BASEMAP_CHOICES: ReadonlyArray<{
   style: BasemapStyle;
   label: string;
   title: string;
-  Icon: React.FC;
+  icon: IconName;
 }> = [
-  { style: 'auto', label: 'Auto', title: 'Auto (Follows Theme)', Icon: IconAuto },
-  { style: 'default', label: 'Light', title: 'Light Basemap', Icon: IconBasemap },
-  { style: 'satellite', label: 'Satellite', title: 'Satellite Imagery', Icon: IconSatellite },
-  { style: 'dark', label: 'Dark', title: 'Dark Night Mode', Icon: IconMoon }
+  { style: 'auto', label: 'Auto', title: 'Auto (Follows Theme)', icon: 'powerup' },
+  { style: 'default', label: 'Light', title: 'Light Basemap', icon: 'basemap' },
+  { style: 'satellite', label: 'Satellite', title: 'Satellite Imagery', icon: 'satellite' },
+  { style: 'dark', label: 'Dark', title: 'Dark Night Mode', icon: 'moon' }
 ];
 
 /** Floating map controls bar providing legend, theme picker, and fit-to-board toggles. */
@@ -52,7 +43,9 @@ export const MapControls: React.FC<MapControlsProps> = ({
   onToggleMapTheme,
   canFitBoard,
   isOffscreenOrZoomedOut,
-  onFitToBoard
+  onFitToBoard,
+  onToggleFollow,
+  following = false
 }) => (
   <div className="map-floating-controls">
     {!editorMode && showLegend && (
@@ -66,7 +59,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <span className="map-legend__muted">Closed Path</span>
         </span>
         <span className="map-legend__item">
-          <IconRoadblockSign />
+          <Icon name="barrier" />
           <span className="map-legend__rule map-legend__rule--roadblock" />
           <span>Roadblock</span>
         </span>
@@ -76,19 +69,19 @@ export const MapControls: React.FC<MapControlsProps> = ({
         </span>
         <span className="map-legend__sep" />
         <span className="map-legend__item">
-          <IconTarget />
+          <Icon name="target" />
           <span>Target</span>
         </span>
         <span className="map-legend__item">
-          <IconPin />
+          <Icon name="pin" />
           <span>Current</span>
         </span>
         <span className="map-legend__item map-legend__item--cleared">
-          <IconTick />
+          <Icon name="check" />
           <span>Cleared</span>
         </span>
         <span className="map-legend__item map-legend__muted">
-          <IconLock />
+          <Icon name="lock" />
           <span>Locked</span>
         </span>
       </div>
@@ -96,7 +89,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
 
     {showMapTheme && (
       <div className="map-basemaps" role="group" aria-label="Basemap style">
-        {BASEMAP_CHOICES.map(({ style, label, title, Icon }) => (
+        {BASEMAP_CHOICES.map(({ style, label, title, icon }) => (
           <button
             key={style}
             onClick={() => onBasemapStyleChange(style)}
@@ -104,7 +97,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
             aria-pressed={basemapStyle === style}
             title={title}
           >
-            <Icon />
+            <Icon name={icon} />
             <span>{label}</span>
           </button>
         ))}
@@ -112,6 +105,19 @@ export const MapControls: React.FC<MapControlsProps> = ({
     )}
 
     <div className="map-floating-controls__row">
+      {!editorMode && onToggleFollow && (
+        <button
+          onClick={onToggleFollow}
+          className={`btn btn--sm map-chip ${following ? 'map-chip--on' : ''}`.trim()}
+          title={following ? 'Stop following your position' : 'Centre the map on you and follow'}
+          aria-label={following ? 'Stop following your position' : 'Centre the map on you and follow'}
+          aria-pressed={following}
+        >
+          <Icon name="locate" />
+          <span className="map-chip__label">{following ? 'Following' : 'Centre on me'}</span>
+        </button>
+      )}
+
       {!editorMode && (
         <button
           onClick={onToggleLegend}
@@ -120,7 +126,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           aria-label={showLegend ? 'Hide map legend' : 'Show map legend'}
           aria-expanded={showLegend}
         >
-          <IconLegend />
+          <Icon name="legend" />
           <span className="map-chip__label">{showLegend ? 'Hide Legend' : 'Legend'}</span>
         </button>
       )}
@@ -132,7 +138,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
         aria-label={showMapTheme ? 'Hide map theme options' : 'Show map theme options'}
         aria-expanded={showMapTheme}
       >
-        <IconPalette />
+        <Icon name="palette" />
         <span className="map-chip__label">{showMapTheme ? 'Hide Theme' : 'Map Theme'}</span>
       </button>
 
@@ -143,7 +149,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
           title="Fit map to board boundaries"
           aria-label="Fit map to board boundaries"
         >
-          <IconFitBounds />
+          <Icon name="fit-bounds" />
           <span className="map-chip__label">Fit Board</span>
           {isOffscreenOrZoomedOut && <span className="map-chip__badge">Off-view</span>}
         </button>

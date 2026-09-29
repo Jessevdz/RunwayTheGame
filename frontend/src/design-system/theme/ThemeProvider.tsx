@@ -22,6 +22,27 @@ function getInitialTheme(): Theme {
   return 'terminal';
 }
 
+const SUNLIGHT_KEY = 'runway_sunlight';
+
+function getInitialSunlight(): boolean {
+  try {
+    return localStorage.getItem(SUNLIGHT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function applySunlight(on: boolean) {
+  if (typeof document === 'undefined') return;
+  if (on) {
+    document.documentElement.setAttribute('data-contrast', 'high');
+  } else {
+    document.documentElement.removeAttribute('data-contrast');
+  }
+  refreshTokens();
+  document.dispatchEvent(new CustomEvent('runway:themechange', { detail: { sunlight: on } }));
+}
+
 function applyTheme(theme: Theme) {
   if (typeof document === 'undefined') return;
   document.documentElement.setAttribute('data-theme', theme);
@@ -38,6 +59,20 @@ function applyTheme(theme: Theme) {
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const [sunlight, setSunlightState] = useState<boolean>(getInitialSunlight);
+
+  const setSunlight = useCallback((on: boolean) => {
+    setSunlightState(on);
+    try {
+      localStorage.setItem(SUNLIGHT_KEY, on ? '1' : '0');
+    } catch {
+      // Blocked storage only loses persistence, the mode still applies for this session.
+    }
+  }, []);
+
+  useEffect(() => {
+    applySunlight(sunlight);
+  }, [sunlight]);
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
@@ -67,7 +102,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, sunlight, setSunlight }}>
       {children}
     </ThemeContext.Provider>
   );

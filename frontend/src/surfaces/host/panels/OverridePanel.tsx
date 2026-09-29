@@ -70,7 +70,7 @@ export const OverridePanel: React.FC<OverridePanelProps> = ({ gameId, hostToken,
     try {
       if (pending.kind === 'coins') {
         const resp = await overrideCoins(gameId, hostToken, pending.teamId, pending.delta, pending.note);
-        onToast(`Coins adjusted — new balance ${resp.new_balance}.`, 'moss');
+        onToast(`Coins adjusted. Balance: ${resp.new_balance}.`, 'moss');
         setCoinsTeam('');
         setCoinsDelta('');
         setCoinsNote('');
@@ -156,9 +156,9 @@ export const OverridePanel: React.FC<OverridePanelProps> = ({ gameId, hostToken,
         </Button>
       </Card>
 
-      <Dialog open={!!pending} title="Confirm override" onClose={() => setPending(null)}>
+      <Dialog open={!!pending} presentation="sheet" title="Confirm override" onClose={() => setPending(null)}>
         <p className="fs-5" style={{ color: 'var(--ink-muted)' }}>
-          This action is permanent and will appear in the public event log.
+          Permanent. Shown in the public event log.
         </p>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', justifyContent: 'flex-end', marginTop: 'var(--sp-4)' }}>
           <Button variant="secondary" onClick={() => setPending(null)}>Cancel</Button>

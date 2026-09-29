@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { isSoloMode, isCoinRush, type GameState, type Powerup } from '../../core/projection/projectionStore';
 import type { TeamSession } from '../../core/game/teamSession';
 import { buyPowerup, activatePowerup } from '../../core/api/client';
-import { Dialog, Button, Stat, Callout, Chip, Empty, IconCoin } from '@ds';
+import { Dialog, Button, Stat, Callout, Chip, Empty, Icon } from '@ds';
+import { TeamAvatar } from './components/TeamAvatar';
 import './shop-panel.css';
 
 interface ShopPanelProps {
@@ -25,11 +26,11 @@ interface CatalogEntry {
 }
 
 const POWERUP_CATALOG: CatalogEntry[] = [
-  { id: 'nerf', name: 'Nerf Dart', cost: 10, desc: 'Freeze the opposing team where they stand. They cannot act until it wears off.', short: '30 min freeze' },
+  { id: 'nerf', name: 'Nerf Dart', cost: 10, desc: 'Freeze a rival team in place.', short: '5 min freeze' },
   // { id: 'roadblock', name: 'Roadblock', cost: 15, desc: 'Block a road of your choice with a roadblock challenge.', short: 'One road' },
-  { id: 'tracker_off', name: 'Tracker Off', cost: 25, desc: 'Hide your position dot from opponents so they cannot read your route.', short: '45 min hidden' },
+  { id: 'tracker_off', name: 'Tracker Off', cost: 25, desc: 'Hide your dot from rivals.', short: '10 min hidden' },
   // { id: 'curse', name: 'Curse', cost: 25, desc: 'Force the opposing team to satisfy a travel constraint before they continue.', short: 'Until resolved' },
-  { id: 'challenge_skip', name: 'Challenge Skip', cost: 100, desc: 'Bypass your current blocking challenge immediately, with no penalty.', short: 'Instant', selfAffecting: true }
+  { id: 'challenge_skip', name: 'Challenge Skip', cost: 100, desc: 'Skip your current challenge with no penalty.', short: 'Instant', selfAffecting: true }
 ];
 
 const CATALOG_BY_ID = new Map(POWERUP_CATALOG.map((p) => [p.id, p]));
@@ -49,6 +50,7 @@ const countByPowerup = (inventory: Powerup[]): Array<{ id: Powerup; count: numbe
 export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gatingWaypointId, onClose }) => {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  const [pickingTarget, setPickingTarget] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
 
   const teamId = session.teamId;
@@ -61,7 +63,9 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
   const lockedOut = isCoinRush(gameState.mode) && !!gameState.progress[teamId]?.reachedFinish;
   const owned = countByPowerup(inventory);
 
-  const opponentTeam = Object.keys(gameState.teams).find((id) => id !== teamId) || 'opponent-team';
+  const rivals = Object.entries(gameState.teams)
+    .filter(([id]) => id !== teamId)
+    .map(([id, info]) => ({ id, name: info.name, finished: !!gameState.progress[id]?.reachedFinish }));
 
   useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
 
@@ -91,10 +95,14 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
     }
   };
 
-  const handleUse = async (powerup: Powerup, roadId?: string) => {
+  const handleUse = async (powerup: Powerup, roadId?: string, targetTeamId?: string) => {
+    if (powerup === 'nerf' && !targetTeamId) {
+      setPickingTarget(true);
+      return;
+    }
     const target = roadId ?? (powerup === 'challenge_skip' ? gatingWaypointId : undefined);
     if (powerup === 'challenge_skip' && !target) {
-      showNotification('Nothing to skip — you are not standing at a challenge.', true);
+      showNotification('No challenge to skip here.', true);
       return;
     }
 
@@ -103,25 +111,62 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
       await activatePowerup(gameState.gameId!, {
         powerup,
         team_token: session.teamToken,
-        target_team_id: opponentTeam,
+        ...(targetTeamId ? { target_team_id: targetTeamId } : {}),
         road_id: target,
         idempotency_key: `use-${Date.now()}`
       });
-      showNotification(`Used ${labelFor(powerup)}.`);
+      const victim = rivals.find((r) => r.id === targetTeamId);
+      showNotification(victim ? `Used ${labelFor(powerup)} on ${victim.name}.` : `Used ${labelFor(powerup)}.`);
     } catch (err: any) {
       showNotification(err.message || 'Failed to use power-up', true);
     } finally {
       setBusy(false);
+      setPickingTarget(false);
     }
   };
 
+  if (pickingTarget) {
+    return (
+      <Dialog open presentation="sheet" title="Who gets the dart?" onClose={() => setPickingTarget(false)}>
+        <p className="fs-5" style={{ marginBottom: 'var(--sp-3)' }}>
+          The team you pick is frozen in place. Pick carefully, a dart cannot be taken back.
+        </p>
+        {rivals.length === 0 ? (
+          <p className="fs-5">There are no rival teams to target.</p>
+        ) : (
+          <ul className="target-picker">
+            {rivals.map((rival) => (
+              <li key={rival.id}>
+                <button
+                  type="button"
+                  className="target-picker__row"
+                  disabled={busy || rival.finished}
+                  onClick={() => handleUse('nerf', undefined, rival.id)}
+                >
+                  <TeamAvatar teamId={rival.id} name={rival.name} teams={gameState.teams} />
+                  <span className="target-picker__name">{rival.name}</span>
+                  {rival.finished && <span className="target-picker__note">Already finished</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div style={{ marginTop: 'var(--sp-3)' }}>
+          <Button variant="secondary" size="lg" onClick={() => setPickingTarget(false)}>
+            Back to the shop
+          </Button>
+        </div>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open title="🛒 Power-up shop" onClose={onClose} className="dialog--shop">
+    <Dialog open title="Power-up shop" onClose={onClose} className="dialog--shop">
       <div className="shop">
         {notice && (
           <Callout kind={notice.kind === 'error' ? 'curse' : 'power'}>
             <div className="callout__kind">{notice.kind === 'error' ? 'Error' : 'Done'}</div>
-            <p className="fs-4">{notice.kind === 'error' ? '⚠️' : '✓'} {notice.text}</p>
+            <p className="fs-4">{notice.text}</p>
           </Callout>
         )}
 
@@ -131,10 +176,10 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
           <Stat
             className="shop__balance"
             label={lockedOut ? 'Final score' : 'Balance'}
-            value={<><IconCoin /> {coins}</>}
+            value={<><Icon name="coin" /> {coins}</>}
             tone="bright"
           />
-          <Stat label="Inventory" value={inventory.length} hint={inventory.length === 1 ? 'item held' : 'items held'} />
+          <Stat label="Inventory" value={inventory.length} />
         </div>
 
         {/* Curses display inactive for current PoC
@@ -160,8 +205,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
         {owned.length > 0 && (
           <section className="shop__section">
             <div className="shop__section-head">
-              <h3 className="shop__section-title">🎒 Owned power-ups</h3>
-              <span className="shop__count">{inventory.length} held</span>
+              <h3 className="shop__section-title"><Icon name="bag" /> Owned power-ups</h3>
             </div>
             <div className="shop__rows">
               {owned.map(({ id, count }) => {
@@ -174,9 +218,9 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
                       <span className="shop__row-name">{labelFor(id)}</span>
                       <span className="shop__row-note">
                         {lockedOut
-                          ? 'Your race is over'
+                          ? 'Race over'
                           : unusable
-                            ? 'Nothing to skip right now'
+                            ? 'No challenge here'
                             : CATALOG_BY_ID.get(id)?.short ?? 'Ready'}
                       </span>
                     </span>
@@ -184,7 +228,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
                     <Button
                       variant="secondary"
                       size="sm"
-                      icon="⚡"
+                      icon={<Icon name="powerup" />}
                       disabled={busy || unusable}
                       onClick={() => handleUse(id)}
                     >
@@ -201,20 +245,20 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
             grid under a "0/0 affordable" heading is worse than no section. */}
         {lockedOut ? (
           <Empty
-            icon="🏁"
-            title="Your score is settled"
-            description="You have crossed the finish line. Your coins are your final score now — nothing left to spend them on."
+            icon={<Icon name="flag" />}
+            title="Score locked"
+            description="Your coins are your final score."
           />
         ) : catalog.length === 0 ? (
           <Empty
-            icon="🛒"
+            icon={<Icon name="cart" />}
             title="Nothing to sell you"
-            description="Every item in this game acts on a rival team, and you are running alone."
+            description="Every item targets a rival."
           />
         ) : (
         <section className="shop__section">
           <div className="shop__section-head">
-            <h3 className="shop__section-title">🛒 Available items</h3>
+            <h3 className="shop__section-title"><Icon name="cart" /> Available items</h3>
             <span className="shop__count">
               {catalog.filter((p) => coins >= p.cost).length}/{catalog.length} affordable
             </span>
@@ -226,7 +270,7 @@ export const ShopPanel: React.FC<ShopPanelProps> = ({ session, gameState, gating
                 <article key={p.id} className={`shop-item${canAfford ? '' : ' shop-item--locked'}`}>
                   <div className="shop-item__head">
                     <h4 className="shop-item__name">{p.name}</h4>
-                    <Chip kind={canAfford ? 'power' : 'veto'}><IconCoin /> {p.cost}</Chip>
+                    <Chip kind={canAfford ? 'power' : 'veto'}><Icon name="coin" /> {p.cost}</Chip>
                   </div>
                   <p className="shop-item__desc">{p.desc}</p>
                   <div className="shop-item__foot">

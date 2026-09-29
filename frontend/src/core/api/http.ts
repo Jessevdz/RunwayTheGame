@@ -162,7 +162,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   if (!res.ok) {
     const message = await errorMessage(res);
     // Feed the bug reporter, so a report says which call failed and how.
-    recordDiagnostic('request', `${res.status} ${method} ${path} — ${message}`);
+    recordDiagnostic('request', `${res.status} ${method} ${path}: ${message}`);
     reportRequestFailure(path, method, res.status);
     throw new ApiError(res.status, message);
   }

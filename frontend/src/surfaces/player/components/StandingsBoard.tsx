@@ -1,8 +1,8 @@
 import React from 'react';
 import { type GameState, type RaceStanding } from '../../../core/projection/projectionStore';
-import { slotColor, getNeutralColor } from '../../../core/team/palette';
-import { Board, IconCoin, type BoardColumn } from '@ds';
+import { Board, Icon, type BoardColumn } from '@ds';
 import { ordinal } from '../consoleFormat';
+import { TeamAvatar } from './TeamAvatar';
 
 interface StandingsBoardProps {
   gameState: GameState;
@@ -29,11 +29,9 @@ export const StandingsBoard: React.FC<StandingsBoardProps> = ({ gameState, teamI
       header: 'Team',
       who: true,
       render: (row) => {
-        const info = gameState.teams[row.teamId];
-        const color = info ? slotColor(info.slotIndex).color : getNeutralColor().color;
         return (
           <>
-            <span className="player-board__dot" style={{ backgroundColor: color }} />
+            <TeamAvatar teamId={row.teamId} name={row.teamName} teams={gameState.teams} size="sm" />
             <span className="player-board__name">{row.teamName}</span>
             {/* Your own row, said in a word. Rank 1 already marks the
                 leader, so Board's LEADING flag would only repeat it. */}
@@ -49,7 +47,7 @@ export const StandingsBoard: React.FC<StandingsBoardProps> = ({ gameState, teamI
             header: 'Coins',
             numeric: true,
             render: (row: StandingRow) => row.coinsVisible
-              ? <><IconCoin /> {row.coins}</>
+              ? <><Icon name="coin" /> {row.coins}</>
               : <span aria-label="Coin balance hidden">Hidden</span>
           },
           {

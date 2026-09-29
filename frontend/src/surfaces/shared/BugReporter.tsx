@@ -5,7 +5,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Dialog, Button, Input, Textarea, Select, Notice } from '@ds';
+import { Dialog, Button, Input, Textarea, Select, Notice, Icon } from '@ds';
 import { createBugReport } from '../../core/api/client';
 import type { BugSeverity, BugReportContext } from '../../core/api/client';
 import { getOrCreateVoterId } from '../../core/game/voterSession';
@@ -68,7 +68,7 @@ export const BugReporter: React.FC = () => {
   const handleSubmit = async () => {
     const trimmed = summary.trim();
     if (trimmed.length < 3) {
-      setError('Tell us what went wrong, in a few words at least.');
+      setError('Describe the problem.');
       return;
     }
     setSubmitting(true);
@@ -115,12 +115,12 @@ export const BugReporter: React.FC = () => {
         aria-label="Report a bug"
         title="Report a bug (Ctrl+Alt+B, or shake)"
       >
-        <span aria-hidden="true">🐞</span>
+        <span aria-hidden="true"><Icon name="bug" /></span>
       </button>
 
       <Dialog open={open} title="Report a bug" onClose={close}>
         {sent ? (
-          <Notice kind="info">Sent. Thanks — that genuinely helps.</Notice>
+          <Notice kind="info">Sent. Thanks!</Notice>
         ) : (
           <div className="bug-report-form">
             {error && <Notice kind="stop">{error}</Notice>}
@@ -145,9 +145,9 @@ export const BugReporter: React.FC = () => {
               value={severity}
               onChange={(e) => setSeverity(e.target.value as BugSeverity)}
             >
-              <option value="BLOCKER">Blocker — I cannot keep playing</option>
-              <option value="NORMAL">Normal — it is wrong but I worked around it</option>
-              <option value="COSMETIC">Cosmetic — it just looks off</option>
+              <option value="BLOCKER">Blocker: I can't keep playing</option>
+              <option value="NORMAL">Normal: wrong, but I worked around it</option>
+              <option value="COSMETIC">Cosmetic: looks off</option>
             </Select>
 
             <div className="bug-report-form__context">

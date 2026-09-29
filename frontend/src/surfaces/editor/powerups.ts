@@ -74,7 +74,7 @@ export const DEFAULT_POWERUPS: PowerupDraft[] = [
     name: 'Nerf Dart',
     description: 'Freeze the opponent team, halting their progress.',
     cost: 10,
-    duration_s: 1800,
+    duration_s: 300,
     effect: 'nerf'
   },
   /* Inactive for current PoC
@@ -92,7 +92,7 @@ export const DEFAULT_POWERUPS: PowerupDraft[] = [
     name: 'Tracker Off',
     description: 'Hide your map position dot from opponents.',
     cost: 25,
-    duration_s: 2700,
+    duration_s: 600,
     effect: 'tracker_off'
   },
   /* Inactive for current PoC

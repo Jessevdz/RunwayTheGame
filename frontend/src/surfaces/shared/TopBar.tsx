@@ -1,7 +1,8 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTheme, IconButton, LinkButton, IconBook } from '@ds';
+import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useTheme, IconButton, LinkButton, Icon, BrandMark, Dialog } from '@ds';
 import { docsUrl } from '../../core/docs';
+import { isImmersiveRoute } from '../../core/ui/immersiveRoutes';
 
 export interface TopBarNavItem {
   id: string;
@@ -19,7 +20,10 @@ export interface TopBarProps {
   /** Primary destinations, shown inline beside the wordmark on desktop. Surfaces
       that carry their nav here render no Rail — one header, one nav. */
   navItems?: TopBarNavItem[];
+  /** Secondary destinations shown behind a menu button on phones. */
+  menuItems?: TopBarNavItem[];
   actions?: React.ReactNode;
+  /** The docs and theme buttons are always hidden on lobby and race routes. */
   showDocsLink?: boolean;
   showThemeToggle?: boolean;
   className?: string;
@@ -31,6 +35,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   subtitle,
   onTitleClick,
   navItems,
+  menuItems,
   actions,
   showDocsLink = true,
   showThemeToggle = true,
@@ -39,6 +44,11 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const immersive = isImmersiveRoute(pathname);
+  const docsVisible = showDocsLink && !immersive;
+  const themeVisible = showThemeToggle && !immersive;
 
   const handleTitleClick = () => {
     if (onTitleClick) {
@@ -51,7 +61,16 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header className={`topbar ${className}`.trim()} style={style}>
       <div className="topbar__lead">
-        {title ? (
+        {title === undefined ? (
+          <button
+            type="button"
+            className="topbar__brand-btn"
+            onClick={handleTitleClick}
+            aria-label="Go to landing page"
+          >
+            <BrandMark />
+          </button>
+        ) : title ? (
           <button
             type="button"
             className="topbar__brand-btn"
@@ -86,7 +105,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       )}
 
       <div className="topbar__actions no-scrollbar">
-        {showDocsLink && (
+        {docsVisible && (
           <LinkButton
             href={docsUrl()}
             variant="ghost"
@@ -95,21 +114,56 @@ export const TopBar: React.FC<TopBarProps> = ({
             title="Documentation"
             aria-label="Documentation"
           >
-            <IconBook />
+            <Icon name="book" />
           </LinkButton>
         )}
         {actions}
-        {showThemeToggle && (
+        {themeVisible && (
           <IconButton
-            icon={theme === 'night' ? '🌙' : '☀️'}
+            icon={<Icon name={theme === 'night' ? 'moon' : 'sun'} />}
             label="Toggle theme"
             variant="ghost"
             size="sm"
             onClick={toggleTheme}
-            style={{ minWidth: '2.25rem', paddingInline: 'var(--sp-2)' }}
           />
         )}
+        {menuItems && menuItems.length > 0 && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--icon topbar__menu-btn"
+            aria-label="Menu"
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+          >
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
       </div>
+
+      {menuItems && menuItems.length > 0 && (
+        <Dialog open={menuOpen} presentation="sheet" title="Menu" onClose={() => setMenuOpen(false)}>
+          <nav className="topbar-menu" aria-label="More destinations">
+            {menuItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`topbar-menu__item ${item.active ? 'active' : ''}`.trim()}
+                aria-current={item.active ? 'page' : undefined}
+                onClick={() => {
+                  setMenuOpen(false);
+                  item.onClick?.();
+                }}
+              >
+                {item.icon && <span aria-hidden="true">{item.icon}</span>}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </Dialog>
+      )}
     </header>
   );
 };

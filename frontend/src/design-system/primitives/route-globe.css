@@ -1,0 +1,241 @@
+@layer components {
+  /* Route globe mark styling. */
+  .route-globe {
+    display: block;
+    width: min(9rem, 36vw);
+    margin-inline: auto;
+    overflow: visible;
+  }
+
+  @media (min-width: 48rem) {
+    .route-globe {
+      width: 15rem;
+    }
+  }
+
+  /* Orbit variant sizing for landing hero. */
+  .route-globe--orbit {
+    --spin-dur: 32s;
+
+    width: min(10rem, 58vw);
+  }
+
+  @media (min-width: 48rem) {
+    .route-globe--orbit {
+      width: 23rem;
+    }
+  }
+
+  /* Globe sphere wireframe with fixed hairline stroke. */
+  .route-globe__sphere {
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .route-globe__band {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+  }
+
+  .route-globe__waypoint {
+    fill: var(--surface);
+    stroke-width: 4;
+  }
+
+  /* Orbit ring line styling for route globe mark. */
+  .route-globe__orbit-far {
+    fill: none;
+    stroke-width: 8;
+    opacity: .36;
+  }
+
+  /* Outer limb border for the orbit globe. */
+  .route-globe__limb {
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* Inner latitude and meridian wireframe lines. */
+  .route-globe__graticule {
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    opacity: .4;
+  }
+
+  /* Spinning meridian animation via horizontal scaling. */
+  .route-globe__meridian {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: globe-spin var(--spin-dur) linear infinite;
+    animation-delay: calc(var(--spin-dur) * var(--phase));
+  }
+
+  @keyframes globe-spin {
+    0% {
+      transform: scaleX(1);
+    }
+
+    12.5% {
+      transform: scaleX(.707);
+    }
+
+    25% {
+      transform: scaleX(.001);
+    }
+
+    37.5% {
+      transform: scaleX(-.707);
+    }
+
+    50% {
+      transform: scaleX(-1);
+    }
+
+    62.5% {
+      transform: scaleX(-.707);
+    }
+
+    75% {
+      transform: scaleX(.001);
+    }
+
+    87.5% {
+      transform: scaleX(.707);
+    }
+
+    100% {
+      transform: scaleX(1);
+    }
+  }
+
+  /* Racers hold until the lane under them has finished drawing. */
+  .route-globe__racers {
+    opacity: 0;
+    animation: waypoint-in var(--dur-4) var(--ease-premium) 900ms forwards;
+  }
+
+  /* Racer animation along orbit path. */
+  .route-globe__racer {
+    offset-rotate: 0deg;
+    animation:
+      racer-run var(--dur) linear infinite,
+      racer-depth var(--dur) linear infinite;
+    animation-delay: calc(var(--dur) * var(--phase));
+  }
+
+  .route-globe__racer-glow {
+    opacity: .3;
+  }
+
+  @keyframes racer-run {
+    from {
+      offset-distance: 0%;
+    }
+
+    to {
+      offset-distance: 100%;
+    }
+  }
+
+  /* Depth fading for racers travelling behind the globe. */
+  @keyframes racer-depth {
+    0% {
+      opacity: .26;
+    }
+
+    6% {
+      opacity: 1;
+    }
+
+    44% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: .26;
+    }
+
+    100% {
+      opacity: .26;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* Reduced motion fallbacks for globe and racer animations. */
+    .route-globe__meridian {
+      animation: none;
+      transform: scaleX(var(--rest));
+    }
+
+    .route-globe__racer {
+      animation: none;
+      offset-distance: var(--park);
+      opacity: 1;
+    }
+
+    /* Reset entrance delay when motion is reduced. */
+    .route-globe__racers {
+      animation-delay: 0s;
+    }
+  }
+
+  /* Network connection link line styles. */
+  .route-globe__link {
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 2;
+    stroke-dasharray: 4 7;
+    stroke-linecap: round;
+  }
+
+  /* Waypoints land after the bands that carry them have finished drawing. */
+  .route-globe__waypoints--in>* {
+    opacity: 0;
+    animation: waypoint-in var(--dur-3) var(--ease-premium) forwards;
+  }
+
+  .route-globe__waypoints--in>*:nth-child(1) {
+    animation-delay: 360ms;
+  }
+
+  .route-globe__waypoints--in>*:nth-child(2) {
+    animation-delay: 520ms;
+  }
+
+  .route-globe__waypoints--in>*:nth-child(3) {
+    animation-delay: 640ms;
+  }
+
+  .route-globe__waypoints--in>*:nth-child(4) {
+    animation-delay: 760ms;
+  }
+
+  .route-globe__waypoints--in>*:nth-child(5) {
+    animation-delay: 900ms;
+  }
+
+  /* The network variant carries a sixth waypoint before its finish hex. */
+  .route-globe__waypoints--in>*:nth-child(6) {
+    animation-delay: 1020ms;
+  }
+
+  @keyframes waypoint-in {
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* Show all waypoints immediately when motion is reduced. */
+    .route-globe__waypoints--in>* {
+      animation-delay: 0s;
+    }
+  }
+}

@@ -30,29 +30,29 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   const title = isWaypoint ? 'DELETE WAYPOINT' : 'REMOVE ROAD SECTION';
 
   return (
-    <Dialog open title={`🗑️ ${title}`} onClose={onCancel}>
+    <Dialog open title={title} onClose={onCancel}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
         {isWaypoint ? (
           <div>
-            <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: '1rem', fontWeight: 600 }}>
+            <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: 'var(--fs-6)', fontWeight: 600 }}>
               Are you sure you want to delete <strong>{target.name}</strong>?
             </p>
             {target.connectedRoadCount > 0 ? (
-              <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: '0.9rem' }}>
+              <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: 'var(--fs-4)' }}>
                 This will also remove <strong>{target.connectedRoadCount}</strong> connected road section(s). This action cannot be undone.
               </p>
             ) : (
-              <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: '0.9rem' }}>
+              <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: 'var(--fs-4)' }}>
                 This action cannot be undone.
               </p>
             )}
           </div>
         ) : (
           <div>
-            <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: '1rem', fontWeight: 600 }}>
+            <p style={{ margin: '0 0 var(--sp-2) 0', fontSize: 'var(--fs-6)', fontWeight: 600 }}>
               Are you sure you want to remove the road section between <strong>{target.waypointAName}</strong> and <strong>{target.waypointBName}</strong>?
             </p>
-            <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: '0.9rem' }}>
+            <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: 'var(--fs-4)' }}>
               This action cannot be undone.
             </p>
           </div>

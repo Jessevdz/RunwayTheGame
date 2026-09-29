@@ -1,0 +1,13 @@
+@layer surfaces {
+  /* Race shell overrides: map chips keep a full-size tap target on phones. */
+  .map-stage .map-chip {
+    min-height: var(--min-tap-target);
+    width: var(--min-tap-target);
+  }
+
+  @media (min-width: 48rem) {
+    .map-stage .map-chip {
+      width: auto;
+    }
+  }
+}

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import type * as maplibregl from 'maplibre-gl';
 import { ROAD_HIT_LAYERS } from './layers';
+
+/** Half-width in screen pixels of the box around a tap that still counts as touching a waypoint. */
+const TAP_HIT_RADIUS = 18;
 import type { DraftMapWaypoint, DraggedWaypointPos, EditorTool } from './types';
 
 // Dispatches custom window event with detail payload.
@@ -31,6 +34,8 @@ export interface MapInteractionOptions {
   onDeleteWaypoint?: (waypointId: string) => void;
   onDeleteRoad?: (roadId: string) => void;
   onMapClick?: (lat: number, lon: number) => void;
+  /** Race mode only: a tap on a waypoint marker picks it as the destination. */
+  onPickWaypoint?: (waypointId: string) => void;
 }
 
 export interface MapInteractions {
@@ -55,7 +60,8 @@ export function useMapInteractions(options: MapInteractionOptions): MapInteracti
     onSelectWaypoint,
     onDeleteWaypoint,
     onDeleteRoad,
-    onMapClick
+    onMapClick,
+    onPickWaypoint
   } = options;
 
   const [roadStartWaypointId, setRoadStartWaypointId] = useState<string | null>(null);
@@ -134,6 +140,18 @@ export function useMapInteractions(options: MapInteractionOptions): MapInteracti
     if (!map) return;
 
     if (!editorMode) {
+      if (onPickWaypoint) {
+        const { x, y } = e.point;
+        const hits = map.queryRenderedFeatures(
+          [
+            [x - TAP_HIT_RADIUS, y - TAP_HIT_RADIUS],
+            [x + TAP_HIT_RADIUS, y + TAP_HIT_RADIUS]
+          ],
+          { layers: ['waypoints-layer-outer'] }
+        );
+        const id = hits[0]?.properties?.id;
+        if (typeof id === 'string') onPickWaypoint(id);
+      }
       const { lat, lng } = e.lngLat;
       onMapClick?.(lat, lng);
       return;
@@ -172,6 +190,7 @@ export function useMapInteractions(options: MapInteractionOptions): MapInteracti
     onAddWaypoint,
     onSelectWaypoint,
     onMapClick,
+    onPickWaypoint,
     handleDeleteClick,
     handleWaypointHitClick
   ]);

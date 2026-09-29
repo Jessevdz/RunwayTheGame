@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Button } from '@ds';
+import { Card, Button, Icon, type IconName } from '@ds';
 
 interface StartRaceOptionsProps {
   onHostTeamRace: () => void;
@@ -9,10 +9,7 @@ interface StartRaceOptionsProps {
 interface Path {
   title: string;
   blurb: string;
-  /** Exactly what happens after the button, in order — the point of this
-   *  section is that neither path is a mystery before it is picked. */
-  steps: string[];
-  action: { label: string; icon: string; variant: 'primary' | 'secondary' };
+  action: { label: string; icon: IconName; variant: 'primary' | 'secondary' };
   onSelect: (props: StartRaceOptionsProps) => void;
 }
 
@@ -21,24 +18,14 @@ interface Path {
 const PATHS: Path[] = [
   {
     title: 'TEAM RACE',
-    blurb: 'Two or more teams race the same map at once. You hold the host tools: you start it and you settle disputes.',
-    steps: [
-      'Pick a map.',
-      'Share the race code or invite QR from the lobby.',
-      'Start the race once every team has joined.',
-    ],
-    action: { label: 'Host a team race', icon: '🏁', variant: 'primary' },
+    blurb: 'Teams race the same map. You host: start the race and settle disputes.',
+    action: { label: 'Host a team race', icon: 'flag', variant: 'primary' },
     onSelect: (p) => p.onHostTeamRace(),
   },
   {
     title: 'SOLO RACE',
     blurb: 'Race the clock for the leaderboard, or walk it casually.',
-    steps: [
-      'Pick time trial or casual.',
-      'Pick a map.',
-      'Start right away.',
-    ],
-    action: { label: 'Start a solo race', icon: '🥾', variant: 'secondary' },
+    action: { label: 'Start a solo race', icon: 'route', variant: 'secondary' },
     onSelect: (p) => p.onStartSoloRun(),
   },
 ];
@@ -49,7 +36,7 @@ export const StartRaceOptions: React.FC<StartRaceOptionsProps> = (props) => {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(18rem, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(18rem, 100%), 1fr))',
         gap: 'var(--sp-5)',
       }}
     >
@@ -67,23 +54,6 @@ export const StartRaceOptions: React.FC<StartRaceOptionsProps> = (props) => {
             {path.blurb}
           </p>
 
-          {/* Numbered by the list, not by hand: the count is the journey. */}
-          <ol
-            style={{
-              margin: 0,
-              paddingLeft: 'var(--sp-5)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--sp-2)',
-            }}
-          >
-            {path.steps.map((step) => (
-              <li key={step} className="fs-5" style={{ color: 'var(--ink)' }}>
-                {step}
-              </li>
-            ))}
-          </ol>
-
           {/* Pushed to the bottom edge so both cards' buttons line up however
               differently the copy wraps. Card carries no onClick by contract —
               this button is the whole click target. */}
@@ -91,7 +61,7 @@ export const StartRaceOptions: React.FC<StartRaceOptionsProps> = (props) => {
             <Button
               variant={path.action.variant}
               size="lg"
-              icon={path.action.icon}
+              icon={<Icon name={path.action.icon} />}
               onClick={() => path.onSelect(props)}
               style={{ width: '100%' }}
             >

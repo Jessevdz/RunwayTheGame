@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { useSurfaceAnalytics } from '../core/analytics/useSurfaceAnalytics';
 import { useDocumentMeta } from '../core/seo/useDocumentMeta';
 import { BugReporter } from '../surfaces/shared/BugReporter';
+import { RouteFallback } from './RouteFallback';
 
 const LandingPage = React.lazy(() =>
   import('../surfaces/landing/LandingPage').then((m) => ({ default: m.LandingPage }))
@@ -58,7 +59,7 @@ export const AppRoutes: React.FC = () => {
 
   return (
     <>
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/gallery" element={<GalleryPage />} />

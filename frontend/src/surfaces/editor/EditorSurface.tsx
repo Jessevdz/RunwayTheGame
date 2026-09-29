@@ -30,6 +30,8 @@ import { useEditorShortcuts } from './useEditorShortcuts';
 import { useMapEditorEvents } from './useMapEditorEvents';
 import { useWaypointEditing } from './useWaypointEditing';
 import { validationIssueCode } from './validationCodes';
+import './editor.css';
+import './editor-pane.css';
 
 interface EditorSurfaceProps {
   onStateUpdate: (data: {

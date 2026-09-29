@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { type GameState } from '../../../core/projection/projectionStore';
 import { type TeamSession } from '../../../core/game/teamSession';
-import { Button } from '@ds';
+import { Button, Icon } from '@ds';
 import { SoloFinish } from '../SoloFinish';
 import { StandingsBoard } from './StandingsBoard';
 
@@ -54,15 +54,12 @@ export const ConsoleMore: React.FC<ConsoleMoreProps> = ({
       {ended && (
         <section className="player-more__sec">
           <h3 className="player-more__title">Race report</h3>
-          <p className="player-more__note">
-            Every photo taken in this race, the numbers behind the result, and the button that deletes the
-            lot. It stays available for 30 days, then goes on its own.
-          </p>
+          <p className="player-more__note">Photos and stats from this race. Deleted after 30 days.</p>
           <div className="player-more__row">
             <Button
               variant="secondary"
               size="sm"
-              icon="📸"
+              icon={<Icon name="camera" />}
               onClick={() => navigate(`/race/${session.gameId}/report`)}
             >
               Open the report
@@ -83,24 +80,15 @@ export const ConsoleMore: React.FC<ConsoleMoreProps> = ({
               total={total}
             />
           ) : (
-            <p className="player-more__note">
-              No standings yet — teams appear as they reach waypoints.
-            </p>
+            <p className="player-more__note">No standings yet.</p>
           )}
         </section>
       )}
 
       <section className="player-more__sec">
         <div className="player-more__header">
-          <div>
-            <h3 className="player-more__title">{solo ? 'Run log' : 'Race log'}</h3>
-            <p className="player-more__note">
-              {gameState.logs.length === 0
-                ? 'No events recorded yet'
-                : `${gameState.logs.length} event${gameState.logs.length === 1 ? '' : 's'} recorded`}
-            </p>
-          </div>
-          <Button variant="secondary" size="sm" icon="📜" onClick={onOpenLog}>
+          <h3 className="player-more__title">{solo ? 'Run log' : 'Race log'}</h3>
+          <Button variant="secondary" size="sm" icon={<Icon name="log" />} onClick={onOpenLog}>
             Open {solo ? 'run log' : 'race log'}
           </Button>
         </div>
@@ -110,13 +98,11 @@ export const ConsoleMore: React.FC<ConsoleMoreProps> = ({
       {solo ? (
         <section className="player-more__sec">
           <h3 className="player-more__title">This run</h3>
-          <p className="player-more__note">
-            {gameState.winner || ended
-              ? 'This run is over. You can close the page — it stays in My Races.'
-              : timeTrial
-                ? 'Ending early stops the clock without a finish, so there is no time to post.'
-                : 'Ending early just stops the walk. Nothing is recorded either way.'}
-          </p>
+          {(gameState.winner || ended || timeTrial) && (
+            <p className="player-more__note">
+              {gameState.winner || ended ? 'Run over. Find it in My Races.' : 'Ending early posts no time.'}
+            </p>
+          )}
           <div className="player-more__row">
             {onAskEndRun && !gameState.winner && !ended && (
               <Button variant="secondary" size="sm" onClick={onAskEndRun}>
@@ -131,13 +117,8 @@ export const ConsoleMore: React.FC<ConsoleMoreProps> = ({
       ) : (
         <section className="player-more__sec">
           <div className="player-more__header">
-            <div>
-              <h3 className="player-more__title">Your Squad</h3>
-              <p className="player-more__note">
-                Invite teammates or share your team code
-              </p>
-            </div>
-            <Button variant="secondary" size="sm" icon="🔗" onClick={onOpenInvite}>
+            <h3 className="player-more__title">Your Squad</h3>
+            <Button variant="secondary" size="sm" icon={<Icon name="link" />} onClick={onOpenInvite}>
               Invite
             </Button>
           </div>

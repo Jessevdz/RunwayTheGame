@@ -14,6 +14,9 @@ export function resolveBasemap(style: BasemapStyle, theme: string): EffectiveBas
   return theme === 'night' ? 'dark' : 'default';
 }
 
+/** The worker fetches glyphs with no page URL to resolve against, so the URL has to be absolute. */
+const glyphOrigin = (): string => (typeof window === 'undefined' ? '' : window.location.origin);
+
 /** Creates MapLibre style specification preloading default, dark, and satellite tile sources. */
 export function createBasemapStyleSpec(
   cartoApiKey: string = (import.meta.env.VITE_CARTO_API_KEY as string) || ''
@@ -22,7 +25,7 @@ export function createBasemapStyleSpec(
 
   return {
     version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    glyphs: `${glyphOrigin()}/glyphs/{fontstack}/{range}.pbf`,
     sources: {
       'carto-voyager': {
         type: 'raster',

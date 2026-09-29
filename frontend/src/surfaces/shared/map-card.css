@@ -1,0 +1,92 @@
+@layer components {
+  /* Map selection picker card component. */
+  .map-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .map-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .map-card__date {
+    color: var(--ink-muted);
+  }
+
+  .map-card__title {
+    margin: 0;
+    color: var(--ink-strong);
+  }
+
+  .map-card__rule {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    color: var(--ink-muted);
+  }
+
+  .map-card__actions {
+    display: flex;
+    gap: var(--sp-2);
+    margin-top: var(--sp-2);
+  }
+
+  .map-card__actions .btn {
+    flex: 1 1 0;
+  }
+
+  @media (width < 48rem) {
+    /* Compact mobile card layout with square thumbnail. */
+    .map-card.card--pad {
+      padding: var(--sp-4);
+    }
+
+    .map-card {
+      display: grid;
+      grid-template-columns: 5.5rem 1fr;
+      grid-template-areas:
+        "thumb head"
+      "thumb title"
+      "thumb rule"
+      "thumb meta"
+      "actions actions";
+      align-content: start;
+      column-gap: var(--sp-3);
+      row-gap: var(--sp-1);
+    }
+
+    .map-card__head {
+      grid-area: head;
+    }
+
+    /* Hide redundant status badge on mobile viewports. */
+    .map-card__head .badge {
+      display: none;
+    }
+
+    .map-card__title {
+      grid-area: title;
+    }
+
+    .map-card__thumb {
+      grid-area: thumb;
+      align-self: start;
+    }
+
+    .map-card__rule {
+      grid-area: rule;
+    }
+
+    .map-card__meta {
+      grid-area: meta;
+    }
+
+    .map-card__actions {
+      grid-area: actions;
+      margin-top: var(--sp-1);
+    }
+  }
+}

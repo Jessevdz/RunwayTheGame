@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { PowerupWorkshop } from './PowerupWorkshop';
 import { formatDuration } from './powerups';
 import type { PowerupDraft } from './powerups';
-import { Button } from '@ds';
-import { IconClock, IconCoin, IconPowerup } from './components/EditorIcons';
+import { Button, Icon } from '@ds';
 
 export type { PowerupDraft, PowerupEffect } from './powerups';
 
@@ -26,7 +25,7 @@ export const PowerupEditor: React.FC<PowerupEditorProps> = ({
     <div className="deck-summary">
       <span className="t-label">POWER-UPS</span>
       <p className="deck-summary__hint">
-        Configure the active power-ups players can buy from the shop (coin costs and active durations).
+        Set each power-up's coin cost and duration.
       </p>
 
       <div className="deck-summary__decks">
@@ -37,7 +36,7 @@ export const PowerupEditor: React.FC<PowerupEditorProps> = ({
         >
           <div className="deck-summary__deck-head">
             <span className="deck-summary__deck-name">
-              <IconPowerup />
+              <Icon name="powerup" />
               <span>Power-up Catalog</span>
             </span>
             <span className="deck-summary__count">{powerups.length}</span>
@@ -45,8 +44,8 @@ export const PowerupEditor: React.FC<PowerupEditorProps> = ({
           <ul className="deck-summary__preview">
             {preview.map((p) => (
               <li key={p.id}>
-                {p.name || 'Untitled power-up'} · <IconCoin /> {p.cost} ·{' '}
-                <IconClock /> {formatDuration(p.duration_s)}
+                {p.name || 'Untitled power-up'} · <Icon name="coin" /> {p.cost} ·{' '}
+                <Icon name="clock" /> {formatDuration(p.duration_s)}
               </li>
             ))}
             {powerups.length > preview.length && (
@@ -60,7 +59,7 @@ export const PowerupEditor: React.FC<PowerupEditorProps> = ({
 
       <Button
         variant="primary"
-        icon={<IconPowerup />}
+        icon={<Icon name="powerup" />}
         className="deck-summary__open"
         onClick={() => setShowWorkshop(true)}
       >

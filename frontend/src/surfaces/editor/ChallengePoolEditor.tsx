@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { analytics } from '../../core/analytics/analyticsClient';
 import { firstTime } from '../../core/analytics/coalesce';
-import { Select, Input, Chip } from '@ds';
-import { IconCoin } from './components/EditorIcons';
+import { Select, Input, Chip, Icon } from '@ds';
 
 export interface ChallengeDraft {
   id?: string;
@@ -152,8 +151,8 @@ export const ChallengePoolEditor: React.FC<ChallengePoolEditorProps> = ({
       <div className="empty">
         <p className="fs-4">
           {waypoints.length === 0
-            ? 'No map waypoints available. Add waypoints on the elements tab first.'
-            : 'The only waypoint on this map is the finish, which has no challenge. Add another waypoint on the elements tab.'}
+            ? 'No waypoints yet. Add some on the Elements tab.'
+            : 'The finish has no challenge. Add another waypoint on the Elements tab.'}
         </p>
       </div>
     );
@@ -263,7 +262,7 @@ export const ChallengePoolEditor: React.FC<ChallengePoolEditorProps> = ({
         <div className="field">
           <div className="challenge-pool-editor__header">
             <label className="fs-label">COIN REWARD</label>
-            <Chip kind="power"><IconCoin /> {challenge.coin_reward} Coins</Chip>
+            <Chip kind="power"><Icon name="coin" /> {challenge.coin_reward} Coins</Chip>
           </div>
           <input
             type="range"

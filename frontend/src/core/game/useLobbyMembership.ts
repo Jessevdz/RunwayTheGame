@@ -23,13 +23,13 @@ export function useLobbyMembership(session: TeamSession | null) {
         return await work();
       } catch (err: any) {
         if (err?.status === 403) {
-          setError('The race has started, so this can no longer be changed.');
+          setError('The race has started. This can no longer be changed.');
         } else if (err?.status === 409) {
           setError(fallback);
         } else if (err?.status === 404) {
           setError('That squad is no longer in this race.');
         } else {
-          setError(err?.message || 'That did not go through — check your signal and try again.');
+          setError(err?.message || 'That failed. Check your signal and try again.');
         }
         return null;
       } finally {

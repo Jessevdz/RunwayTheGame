@@ -3,8 +3,7 @@ import { analytics } from '../../core/analytics/analyticsClient';
 import { DeckWorkshop } from './DeckWorkshop';
 import { parseCard, DECK_META } from './deckCards';
 import type { CardDraft, DeckKind } from './deckCards';
-import { Button, Empty } from '@ds';
-import { IconDeck } from './components/EditorIcons';
+import { Button, Empty, Icon } from '@ds';
 
 export type { CardDraft, DeckKind } from './deckCards';
 
@@ -42,17 +41,16 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
     <div className="deck-summary">
       <span className="t-label">CARD DECKS</span>
       <p className="deck-summary__hint">
-        Build the roadblock and curse decks players draw from. The workshop opens them as a card
-        grid.
+        Roadblock and curse decks players draw from.
       </p>
 
       {total === 0 ? (
         <Empty
-          icon={<IconDeck />}
+          icon={<Icon name="deck" />}
           title="No cards yet"
-          description="Both decks are empty. Open the workshop to start from the shipped sets or write your own."
+          description="Start from the default sets or write your own."
           action={
-            <Button variant="primary" icon={<IconDeck />} onClick={() => openWorkshop('roadblock')}>
+            <Button variant="primary" icon={<Icon name="deck" />} onClick={() => openWorkshop('roadblock')}>
               Open Deck Workshop
             </Button>
           }
@@ -72,7 +70,7 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
                 >
                   <div className="deck-summary__deck-head">
                     <span className="deck-summary__deck-name">
-                      <meta.Icon />
+                      <Icon name={meta.icon} />
                       <span>{meta.label}</span>
                     </span>
                     <span className="deck-summary__count">{cards.length}</span>
@@ -89,7 +87,7 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
                     </ul>
                   ) : (
                     <ul className="deck-summary__preview">
-                      <li className="deck-summary__more">Empty — open to fill it</li>
+                      <li className="deck-summary__more">Empty</li>
                     </ul>
                   )}
                 </button>
@@ -99,7 +97,7 @@ export const DeckEditor: React.FC<DeckEditorProps> = ({
 
           <Button
             variant="primary"
-            icon={<IconDeck />}
+            icon={<Icon name="deck" />}
             className="deck-summary__open"
             onClick={() => openWorkshop('roadblock')}
           >

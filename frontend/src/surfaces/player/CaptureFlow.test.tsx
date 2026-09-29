@@ -146,7 +146,7 @@ describe('CaptureFlow', () => {
 
     // In trust mode, status is 'pass', should display approved verdict immediately
     await waitFor(() => {
-      expect(screen.getByText(/verdict: approved/i)).toBeInTheDocument();
+      expect(screen.getByText(/^cleared$/i)).toBeInTheDocument();
     });
   });
 
