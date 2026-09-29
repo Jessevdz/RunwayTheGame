@@ -320,6 +320,18 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
   });
 
   // 6. Waypoint Challenge Validation
+  const waypointHasChallenge = (w: WaypointDraft) => !!((board.challenges && board.challenges[w.id]) || w.challenge);
+  const boardHasChallenges =
+    waypoints.some((w) => !w.isFinish && waypointHasChallenge(w)) || roads.some((r) => !!(r.challenge || r.challenge_id));
+  const playable = waypoints.length > 0 && starts.length === 1 && finishes.length === 1;
+  if (playable && !boardHasChallenges) {
+    errors.push({
+      id: 'warn-waypoint-challenge-missing-board',
+      message: 'No challenges on this board, so teams will only walk between waypoints. Add some in the Challenges tab.',
+      type: 'warning'
+    });
+  }
+
   waypoints.forEach((w) => {
     // Finish line waypoints cannot carry a challenge.
     if (w.isFinish && ((board.challenges && board.challenges[w.id]) || w.challenge)) {
@@ -334,6 +346,7 @@ export function validateBoard(board: BoardDraft): ValidationError[] {
     if (w.isStart || w.isFinish) return; // Start and finish waypoints are exempt from gating challenges.
     const ch = (board.challenges && board.challenges[w.id]) || w.challenge;
     if (!ch) {
+      if (!boardHasChallenges) return;
       errors.push({
         id: `warn-waypoint-challenge-missing-${w.id}`,
         message: `"${w.name}" has no challenge.`,

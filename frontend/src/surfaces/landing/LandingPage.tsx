@@ -228,7 +228,7 @@ export const LandingPage: React.FC = () => {
           Walk between <em className="landing-hero__em">real places</em>, clear photo challenges, and race your friends to the finish.
         </p>
         <p className="fs-6 landing-hero__value">
-          Design a course anywhere on Earth, host it, and play it on foot.
+          Design a course anywhere on Earth.
         </p>
 
         {/* Mobile puts the code field first and desktop puts it last, and that is

@@ -98,6 +98,32 @@ describe('useRaceRoute destination', () => {
   });
 });
 
+describe('useRaceRoute waypoint gate', () => {
+  const standingAt = (id: string, waypoints: Waypoint[], waypointStates = {}) =>
+    ({
+      ...state,
+      waypoints,
+      waypointStates,
+      progress: { 'team-1': { currentWaypointId: id, traversedRoads: [], clearedWaypoints: [], reachedFinish: false } }
+    }) as unknown as GameState;
+
+  it('treats a waypoint without a challenge as cleared so no challenge is offered', () => {
+    const challengeFree = standingAt('b', [wp('a', 51, 4, { isStart: true }), wp('b', 51.009, 4), wp('c', 51, 4.0143)]);
+    const { result } = renderHook(() => useRaceRoute(challengeFree, session, null, noChoice()));
+    expect(result.current.isCurrentWaypointCleared).toBe(true);
+  });
+
+  it('keeps a challenge waypoint gated until the team clears it', () => {
+    const waypoints = [wp('a', 51, 4, { isStart: true }), wp('b', 51.009, 4, { challengeId: 'ch-1' }), wp('c', 51, 4.0143)];
+    const gated = renderHook(() => useRaceRoute(standingAt('b', waypoints), session, null, noChoice()));
+    expect(gated.result.current.isCurrentWaypointCleared).toBe(false);
+
+    const cleared = standingAt('b', waypoints, { b: { clearedBy: { 'team-1': true }, bypassed: {} } });
+    const open = renderHook(() => useRaceRoute(cleared, session, null, noChoice()));
+    expect(open.result.current.isCurrentWaypointCleared).toBe(true);
+  });
+});
+
 describe('useRaceRoute reached count', () => {
   it('counts only the start waypoint at the beginning of a race', () => {
     const { result } = renderHook(() => useRaceRoute(state, session, null, noChoice()));

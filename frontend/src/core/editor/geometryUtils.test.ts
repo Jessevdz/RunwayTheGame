@@ -211,4 +211,42 @@ describe('geometryUtils.ts validateBoard', () => {
     expect(errors.some((e) => e.id === 'err-waypoint-challenge-coins-w-mid')).toBe(true);
     expect(errors.some((e) => e.id === 'err-waypoint-challenge-veto-w-mid')).toBe(true);
   });
+
+  it('raises one board-level warning instead of a per-waypoint list when nothing has a challenge', () => {
+    const board = createValidBoard();
+    delete board.waypoints[1].challenge;
+
+    const missing = validateBoard(board).filter((e) => e.id.startsWith('warn-waypoint-challenge-missing'));
+    expect(missing.map((e) => e.id)).toEqual(['warn-waypoint-challenge-missing-board']);
+  });
+
+  it('warns per waypoint when only some of the board has challenges', () => {
+    const board = createValidBoard();
+    board.waypoints.splice(2, 0, {
+      id: 'w-bare',
+      name: 'Bare',
+      lat: 51.215,
+      lon: 4.415,
+      arrival_radius_m: 25,
+      isStart: false,
+      isFinish: false
+    });
+    board.roads = [
+      { id: 'r1', waypoint_id_a: 'w-start', waypoint_id_b: 'w-mid' },
+      { id: 'r2', waypoint_id_a: 'w-mid', waypoint_id_b: 'w-bare' },
+      { id: 'r3', waypoint_id_a: 'w-bare', waypoint_id_b: 'w-finish' }
+    ];
+
+    const missing = validateBoard(board).filter((e) => e.id.startsWith('warn-waypoint-challenge-missing'));
+    expect(missing.map((e) => e.id)).toEqual(['warn-waypoint-challenge-missing-w-bare']);
+  });
+
+  it('counts a road challenge as the board having challenges', () => {
+    const board = createValidBoard();
+    delete board.waypoints[1].challenge;
+    board.roads[0].challenge = validChallenge;
+
+    const missing = validateBoard(board).filter((e) => e.id === 'warn-waypoint-challenge-missing-board');
+    expect(missing).toHaveLength(0);
+  });
 });

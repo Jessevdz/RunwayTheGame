@@ -126,9 +126,10 @@ export const useRaceRoute = (
   };
 
   const currentWaypointState = currentWaypoint ? gameState.waypointStates[currentWaypoint.id] : null;
-  // Checks if waypoint is cleared or bypassed for team.
+  // A waypoint with no challenge gates nothing, so it counts as cleared on arrival.
   const isCurrentWaypointCleared = currentWaypoint
-    ? !!(
+    ? !currentWaypoint.challengeId ||
+      !!(
         Object.values(currentWaypointState?.clearedBy || {}).some(Boolean) ||
         currentWaypointState?.bypassed?.[session.teamId]
       )
