@@ -218,7 +218,7 @@ func (s *Server) sweepGamesPastDeadline(ctx context.Context) error {
 			if !live {
 				return &commands.CommandResult{ResponseCode: http.StatusOK, ResponseBody: statusResponse{Status: "ended"}}, nil
 			}
-			tag, err := tx.Exec(txCtx, `UPDATE games SET status = 'ended', winner_team_id = NULLIF($1, '') WHERE id = $2 AND status = 'live' AND ends_at <= NOW()`, winner, gameID)
+			tag, err := tx.Exec(txCtx, `UPDATE games SET status = 'ended', winner_team_id = NULLIF($1::text, '')::uuid WHERE id = $2 AND status = 'live' AND ends_at <= NOW()`, winner, gameID)
 			if err != nil {
 				return nil, err
 			}

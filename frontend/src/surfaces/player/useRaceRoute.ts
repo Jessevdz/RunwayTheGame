@@ -134,7 +134,7 @@ export const useRaceRoute = (
       )
     : true;
 
-  const reached = (myProgress?.clearedWaypoints?.length || 0) + 1;
+  const reached = clearedWaypointsSet.size + (currentWaypoint && !clearedWaypointsSet.has(currentWaypoint.id) ? 1 : 0);
   const total = gameState.waypoints.length;
 
   return {

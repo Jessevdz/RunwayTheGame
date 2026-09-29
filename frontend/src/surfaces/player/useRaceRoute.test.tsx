@@ -97,3 +97,45 @@ describe('useRaceRoute destination', () => {
     expect(result.current.destination?.waypoint.id).toBe('c');
   });
 });
+
+describe('useRaceRoute reached count', () => {
+  it('counts only the start waypoint at the beginning of a race', () => {
+    const { result } = renderHook(() => useRaceRoute(state, session, null, noChoice()));
+    expect(result.current.reached).toBe(1);
+    expect(result.current.total).toBe(3);
+  });
+
+  it('counts a challenge-free waypoint once after arriving', () => {
+    const arrived = {
+      ...state,
+      progress: {
+        'team-1': { currentWaypointId: 'b', traversedRoads: [], clearedWaypoints: ['a', 'b'], reachedFinish: false }
+      }
+    } as unknown as GameState;
+    const { result } = renderHook(() => useRaceRoute(arrived, session, null, noChoice()));
+    expect(result.current.reached).toBe(2);
+  });
+
+  it('counts an uncleared challenge waypoint as reached', () => {
+    const challenged = {
+      ...state,
+      waypoints: [wp('a', 51, 4, { isStart: true }), wp('b', 51.009, 4, { challengeId: 'ch-1' }), wp('c', 51, 4.0143)],
+      progress: {
+        'team-1': { currentWaypointId: 'b', traversedRoads: [], clearedWaypoints: ['a'], reachedFinish: false }
+      }
+    } as unknown as GameState;
+    const { result } = renderHook(() => useRaceRoute(challenged, session, null, noChoice()));
+    expect(result.current.reached).toBe(2);
+  });
+
+  it('counts a start waypoint with a challenge as reached before it is cleared', () => {
+    const challengedStart = {
+      ...state,
+      waypoints: [wp('a', 51, 4, { isStart: true, challengeId: 'ch-1' }), wp('b', 51.009, 4), wp('c', 51, 4.0143)],
+      waypointStates: {},
+      progress: { 'team-1': { currentWaypointId: 'a', traversedRoads: [], clearedWaypoints: [], reachedFinish: false } }
+    } as unknown as GameState;
+    const { result } = renderHook(() => useRaceRoute(challengedStart, session, null, noChoice()));
+    expect(result.current.reached).toBe(1);
+  });
+});
