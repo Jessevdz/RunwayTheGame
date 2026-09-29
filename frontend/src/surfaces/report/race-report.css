@@ -369,26 +369,6 @@
     overflow-wrap: anywhere;
   }
 
-  /* Standings scroll sideways on phones while the team column stays pinned. */
-  .race-report__board {
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-  }
-
-  .race-report__board .board {
-    min-width: 28rem;
-  }
-
-  .race-report__board .board th:first-child,
-    .race-report__board .board td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    background: var(--surface);
-    max-width: 11rem;
-    padding-right: var(--sp-3);
-  }
-
   .race-report__place {
     min-width: 2.5rem;
     color: var(--ink-muted);
@@ -411,6 +391,51 @@
   .race-report__board .board td:last-child,
     .race-report__board .board th:last-child {
     padding-right: 0;
+  }
+
+  /* On phones each standing stacks as a card: the team on top, labelled stats beneath. */
+  @media (width < 40rem) {
+    .race-report__board .board thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+
+    .race-report__board .board,
+      .race-report__board .board tbody {
+      display: block;
+    }
+
+    .race-report__board .board tr {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+      gap: var(--sp-2) var(--sp-3);
+      padding: var(--sp-3) 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .race-report__board .board td {
+      padding: 0;
+      border-bottom: 0;
+      min-width: 0;
+      text-align: left;
+    }
+
+    .race-report__board .board td:first-child {
+      grid-column: 1 / -1;
+    }
+
+    .race-report__board .board td[data-label]:not(:first-child)::before {
+      content: attr(data-label);
+      display: block;
+      font-family: var(--font-data);
+      font-size: var(--fs-2);
+      letter-spacing: var(--ls-label);
+      text-transform: uppercase;
+      color: var(--ink-muted);
+    }
   }
 
   .race-report__timeline {

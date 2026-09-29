@@ -44,7 +44,11 @@ export function Board<T>({
         {rows.map((row, i) => (
           <tr key={rowKey(row, i)} data-lead={isLeader?.(row, i) ? 'true' : undefined}>
             {columns.map((col) => (
-              <td key={col.key} className={col.numeric ? 'num' : ''}>
+              <td
+                key={col.key}
+                className={col.numeric ? 'num' : ''}
+                data-label={typeof col.header === 'string' ? col.header : undefined}
+              >
                 {col.who ? <div className="who">{col.render(row)}</div> : col.render(row)}
               </td>
             ))}

@@ -447,7 +447,7 @@ const StandingsBoard: React.FC<{ report: RaceReport; result: RaceResult }> = ({ 
   ];
 
   return (
-    <div className="race-report__board" tabIndex={0} role="region" aria-label="Final standings, scrolls sideways">
+    <div className="race-report__board" role="region" aria-label="Final standings">
       <Board columns={columns} rows={result.ranked} rowKey={(row) => row.teamId} isLeader={(row) => row.place === 1} />
     </div>
   );
