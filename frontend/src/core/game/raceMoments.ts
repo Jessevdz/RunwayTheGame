@@ -14,13 +14,15 @@ export interface CelebrationMoment {
 }
 
 /** Things that happened to or around this team that deserve a short pop-up. */
-export type RivalEventKind = 'nerfed' | 'rival_finished' | 'rival_won' | 'countdown_started';
+export type RivalEventKind = 'nerfed' | 'rival_finished' | 'rival_won' | 'countdown_started' | 'rival_opened';
 
 export interface RivalEvent {
   key: string;
   kind: RivalEventKind;
   /** The rival involved, when one is known. */
   teamId?: string;
+  /** The waypoint a rival's clear opened for this team. */
+  waypointId?: string;
   /** Countdown length in seconds, for a countdown start. */
   seconds?: number;
 }
@@ -34,13 +36,18 @@ const EMPTY: MomentBatch = { celebration: null, rival: [] };
 
 const PRIORITY: Record<CelebrationKind, number> = { won: 4, finished: 3, cleared: 2, arrived: 1 };
 
-const clearedSet = (state: GameState, teamId: string): Set<string> => {
-  const set = new Set<string>(state.progress[teamId]?.clearedWaypoints ?? []);
+/** Waypoints whose challenge this team cleared itself, not ones a rival's clear opened for it. */
+const ownClears = (state: GameState, teamId: string): Set<string> => {
+  const set = new Set<string>();
   Object.entries(state.waypointStates).forEach(([waypointId, ws]) => {
     if (ws.clearedBy?.[teamId]) set.add(waypointId);
   });
   return set;
 };
+
+/** The rival whose clear opened this waypoint, if any. */
+const openedBy = (state: GameState, waypointId: string, teamId: string): string | undefined =>
+  Object.entries(state.waypointStates[waypointId]?.clearedBy ?? {}).find(([id, cleared]) => cleared && id !== teamId)?.[0];
 
 /** Everything that changed between two projection states that this team should feel. */
 export function diffMoments(prev: GameState, next: GameState, teamId: string): MomentBatch {
@@ -62,8 +69,8 @@ export function diffMoments(prev: GameState, next: GameState, teamId: string): M
       candidates.push({ key: `arrived:${arrivedAt}`, kind: 'arrived', waypointId: arrivedAt, coinsGained });
     }
 
-    const wasCleared = clearedSet(prev, teamId);
-    clearedSet(next, teamId).forEach((waypointId) => {
+    const wasCleared = ownClears(prev, teamId);
+    ownClears(next, teamId).forEach((waypointId) => {
       if (wasCleared.has(waypointId)) return;
       const waypoint = next.waypoints.find((w) => w.id === waypointId);
       if (!waypoint?.challengeId) return;
@@ -98,6 +105,18 @@ export function diffMoments(prev: GameState, next: GameState, teamId: string): M
   const frozenUntil = next.effects[teamId]?.frozenUntil;
   if (frozenUntil && frozenUntil !== prev.effects[teamId]?.frozenUntil) {
     rival.push({ key: `nerfed:${frozenUntil}`, kind: 'nerfed' });
+  }
+
+  if (before && after) {
+    const passedBefore = new Set(before.clearedWaypoints);
+    after.clearedWaypoints.forEach((waypointId) => {
+      if (passedBefore.has(waypointId)) return;
+      if (!next.waypoints.find((w) => w.id === waypointId)?.challengeId) return;
+      const ws = next.waypointStates[waypointId];
+      if (ws?.clearedBy?.[teamId] || ws?.bypassed?.[teamId]) return;
+      const rivalId = openedBy(next, waypointId, teamId);
+      if (rivalId) rival.push({ key: `rival-opened:${waypointId}`, kind: 'rival_opened', teamId: rivalId, waypointId });
+    });
   }
 
   const rivalWon = next.winner && next.winner !== teamId && next.winner !== prev.winner ? next.winner : null;

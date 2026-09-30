@@ -69,6 +69,28 @@ describe('diffMoments', () => {
     expect(diffMoments(prev, next, ME).celebration).toBeNull();
   });
 
+  it('does not celebrate a rival clearing the waypoint this team stands on', () => {
+    const prev = withProgress(withProgress(base(), ME, { currentWaypointId: 'b' }), RIVAL, { currentWaypointId: 'b' });
+    const next = {
+      ...withProgress(withProgress(prev, RIVAL, { clearedWaypoints: ['a', 'b'] }), ME, { clearedWaypoints: ['a', 'b'] }),
+      coins: { [ME]: 0, [RIVAL]: 10 },
+      waypointStates: { b: { clearedBy: { [RIVAL]: true }, bypassed: {} } }
+    };
+    const batch = diffMoments(prev, next, ME);
+    expect(batch.celebration).toBeNull();
+    expect(batch.rival).toEqual([{ key: 'rival-opened:b', kind: 'rival_opened', teamId: RIVAL, waypointId: 'b' }]);
+    expect(diffMoments(prev, next, RIVAL).celebration).toMatchObject({ kind: 'cleared', key: 'cleared:b' });
+  });
+
+  it('treats arriving at a waypoint a rival already cleared as an arrival, not a clear', () => {
+    const prev = { ...base(), waypointStates: { b: { clearedBy: { [RIVAL]: true }, bypassed: {} } } };
+    const next = withProgress(prev, ME, { currentWaypointId: 'b', clearedWaypoints: ['a', 'b'] });
+    const batch = diffMoments(prev, next, ME);
+    expect(batch.celebration).toMatchObject({ kind: 'arrived', key: 'arrived:b' });
+    expect(batch.rival.map((e) => e.kind)).toEqual(['rival_opened']);
+    expect(describeCelebration(batch.celebration!, next, ME).next).toBe('Next stop: Finish');
+  });
+
   it('celebrates an accepted photo once even if the waypoint state follows in a later update', () => {
     const start = withProgress(base(), ME, { currentWaypointId: 'b' });
     const pending = {
@@ -170,5 +192,10 @@ describe('describeCelebration', () => {
   it('writes a plain rival pop-up', () => {
     const text = describeRivalEvent({ key: 'k', kind: 'rival_finished', teamId: RIVAL }, base()).text;
     expect(text).toBe('Blue Jay reached the finish.');
+  });
+
+  it('names the rival and waypoint when a rival clear opens the way', () => {
+    const text = describeRivalEvent({ key: 'k', kind: 'rival_opened', teamId: RIVAL, waypointId: 'b' }, base()).text;
+    expect(text).toBe('Blue Jay cleared Bridge. No challenge for you here, but no coins either.');
   });
 });

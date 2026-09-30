@@ -88,7 +88,9 @@ export function describeCelebration(moment: CelebrationMoment, state: GameState,
     }
 
     case 'arrived': {
-      const hasChallenge = !!waypoint?.challengeId && !state.waypointStates[waypoint.id]?.clearedBy?.[teamId];
+      const ws = waypoint ? state.waypointStates[waypoint.id] : undefined;
+      const opened = Object.values(ws?.clearedBy ?? {}).some(Boolean) || !!ws?.bypassed?.[teamId];
+      const hasChallenge = !!waypoint?.challengeId && !opened;
       const stops = moment.waypointId ? stopsOutOf(state, moment.waypointId, teamId) : [];
       return {
         eyebrow: 'Arrived',
@@ -111,6 +113,10 @@ export function describeRivalEvent(event: RivalEvent, state: GameState): { text:
       return { text: `${who} reached the finish.`, tone: 'gold' };
     case 'rival_won':
       return { text: `${who} won the race.`, tone: 'gold' };
+    case 'rival_opened': {
+      const name = state.waypoints.find((w) => w.id === event.waypointId)?.name ?? 'this waypoint';
+      return { text: `${who} cleared ${name}. No challenge for you here, but no coins either.`, tone: 'rust' };
+    }
     case 'countdown_started': {
       const minutes = Math.max(1, Math.round((event.seconds ?? 0) / 60));
       return { text: `A team is home. The coin rush ends in ${minutes} min.`, tone: 'rust' };
